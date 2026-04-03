@@ -15,6 +15,7 @@ from game_logic import (
     build_state_snapshot, MISSION_SIZES,
 )
 
+import os
 import time as _time
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "avalon-secret-key-change-in-prod"
@@ -34,8 +35,8 @@ games: dict[str, GameState] = {}           # code -> GameState
 sid_to_info: dict[str, dict] = {}          # sid -> {game_code, player_id, is_host_screen}
 session_tokens: dict[str, tuple] = {}       # token -> (game_code, player_id)
 
-HOST_IP = "10.0.0.104"
-PORT = 5000
+HOST_IP = os.environ.get("HOST_IP", "localhost")
+PORT = int(os.environ.get("PORT", 5001))
 
 # ---------------------------------------------------------------------------
 # Routes
