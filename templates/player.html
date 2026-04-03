@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Avalon</title>
+<link rel="stylesheet" href="/static/css/common.css">
+<link rel="stylesheet" href="/static/css/player.css">
+</head>
+<body>
+
+<div id="page-transition"></div>
+<div id="flash-overlay"></div>
+
+<!-- Mission board (fixed top, shown during game) -->
+<div id="player-board" class="player-board hidden">
+    <div class="pb-shields" id="pb-shields"></div>
+    <div class="pb-right">
+        <span class="pb-reject-label">REJECTIONS</span>
+        <div class="pb-dots" id="pb-dots"></div>
+    </div>
+</div>
+
+<!-- Chat (fixed bottom, shown during game) -->
+<div id="chat-container" class="chat-container hidden">
+    <div id="chat-bubbles" class="chat-bubbles"></div>
+    <div id="chat-history-panel" class="chat-history-panel hidden">
+        <div class="chat-history-header">
+            <span>Chat History</span>
+            <button id="btn-history-close" class="chat-history-close">✕</button>
+        </div>
+        <div id="chat-history-list" class="chat-history-list"></div>
+    </div>
+    <div class="chat-input-row">
+        <button class="chat-history-btn" id="btn-history-toggle" title="Show chat history">📜</button>
+        <input type="text" id="chat-input" placeholder="Quick quip..." maxlength="80" autocomplete="off" autocorrect="off">
+        <button class="chat-send-btn" id="btn-chat-send">Send</button>
+    </div>
+</div>
+
+<div id="app">
+
+    <!-- ============ JOIN SCREEN ============ -->
+    <div class="screen active" id="screen-join">
+        <div class="join-logo">AVALON</div>
+        <p class="join-tagline">The Resistance Awaits</p>
+        <div class="join-form">
+            <div class="form-group">
+                <label for="input-room-code">Room Code</label>
+                <input type="text" id="input-room-code" maxlength="4" autocomplete="off"
+                       autocapitalize="characters" placeholder="ABCD" inputmode="text">
+            </div>
+            <div class="form-group">
+                <label for="input-name">Thy Name</label>
+                <input type="text" id="input-name" maxlength="12" autocomplete="off" placeholder="Lancelot">
+            </div>
+            <div class="error-message" id="join-error"></div>
+            <button class="btn btn-primary" id="btn-join">Join the Round Table</button>
+        </div>
+    </div>
+
+    <!-- ============ LOBBY SCREEN ============ -->
+    <div class="screen" id="screen-lobby">
+        <div class="screen-header">
+            <div class="screen-title-small">AVALON</div>
+            <div class="screen-subtitle">Room: <span id="lobby-code-display" style="color:var(--gold)">----</span></div>
+        </div>
+        <div id="lobby-host-controls" class="hidden" style="width:100%;text-align:center;margin-bottom:1rem">
+            <button class="btn btn-primary" id="btn-host-start" style="width:100%">Begin the Quest</button>
+            <div id="host-start-hint" class="dim-text" style="font-size:0.75rem;margin-top:0.4rem;font-family:var(--font-heading)">Need 6–10 players</div>
+        </div>
+        <div class="player-list" id="lobby-player-list"></div>
+        <p class="waiting-text" style="margin-top:1rem">Waiting for the host to begin...</p>
+    </div>
+
+    <!-- ============ ROLE REVEAL SCREEN ============ -->
+    <div class="screen" id="screen-role">
+        <div class="screen-header">
+            <div class="screen-title-small" style="font-size:1.2rem;color:var(--text-secondary)">Your Fate is Sealed</div>
+        </div>
+        <div class="role-card-wrapper">
+            <div class="role-card" id="role-card">
+                <div class="role-card-face role-card-back-face">
+                    <div class="card-back-pattern">⚔</div>
+                </div>
+                <div class="role-card-face role-card-front-face" id="role-card-front">
+                    <div class="role-team-badge" id="role-team-badge"></div>
+                    <img id="role-portrait-card" class="role-portrait-card" src="" alt="" onerror="this.style.display='none'">
+                    <div class="role-name" id="role-name-display"></div>
+                    <div class="role-description" id="role-desc-display"></div>
+                </div>
+            </div>
+        </div>
+        <button class="btn btn-primary" id="btn-confirm-role" style="width:100%;margin-top:1rem" disabled>
+            I understand my role
+        </button>
+    </div>
+
+    <!-- ============ NIGHT PHASE INFO ============ -->
+    <div class="screen" id="screen-night">
+        <div class="screen-header">
+            <div class="screen-title-small" style="color:var(--silver)">The Night Reveals</div>
+        </div>
+        <div class="night-info-panel" id="night-info-panel">
+            <div class="night-sees-label" id="night-sees-label">Your vision</div>
+            <div class="night-sees-names" id="night-sees-names"></div>
+        </div>
+        <button class="btn btn-primary" id="btn-confirm-night" style="width:100%;margin-top:1rem">
+            I understand — seal my fate
+        </button>
+        <p class="waiting-text hidden" id="night-waiting-text">Waiting for all players...</p>
+    </div>
+
+    <!-- ============ DISCUSSION SCREEN ============ -->
+    <div class="screen" id="screen-discussion">
+        <div class="screen-header">
+            <div class="screen-title-small">Discussion</div>
+        </div>
+        <div class="discussion-info">
+            <div class="mission-info-pill" id="discussion-mission-info"></div>
+        </div>
+        <div class="you-are-leader hidden" id="leader-banner">♔ You are the Leader</div>
+        <div class="timer-small" id="discussion-timer-player">—</div>
+        <p class="waiting-text" style="font-size:0.9rem">Deliberate. Argue. Trust wisely.</p>
+    </div>
+
+    <!-- ============ TEAM PROPOSAL — leader ============ -->
+    <div class="screen" id="screen-proposal">
+        <div class="screen-header">
+            <div class="screen-title-small" style="font-size:1.2rem">Assemble Your Party</div>
+        </div>
+        <div class="select-count">
+            Select <span id="proposal-required">?</span> members &nbsp;·&nbsp;
+            <span id="proposal-selected-count" style="color:var(--gold-light)">0</span> chosen
+        </div>
+        <div class="player-select-list" id="player-select-list"></div>
+        <button class="btn btn-primary" id="btn-lock-team" disabled style="width:100%;margin-top:0.5rem">
+            Lock In Team
+        </button>
+        <p class="waiting-text hidden" id="proposal-waiting-text">Waiting for the leader...</p>
+    </div>
+
+    <!-- ============ VOTE SCREEN ============ -->
+    <div class="screen" id="screen-vote">
+        <div class="screen-header">
+            <div class="screen-title-small" style="font-size:1.2rem">The Quest Party</div>
+        </div>
+        <div class="vote-team-display">
+            <h3>Proposed by <span id="vote-leader-name-player"></span></h3>
+            <div class="vote-team-names-list" id="vote-team-names-player"></div>
+        </div>
+        <div class="vote-buttons" id="vote-buttons">
+            <button class="btn btn-approve" id="btn-approve">
+                <span class="vote-icon">🛡</span>
+                Approve
+            </button>
+            <button class="btn btn-reject" id="btn-reject">
+                <span class="vote-icon">✗</span>
+                Reject
+            </button>
+        </div>
+        <div class="vote-cast-waiting hidden" id="vote-cast-waiting">
+            <p class="waiting-text">Vote cast. Awaiting others...</p>
+        </div>
+    </div>
+
+    <!-- ============ MISSION SCREEN ============ -->
+    <div class="screen" id="screen-mission">
+        <div class="screen-header">
+            <div class="screen-title-small" style="font-size:1.2rem">The Quest Begins</div>
+        </div>
+        <div id="mission-on-team">
+            <div class="mission-card-choices" id="mission-card-choices">
+                <button class="mission-choice-btn success" id="btn-success">
+                    <span class="choice-icon">☀</span>
+                    Success
+                </button>
+                <button class="mission-choice-btn fail" id="btn-fail">
+                    <span class="choice-icon">☠</span>
+                    Fail
+                </button>
+            </div>
+            <p class="auto-success-msg hidden" id="auto-success-msg">As a knight of the realm, you must play SUCCESS.</p>
+        </div>
+        <p class="waiting-text" id="mission-not-on-team" style="margin-top:2rem">The quest is underway... await their return.</p>
+        <p class="waiting-text hidden" id="mission-card-played">Your card has been played. Awaiting others...</p>
+    </div>
+
+    <!-- ============ ASSASSIN SCREEN ============ -->
+    <div class="screen" id="screen-assassin">
+        <div class="screen-header">
+            <div class="screen-title-small" style="color:var(--red-glow)">Choose Your Target</div>
+            <div class="screen-subtitle">Who is Merlin?</div>
+        </div>
+        <div class="assassin-target-list" id="assassin-target-list"></div>
+        <button class="btn btn-danger" id="btn-assassinate" disabled style="width:100%;margin-top:1rem">
+            ⚔ Assassinate
+        </button>
+        <p class="waiting-text hidden" id="assassin-waiting">The Assassin is deliberating...</p>
+    </div>
+
+    <!-- ============ GAME OVER SCREEN ============ -->
+    <div class="screen" id="screen-game-over">
+        <div class="game-over-result" id="game-over-result-player"></div>
+        <div class="my-role-reveal" id="my-role-reveal-display"></div>
+        <p class="waiting-text" id="win-reason-player" style="font-size:0.9rem"></p>
+        <div class="game-over-roles">
+            <h3>Full Role Reveal</h3>
+            <div class="roles-list" id="roles-list-player"></div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Persistent role reminder button (shown after role reveal) -->
+<button id="btn-role-reminder" class="role-reminder-btn hidden" aria-label="My Role">
+    <span>My Role</span>
+</button>
+
+<!-- Settings button (always visible after joining) -->
+<button id="btn-settings" class="settings-float-btn hidden" aria-label="Settings">⚙</button>
+
+<!-- Settings overlay -->
+<div id="settings-overlay" class="role-overlay hidden">
+    <div class="role-overlay-box" style="max-width:320px">
+        <div class="role-overlay-name" style="font-size:1.2rem;margin-bottom:1.25rem">Settings</div>
+        <div style="width:100%;text-align:left;display:flex;flex-direction:column;gap:1rem">
+            <div>
+                <label style="font-family:var(--font-heading);font-size:0.75rem;letter-spacing:0.1em;color:var(--text-secondary);display:flex;justify-content:space-between">
+                    <span>MUSIC VOLUME</span>
+                    <span id="settings-music-display">45%</span>
+                </label>
+                <input type="range" id="settings-music-slider" min="0" max="100" step="5" value="45"
+                       style="width:100%;margin-top:0.4rem;accent-color:var(--gold)">
+            </div>
+            <button class="btn" id="btn-settings-mute" style="width:100%">🔊 Mute</button>
+        </div>
+        <button class="btn" id="btn-close-settings" style="margin-top:1.5rem;width:100%">Close</button>
+    </div>
+</div>
+
+<!-- Role reminder overlay -->
+<div id="role-overlay" class="role-overlay hidden">
+    <div class="role-overlay-box">
+        <div class="role-overlay-team" id="overlay-team-badge"></div>
+        <img id="overlay-portrait" class="overlay-portrait" src="" alt="" onerror="this.style.display='none'">
+        <div class="role-overlay-name" id="overlay-role-name"></div>
+        <div class="role-overlay-desc" id="overlay-role-desc"></div>
+        <div class="role-overlay-knowledge" id="overlay-knowledge"></div>
+        <button class="btn" id="btn-close-overlay" style="margin-top:1.5rem;width:100%">Close</button>
+    </div>
+</div>
+
+<style>
+.settings-float-btn {
+    position: fixed;
+    bottom: 3.75rem;
+    left: 1.25rem;
+    z-index: 200;
+    background: linear-gradient(135deg, #2a2010, #1a1508);
+    border: 1.5px solid var(--border-gold);
+    border-radius: var(--radius-pill);
+    color: var(--gold-light);
+    font-size: 1rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 0 12px rgba(201,168,76,0.2);
+    transition: box-shadow 0.2s, filter 0.2s;
+}
+.settings-float-btn:hover { box-shadow: 0 0 20px rgba(201,168,76,0.4); filter: brightness(1.2); }
+
+.role-reminder-btn {
+    position: fixed;
+    bottom: 3.75rem;
+    right: 1.25rem;
+    z-index: 200;
+    background: linear-gradient(135deg, #2a2010, #1a1508);
+    border: 1.5px solid var(--gold);
+    border-radius: var(--radius-pill);
+    color: var(--gold-light);
+    font-family: var(--font-heading);
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    box-shadow: 0 0 12px rgba(201,168,76,0.25);
+    transition: box-shadow 0.2s, filter 0.2s;
+}
+.role-reminder-btn:hover { box-shadow: 0 0 20px rgba(201,168,76,0.4); filter: brightness(1.15); }
+
+.role-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.82);
+    z-index: 300;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+.role-overlay.hidden { display: none; }
+.role-overlay-box {
+    background: var(--bg-parchment);
+    border: 2px solid var(--gold);
+    border-radius: var(--radius-lg);
+    padding: 2rem 1.75rem;
+    max-width: 360px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 0 60px rgba(201,168,76,0.2);
+    animation: fade-in-scale 0.2s ease-out;
+}
+.role-overlay-team {
+    font-family: var(--font-heading);
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    margin-bottom: 0.5rem;
+    padding: 0.2rem 0.75rem;
+    border-radius: var(--radius-pill);
+    display: inline-block;
+}
+.role-overlay-team.good { color: #7ec8ff; border: 1px solid rgba(46,134,222,0.4); }
+.role-overlay-team.evil { color: #ff8080; border: 1px solid rgba(192,57,43,0.4); }
+.role-overlay-name {
+    font-family: var(--font-title);
+    font-size: 1.6rem;
+    color: var(--gold);
+    margin-bottom: 0.75rem;
+}
+.role-overlay-desc {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 1rem;
+}
+.role-overlay-knowledge {
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    background: rgba(0,0,0,0.25);
+    border-radius: var(--radius-md);
+    padding: 0.6rem 0.75rem;
+    line-height: 1.5;
+    min-height: 1.5rem;
+}
+</style>
+
+<script src="/static/js/socket.io.min.js"></script>
+<script src="/static/js/player.js"></script>
+</body>
+</html>

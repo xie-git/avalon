@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Avalon — Host</title>
+<link rel="stylesheet" href="/static/css/common.css">
+<link rel="stylesheet" href="/static/css/host.css">
+<style>
+/* In-game confirmation modal */
+#confirm-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+}
+#confirm-modal.open { display: flex; }
+.confirm-box {
+    background: var(--bg-parchment);
+    border: 2px solid var(--gold);
+    border-radius: var(--radius-lg);
+    padding: 2.5rem 3rem;
+    text-align: center;
+    max-width: 460px;
+    box-shadow: 0 0 60px rgba(201,168,76,0.25);
+    animation: fade-in-scale 0.25s ease-out;
+}
+.confirm-box h2 {
+    font-family: var(--font-title);
+    font-size: 1.5rem;
+    color: var(--gold);
+    margin-bottom: 0.75rem;
+}
+.confirm-box p {
+    font-family: var(--font-body);
+    font-style: italic;
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    margin-bottom: 2rem;
+}
+.confirm-actions { display: flex; gap: 1rem; justify-content: center; }
+
+/* Reorder mode node styles */
+.player-node.reorder-mode circle { cursor: pointer; }
+.player-node.reorder-mode:hover circle { stroke: var(--gold); stroke-width: 2.5; }
+.player-node.reorder-selected circle {
+    stroke: var(--gold) !important;
+    stroke-width: 3 !important;
+    filter: drop-shadow(0 0 8px rgba(201,168,76,0.8));
+}
+.player-node.reorder-selected text { fill: var(--gold) !important; }
+
+/* Reorder mode hint */
+.reorder-hint {
+    font-family: var(--font-heading);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.1em;
+    text-align: center;
+    min-height: 1.2rem;
+}
+.reorder-btn-row { display: flex; gap: 0.5rem; justify-content: center; align-items: center; }
+
+/* Proposal timer — centered, larger */
+#screen-proposal .timer-container {
+    width: 200px;
+    height: 200px;
+    margin: 0 auto;
+}
+</style>
+</head>
+<body>
+
+<!-- In-game confirmation modal (replaces browser confirm()) -->
+<div id="confirm-modal">
+    <div class="confirm-box">
+        <h2 id="confirm-title">Are you sure?</h2>
+        <p id="confirm-body"></p>
+        <div class="confirm-actions">
+            <button class="btn btn-primary" id="confirm-yes">Proceed</button>
+            <button class="btn" id="confirm-no">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="page-transition"></div>
+<div id="flash-overlay"></div>
+
+<!-- Floating music controls (visible during game, hidden in lobby) -->
+<div id="music-controls-float" style="display:none;position:fixed;bottom:1rem;right:1rem;z-index:400;background:rgba(20,15,5,0.92);border:1px solid var(--border-gold);border-radius:var(--radius-md);padding:0.6rem 0.9rem;display:none;flex-direction:column;gap:0.4rem;min-width:180px;box-shadow:0 0 20px rgba(0,0,0,0.6)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem">
+        <span style="font-family:var(--font-heading);font-size:0.7rem;letter-spacing:0.1em;color:var(--text-secondary)">MUSIC</span>
+        <button id="btn-mute-float" style="font-size:0.7rem;padding:0.2rem 0.5rem;background:transparent;border:1px solid var(--border-gold);border-radius:var(--radius-sm);color:var(--gold-light);font-family:var(--font-heading);cursor:pointer">🔊 Mute</button>
+    </div>
+    <input type="range" id="music-vol-float" min="0" max="100" step="5" value="55" style="width:100%;accent-color:var(--gold)">
+</div>
+<button id="btn-music-toggle" style="display:none;position:fixed;bottom:1rem;right:1rem;z-index:401;background:rgba(20,15,5,0.85);border:1px solid var(--border-gold);border-radius:var(--radius-pill);padding:0.4rem 0.75rem;font-family:var(--font-heading);font-size:0.7rem;letter-spacing:0.1em;color:var(--gold-light);cursor:pointer">🎵</button>
+
+<!-- Game header (mission tracker) — shown during gameplay -->
+<div id="game-header">
+    <div class="mission-tracker" id="mission-tracker"></div>
+    <div class="leader-display" id="leader-display"></div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.4rem">
+        <div class="rejection-tracker" id="rejection-tracker">
+            <span class="rejection-label">Rejections</span>
+        </div>
+    </div>
+</div>
+
+<div id="app">
+
+    <!-- ============ TITLE SCREEN ============ -->
+    <div class="screen active" id="screen-title">
+        <div class="swords-divider">
+            <span class="avalon-logo">AVALON</span>
+        </div>
+        <p class="tagline">The Resistance Awaits</p>
+        <button class="btn btn-primary" id="btn-create-game">Create Game</button>
+    </div>
+
+    <!-- ============ LOBBY SCREEN ============ -->
+    <div class="screen" id="screen-lobby">
+        <div class="lobby-main">
+            <div class="room-code-block">
+                <div class="room-code-label">Room Code</div>
+                <div class="room-code" id="room-code-display">----</div>
+                <div class="room-join-url" id="join-url-display"></div>
+            </div>
+            <div class="reorder-btn-row">
+                <button class="btn" id="btn-reorder-toggle" style="font-size:0.75rem;padding:0.4rem 1rem">↕ Reorder Seats</button>
+                <span class="reorder-hint" id="reorder-hint"></span>
+            </div>
+            <div class="round-table-container">
+                <svg id="round-table-svg" viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
+                    <ellipse class="table-center-fill" cx="250" cy="250" rx="120" ry="120"/>
+                    <ellipse class="table-ring" cx="250" cy="250" rx="200" ry="200"/>
+                    <text x="250" y="250" text-anchor="middle" dominant-baseline="middle"
+                          font-family="'Cinzel Decorative', serif" font-size="18" fill="#7a6a30" opacity="0.5">
+                        Round Table
+                    </text>
+                    <g id="player-nodes"></g>
+                </svg>
+            </div>
+        </div>
+        <div class="lobby-sidebar">
+            <div class="panel">
+                <div class="player-count-indicator">
+                    <div class="count-dot" id="player-count-dot"></div>
+                    <span id="player-count-text">0 / 10 Players</span>
+                </div>
+            </div>
+            <div class="panel settings-panel">
+                <h3>Settings</h3>
+                <div class="setting-row">
+                    <label>Discussion Time <span class="value-display" id="discussion-time-display">10 sec</span></label>
+                    <input type="range" id="discussion-slider" min="10" max="600" step="5" value="10">
+                </div>
+                <div class="setting-row">
+                    <label>Proposal Time <span class="value-display" id="proposal-time-display">60 sec</span></label>
+                    <input type="range" id="proposal-slider" min="30" max="120" step="10" value="60">
+                </div>
+                <div class="setting-row">
+                    <label>Music Volume <span class="value-display" id="music-vol-display">55%</span></label>
+                    <input type="range" id="music-vol-slider" min="0" max="100" step="5" value="55">
+                </div>
+                <div class="setting-row" style="justify-content:flex-end">
+                    <button class="btn" id="btn-mute-music" style="font-size:0.75rem;padding:0.3rem 0.9rem">🔊 Mute</button>
+                </div>
+            </div>
+            <div class="start-btn-wrapper">
+                <button class="btn btn-primary" id="btn-start-game" disabled>Begin the Quest</button>
+                <div class="dim-text" id="start-game-hint" style="font-size:0.75rem;margin-top:0.5rem;font-family:var(--font-heading);text-align:center">Need 6–10 players</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ NIGHT PHASE ============ -->
+    <div class="screen" id="screen-night">
+        <div class="night-stars" id="night-stars"></div>
+        <h1 class="night-title">Close your eyes...</h1>
+        <p class="dim-text" style="font-style:italic;font-size:1.2rem">The night reveals its secrets</p>
+        <div class="night-progress">
+            Awaiting confirmation... <span id="night-confirmed">0</span> / <span id="night-total">0</span>
+        </div>
+    </div>
+
+    <!-- ============ ROUND START / DISCUSSION ============ -->
+    <div class="screen" id="screen-round">
+        <div class="round-title" id="round-title">Mission 1</div>
+        <div class="leader-announce">
+            Leader: <strong id="round-leader-name">—</strong>
+        </div>
+        <div class="timer-container" id="discussion-timer-container">
+            <svg class="timer-svg" viewBox="0 0 200 200">
+                <circle class="timer-bg" cx="100" cy="100" r="90"/>
+                <circle class="timer-progress" id="timer-ring" cx="100" cy="100" r="90"/>
+            </svg>
+            <div class="timer-text" id="timer-text">—</div>
+        </div>
+        <button class="btn" id="btn-skip-discussion">Discussion Complete!</button>
+    </div>
+
+    <!-- ============ TEAM PROPOSAL ============ -->
+    <div class="screen" id="screen-proposal">
+        <h2 class="proposal-title" id="proposal-leader-name">—</h2>
+        <p class="proposal-subtitle">is assembling the quest party...</p>
+        <p class="dim-text" id="proposal-mission-size" style="font-family:var(--font-heading);font-size:0.85rem;letter-spacing:0.1em"></p>
+        <div class="proposed-players" id="proposed-players-display"></div>
+        <div class="timer-container" id="proposal-timer-container">
+            <svg class="timer-svg" viewBox="0 0 200 200">
+                <circle class="timer-bg" cx="100" cy="100" r="90"/>
+                <circle class="timer-progress" id="proposal-timer-ring" cx="100" cy="100" r="90"/>
+            </svg>
+            <div class="timer-text" id="proposal-timer-text">—</div>
+        </div>
+    </div>
+
+    <!-- ============ TEAM VOTE ============ -->
+    <div class="screen" id="screen-vote">
+        <div class="vote-team-banner">
+            <h2 id="vote-leader-label">Leader proposes:</h2>
+            <div class="vote-team-names" id="vote-team-names"></div>
+        </div>
+        <p class="heading-font" style="font-size:1rem;letter-spacing:0.15em;color:var(--text-secondary)">ALL PLAYERS: CAST YOUR VOTE</p>
+        <div class="vote-status-grid" id="vote-status-grid"></div>
+    </div>
+
+    <!-- ============ VOTE REVEAL ============ -->
+    <div class="screen" id="screen-vote-reveal">
+        <div class="vote-cards-grid" id="vote-cards-container"></div>
+        <div class="vote-result-banner hidden" id="vote-result-banner"></div>
+    </div>
+
+    <!-- ============ MISSION ============ -->
+    <div class="screen" id="screen-mission">
+        <h2 class="heading-font gold-text" style="font-size:1.5rem;letter-spacing:0.1em">QUEST IN PROGRESS</h2>
+        <div class="mission-team-display" id="mission-team-display"></div>
+        <div class="mission-progress">
+            Cards played: <span id="mission-played">0</span> / <span id="mission-total">0</span>
+        </div>
+    </div>
+
+    <!-- ============ MISSION REVEAL ============ -->
+    <div class="screen" id="screen-mission-reveal">
+        <h2 class="heading-font gold-text" style="font-size:1.2rem;letter-spacing:0.15em">THE QUEST RETURNS...</h2>
+        <div class="mission-cards-display" id="mission-cards-display"></div>
+        <div class="mission-result-banner hidden" id="mission-result-banner"></div>
+    </div>
+
+    <!-- ============ ASSASSIN PHASE ============ -->
+    <div class="screen" id="screen-assassin">
+        <h1 class="assassin-title">The forces of good have prevailed...</h1>
+        <p class="assassin-subtitle">But shadows linger in Camelot.</p>
+        <div class="crosshair-icon">⊕</div>
+        <p class="assassin-choosing" id="assassin-choosing-text">The Assassin deliberates...</p>
+    </div>
+
+    <!-- ============ GAME OVER ============ -->
+    <div class="screen" id="screen-game-over">
+        <div class="game-over-banner" id="game-over-banner"></div>
+        <p class="win-reason" id="win-reason-text"></p>
+        <div class="roles-reveal-grid" id="roles-reveal-grid"></div>
+        <div class="game-over-actions">
+            <button class="btn btn-primary" id="btn-return-lobby">Return to Lobby</button>
+        </div>
+    </div>
+
+</div>
+
+<script src="/static/js/socket.io.min.js"></script>
+<script src="/static/js/host.js"></script>
+</body>
+</html>
