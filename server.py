@@ -690,24 +690,7 @@ def on_return_to_lobby():
     for p in game.players.values():
         if p.session_token and p.session_token in session_tokens:
             del session_tokens[p.session_token]
-    # Reset game state completely
-    game.phase = GamePhase.LOBBY
-    game.players = {}
-    game.player_order = []
-    game.host_player_id = None
-    game.current_leader_index = 0
-    game.current_mission = 0
-    game.mission_results = []
-    game.consecutive_rejections = 0
-    game.proposed_team = []
-    game.votes = {}
-    game.mission_cards = {}
-    game.night_acks = set()
-    game.assassin_target = None
-    game.winner = None
-    game.win_reason = None
-    game.timer_phase_key = None
-    game.pending_mission_outcome = None
+    game.reset()
     emit_to_game(game.code, "return_to_lobby", {
         "players": [],
         "settings": {"discussion_time": game.discussion_time, "proposal_time": game.proposal_time},

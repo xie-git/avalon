@@ -1,5 +1,4 @@
 import random
-import string
 from enum import Enum
 
 
@@ -83,7 +82,6 @@ class PlayerInfo:
         self.team: Team | None = None
         self.connected = True
         self.session_token = None
-        self.night_ack = False
 
     def to_dict(self, include_role=False):
         d = {
@@ -136,18 +134,6 @@ class GameState:
     def player_count(self) -> int:
         return len(self.players)
 
-    def get_player_by_name(self, name: str) -> PlayerInfo | None:
-        for p in self.players.values():
-            if p.name.lower() == name.lower():
-                return p
-        return None
-
-    def get_player_by_sid(self, sid: str) -> PlayerInfo | None:
-        for p in self.players.values():
-            if p.sid == sid:
-                return p
-        return None
-
     def public_players(self):
         return [p.to_dict() for p in self.player_order_list()]
 
@@ -171,6 +157,26 @@ class GameState:
 
     def evil_wins_count(self) -> int:
         return self.mission_results.count("fail")
+
+    def reset(self) -> None:
+        """Reset all game state for a new game, preserving settings."""
+        self.phase = GamePhase.LOBBY
+        self.players = {}
+        self.player_order = []
+        self.host_player_id = None
+        self.current_leader_index = 0
+        self.current_mission = 0
+        self.mission_results = []
+        self.consecutive_rejections = 0
+        self.proposed_team = []
+        self.votes = {}
+        self.mission_cards = {}
+        self.night_acks = set()
+        self.assassin_target = None
+        self.winner = None
+        self.win_reason = None
+        self.timer_phase_key = None
+        self.pending_mission_outcome = None
 
 
 # ---------------------------------------------------------------------------
