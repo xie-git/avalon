@@ -43,32 +43,46 @@
 }
 .confirm-actions { display: flex; gap: 1rem; justify-content: center; }
 
-/* Reorder mode node styles */
-.player-node.reorder-mode circle { cursor: pointer; }
-.player-node.reorder-mode:hover circle { stroke: var(--gold); stroke-width: 2.5; }
-.player-node.reorder-selected circle {
-    stroke: var(--gold) !important;
-    stroke-width: 3 !important;
-    filter: drop-shadow(0 0 8px rgba(201,168,76,0.8));
+.reorder-label {
+    font-family: var(--font-heading);
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+    text-align: center;
+    margin: 0.25rem 0 0.4rem;
 }
-.player-node.reorder-selected text { fill: var(--gold) !important; }
-
-/* Reorder mode hint */
-.reorder-hint {
+.reorder-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    justify-content: center;
+}
+.reorder-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.6rem 0.3rem 0.4rem;
+    background: rgba(20,15,5,0.7);
+    border: 1px solid var(--border-gold);
+    border-radius: var(--radius-sm);
     font-family: var(--font-heading);
     font-size: 0.75rem;
-    color: var(--text-secondary);
-    letter-spacing: 0.1em;
-    text-align: center;
-    min-height: 1.2rem;
+    color: var(--gold-light);
+    cursor: grab;
+    user-select: none;
+    transition: background 0.15s, border-color 0.15s;
 }
-.reorder-btn-row { display: flex; gap: 0.5rem; justify-content: center; align-items: center; }
-
-/* Proposal timer — centered, larger */
-#screen-proposal .timer-container {
-    width: 200px;
-    height: 200px;
-    margin: 0 auto;
+.reorder-item:active { cursor: grabbing; }
+.reorder-item.drag-over { border-color: var(--gold); background: rgba(201,168,76,0.15); }
+.reorder-item.dragging { opacity: 0.4; }
+.reorder-num {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    min-width: 1rem;
+    text-align: right;
 }
 </style>
 </head>
@@ -85,6 +99,19 @@
         </div>
     </div>
 </div>
+
+<!-- In-game settings menu -->
+<div id="host-settings-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:500;align-items:center;justify-content:center">
+    <div class="confirm-box" style="min-width:320px">
+        <h2 style="font-family:var(--font-title);font-size:1.3rem;color:var(--gold);margin-bottom:1.5rem">⚙ Game Settings</h2>
+        <div class="confirm-actions" style="flex-direction:column;gap:0.75rem">
+            <button class="btn btn-primary" id="btn-host-back-lobby" style="width:100%">↩ Back to Lobby</button>
+            <button class="btn" id="btn-host-end-game" style="width:100%;border-color:var(--red-glow);color:#ff8080">✕ End Game (New Game)</button>
+            <button class="btn" id="btn-host-settings-close" style="width:100%;margin-top:0.5rem">Cancel</button>
+        </div>
+    </div>
+</div>
+<button id="btn-host-settings" style="display:none;position:fixed;top:0.75rem;right:0.75rem;z-index:402;background:rgba(20,15,5,0.85);border:1px solid var(--border-gold);border-radius:var(--radius-pill);padding:0.4rem 0.75rem;font-family:var(--font-heading);font-size:0.7rem;letter-spacing:0.1em;color:var(--gold-light);cursor:pointer">⚙</button>
 
 <div id="page-transition"></div>
 <div id="flash-overlay"></div>
@@ -104,9 +131,7 @@
     <div class="mission-tracker" id="mission-tracker"></div>
     <div class="leader-display" id="leader-display"></div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.4rem">
-        <div class="rejection-tracker" id="rejection-tracker">
-            <span class="rejection-label">Rejections</span>
-        </div>
+        <div class="rejection-tracker" id="rejection-tracker"></div>
     </div>
 </div>
 
@@ -129,10 +154,6 @@
                 <div class="room-code" id="room-code-display">----</div>
                 <div class="room-join-url" id="join-url-display"></div>
             </div>
-            <div class="reorder-btn-row">
-                <button class="btn" id="btn-reorder-toggle" style="font-size:0.75rem;padding:0.4rem 1rem">↕ Reorder Seats</button>
-                <span class="reorder-hint" id="reorder-hint"></span>
-            </div>
             <div class="round-table-container">
                 <svg id="round-table-svg" viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
                     <ellipse class="table-center-fill" cx="250" cy="250" rx="120" ry="120"/>
@@ -144,6 +165,8 @@
                     <g id="player-nodes"></g>
                 </svg>
             </div>
+            <p class="reorder-label">DRAG TO REORDER SEATING</p>
+            <ol id="reorder-list" class="reorder-list"></ol>
         </div>
         <div class="lobby-sidebar">
             <div class="panel">
@@ -157,10 +180,6 @@
                 <div class="setting-row">
                     <label>Discussion Time <span class="value-display" id="discussion-time-display">10 sec</span></label>
                     <input type="range" id="discussion-slider" min="10" max="600" step="5" value="10">
-                </div>
-                <div class="setting-row">
-                    <label>Proposal Time <span class="value-display" id="proposal-time-display">60 sec</span></label>
-                    <input type="range" id="proposal-slider" min="30" max="120" step="10" value="60">
                 </div>
                 <div class="setting-row">
                     <label>Music Volume <span class="value-display" id="music-vol-display">55%</span></label>
@@ -209,13 +228,6 @@
         <p class="proposal-subtitle">is assembling the quest party...</p>
         <p class="dim-text" id="proposal-mission-size" style="font-family:var(--font-heading);font-size:0.85rem;letter-spacing:0.1em"></p>
         <div class="proposed-players" id="proposed-players-display"></div>
-        <div class="timer-container" id="proposal-timer-container">
-            <svg class="timer-svg" viewBox="0 0 200 200">
-                <circle class="timer-bg" cx="100" cy="100" r="90"/>
-                <circle class="timer-progress" id="proposal-timer-ring" cx="100" cy="100" r="90"/>
-            </svg>
-            <div class="timer-text" id="proposal-timer-text">—</div>
-        </div>
     </div>
 
     <!-- ============ TEAM VOTE ============ -->
@@ -248,6 +260,7 @@
         <h2 class="heading-font gold-text" style="font-size:1.2rem;letter-spacing:0.15em">THE QUEST RETURNS...</h2>
         <div class="mission-cards-display" id="mission-cards-display"></div>
         <div class="mission-result-banner hidden" id="mission-result-banner"></div>
+        <button class="btn btn-primary hidden" id="btn-next-round" style="margin-top:2rem">Next Round</button>
     </div>
 
     <!-- ============ ASSASSIN PHASE ============ -->

@@ -127,6 +127,9 @@ class GameState:
         self.winner: str | None = None
         self.win_reason: str | None = None
 
+        # Pending mission advance (set after mission_reveal; cleared when host clicks Next Round)
+        self.pending_mission_outcome: str | None = None  # "next_mission" | "assassin_phase" | "evil_wins"
+
         # Timer cancellation flag
         self.timer_phase_key: str | None = None
 

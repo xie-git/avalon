@@ -169,11 +169,9 @@ def transition_to_team_proposal(game: GameState):
         "leader_name": leader.name if leader else "Unknown",
         "leader_id": leader.player_id if leader else None,
         "mission_size": game.mission_size(),
-        "duration_seconds": game.proposal_time,
         "player_order": [game.players[pid].name for pid in game.player_order],
         "player_name_to_id": {game.players[pid].name: pid for pid in game.player_order},
     })
-    socketio.start_background_task(run_proposal_timer, game.code, phase_key, game.proposal_time)
 
 
 def transition_to_night_phase(game: GameState):
@@ -237,7 +235,18 @@ def on_register_host_screen(data):
         game.host_sid = sid
         join_room(game_code)
         sid_to_info[sid] = {"game_code": game_code, "is_host_screen": True}
-        emit("host_registered", {"code": game_code, "players": game.public_players(), "phase": game.phase})
+        player_count = game.player_count()
+        emit("host_registered", {
+            "code": game_code,
+            "players": game.public_players(),
+            "phase": game.phase,
+            "mission_sizes": MISSION_SIZES.get(player_count, []),
+            "mission_results": game.mission_results,
+            "current_mission": game.current_mission,
+            "consecutive_rejections": game.consecutive_rejections,
+            "current_leader": game.current_leader().name if game.current_leader() else "",
+            "discussion_time": game.discussion_time,
+        })
     else:
         emit("error", {"message": "Game not found"})
 
@@ -599,24 +608,46 @@ def on_play_mission_card(data):
             "good_wins": game.good_wins(),
             "evil_wins": game.evil_wins_count(),
         })
-        if outcome == "assassin_phase":
-            assassin = get_assassin(game)
-            eventlet.sleep(2)
-            emit_to_game(game.code, "assassin_phase_start", {
-                "assassin_name": assassin.name if assassin else "Unknown",
-                "assassin_id": assassin.player_id if assassin else None,
-                "targets": [
-                    {"name": p.name, "player_id": p.player_id}
-                    for p in game.players.values()
-                    if p.player_id != (assassin.player_id if assassin else None)
-                ],
-            })
-        elif outcome == "evil_wins":
-            eventlet.sleep(2)
-            emit_to_game(game.code, "game_over", get_game_summary(game))
-        else:  # next_mission
-            eventlet.sleep(2)
-            start_round(game)
+        # Store outcome and wait for host to click "Next Round"
+        game.pending_mission_outcome = outcome
+        emit_to_game(game.code, "mission_complete", {
+            "outcome": outcome,
+            "passed": result["passed"],
+            "good_wins": game.good_wins(),
+            "evil_wins": game.evil_wins_count(),
+        })
+
+
+# --- Advance after mission (host clicks "Next Round") ---
+
+@socketio.on("advance_after_mission")
+def on_advance_after_mission():
+    sid = request.sid
+    info = sid_to_info.get(sid)
+    if not info:
+        emit("error", {"message": "Not connected"}); return
+    game = games.get(info["game_code"])
+    if not game:
+        emit("error", {"message": "Game not found"}); return
+    outcome = game.pending_mission_outcome
+    if not outcome:
+        return  # already advanced or not waiting
+    game.pending_mission_outcome = None
+    if outcome == "assassin_phase":
+        assassin = get_assassin(game)
+        emit_to_game(game.code, "assassin_phase_start", {
+            "assassin_name": assassin.name if assassin else "Unknown",
+            "assassin_id": assassin.player_id if assassin else None,
+            "targets": [
+                {"name": p.name, "player_id": p.player_id}
+                for p in game.players.values()
+                if p.player_id != (assassin.player_id if assassin else None)
+            ],
+        })
+    elif outcome == "evil_wins":
+        emit_to_game(game.code, "game_over", get_game_summary(game))
+    else:  # next_mission
+        start_round(game)
 
 
 # --- Assassination ---
@@ -653,8 +684,16 @@ def on_return_to_lobby():
         player_id = info.get("player_id")
         if not player_id or player_id != game.host_player_id:
             emit("error", {"message": "Only the host can return to lobby"}); return
-    # Reset game state but keep players and their sids
+    # Jackbox-style: clear ALL players so everyone rejoins fresh
+    # Invalidate all player session tokens
+    for p in game.players.values():
+        if p.session_token and p.session_token in session_tokens:
+            del session_tokens[p.session_token]
+    # Reset game state completely
     game.phase = GamePhase.LOBBY
+    game.players = {}
+    game.player_order = []
+    game.host_player_id = None
     game.current_leader_index = 0
     game.current_mission = 0
     game.mission_results = []
@@ -667,14 +706,36 @@ def on_return_to_lobby():
     game.winner = None
     game.win_reason = None
     game.timer_phase_key = None
-    for p in game.players.values():
-        p.role = None
-        p.team = None
-        p.night_ack = False
+    game.pending_mission_outcome = None
     emit_to_game(game.code, "return_to_lobby", {
-        "players": game.public_players(),
+        "players": [],
         "settings": {"discussion_time": game.discussion_time, "proposal_time": game.proposal_time},
     })
+
+
+# --- End game (delete game, send everyone back to join screen) ---
+
+@socketio.on("end_game")
+def on_end_game():
+    sid = request.sid
+    info = sid_to_info.get(sid)
+    if not info:
+        emit("error", {"message": "Not connected to a game"}); return
+    game = games.get(info["game_code"])
+    if not game:
+        emit("error", {"message": "Game not found"}); return
+    # Only host screen or host player can end game
+    if not info.get("is_host_screen"):
+        player_id = info.get("player_id")
+        if not player_id or player_id != game.host_player_id:
+            emit("error", {"message": "Only the host can end the game"}); return
+    game_code = game.code
+    emit_to_game(game_code, "game_ended", {})
+    # Clean up
+    for pid, player in game.players.items():
+        if player.session_token and player.session_token in session_tokens:
+            del session_tokens[player.session_token]
+    del games[game_code]
 
 
 # --- Chat ---

@@ -224,16 +224,11 @@
 <div id="settings-overlay" class="role-overlay hidden">
     <div class="role-overlay-box" style="max-width:320px">
         <div class="role-overlay-name" style="font-size:1.2rem;margin-bottom:1.25rem">Settings</div>
-        <div style="width:100%;text-align:left;display:flex;flex-direction:column;gap:1rem">
-            <div>
-                <label style="font-family:var(--font-heading);font-size:0.75rem;letter-spacing:0.1em;color:var(--text-secondary);display:flex;justify-content:space-between">
-                    <span>MUSIC VOLUME</span>
-                    <span id="settings-music-display">45%</span>
-                </label>
-                <input type="range" id="settings-music-slider" min="0" max="100" step="5" value="45"
-                       style="width:100%;margin-top:0.4rem;accent-color:var(--gold)">
+        <div style="width:100%;text-align:left;display:flex;flex-direction:column;gap:0.75rem">
+            <div id="settings-game-actions" class="hidden" style="display:flex;flex-direction:column;gap:0.5rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border-gold)">
+                <button class="btn" id="btn-back-to-lobby" style="width:100%;font-size:0.8rem">↩ Back to Lobby</button>
+                <button class="btn" id="btn-new-game" style="width:100%;font-size:0.8rem;border-color:var(--red-glow);color:#ff8080">✕ End Game</button>
             </div>
-            <button class="btn" id="btn-settings-mute" style="width:100%">🔊 Mute</button>
         </div>
         <button class="btn" id="btn-close-settings" style="margin-top:1.5rem;width:100%">Close</button>
     </div>

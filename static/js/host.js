@@ -22,9 +22,6 @@ let proposedTeam = [];
 let pendingVoters = [];
 let timerMax = 0;
 
-// Reorder mode state
-let reorderMode = false;
-let selectedNodeIndex = -1;
 
 // ---------------------------------------------------------------------------
 // Audio Manager
@@ -37,6 +34,7 @@ const TRACKS = {
     proposal:       '/static/sounds/music/proposal.mp3',
     tension:        '/static/sounds/music/tension.mp3',
     mission_reveal: '/static/sounds/music/mission-reveal.mp3',
+    quest_pass:     '/static/sounds/music/tavern.mp3',
     assassin:       '/static/sounds/music/assassin.mp3',
     good_wins:      '/static/sounds/music/good-wins.mp3',
     evil_wins:      '/static/sounds/music/evil-wins.mp3',
@@ -172,15 +170,11 @@ function updateMissionTracker() {
 
 function updateRejectionTracker() {
     const tracker = document.getElementById('rejection-tracker');
-    // Keep label, rebuild tokens
-    const label = tracker.querySelector('.rejection-label');
-    tracker.innerHTML = '';
-    tracker.appendChild(label);
-    for (let i = 0; i < 5; i++) {
-        const tok = document.createElement('div');
-        tok.className = 'rejection-token' + (i < consecutiveRejections ? ' filled' : '');
-        tracker.appendChild(tok);
-    }
+    tracker.innerHTML = `<span class="rejection-label">REJECTIONS</span><div class="rejection-dots">${
+        Array.from({length: 5}, (_, i) =>
+            `<div class="rejection-token${i < consecutiveRejections ? ' filled' : ''}"></div>`
+        ).join('')
+    }</div>`;
 }
 
 function updateLeaderDisplay(name) {
@@ -189,7 +183,7 @@ function updateLeaderDisplay(name) {
 }
 
 // ---------------------------------------------------------------------------
-// Lobby: Round table rendering
+// Lobby: Round table rendering + draggable reorder list
 // ---------------------------------------------------------------------------
 function renderRoundTable(playerList) {
     const svg = document.getElementById('player-nodes');
@@ -203,48 +197,57 @@ function renderRoundTable(playerList) {
         const y = cy + r * Math.sin(angle);
         const isLeader = p.name === currentLeaderName;
         const isDisconnected = !p.connected;
-        const isSelected = reorderMode && selectedNodeIndex === i;
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('class', `player-node${isLeader ? ' leader' : ''}${isDisconnected ? ' disconnected' : ''}${isSelected ? ' reorder-selected' : ''}${reorderMode ? ' reorder-mode' : ''}`);
+        g.setAttribute('class', `player-node${isLeader ? ' leader' : ''}${isDisconnected ? ' disconnected' : ''}`);
         g.innerHTML = `
             <circle cx="${x}" cy="${y}" r="30"/>
             ${isLeader ? `<text x="${x}" y="${y - 38}" class="crown-icon">♔</text>` : ''}
             <text x="${x}" y="${y}">${escapeHtml(p.name)}</text>
         `;
-        if (reorderMode) {
-            g.style.cursor = 'pointer';
-            g.addEventListener('click', () => handleNodeClick(i));
-        }
         svg.appendChild(g);
     });
 }
 
-function handleNodeClick(index) {
-    if (!reorderMode) return;
-    if (selectedNodeIndex === -1) {
-        selectedNodeIndex = index;
-        document.getElementById('reorder-hint').textContent = 'Now tap the destination seat';
-        renderRoundTable(players);
-    } else if (selectedNodeIndex === index) {
-        // Deselect
-        selectedNodeIndex = -1;
-        document.getElementById('reorder-hint').textContent = 'Tap a seat to move it';
-        renderRoundTable(players);
-    } else {
-        // Swap
-        const tmp = players[selectedNodeIndex];
-        players[selectedNodeIndex] = players[index];
-        players[index] = tmp;
-        selectedNodeIndex = -1;
-        socket.emit('reorder_players', { order: players.map(p => p.name) });
-        renderRoundTable(players);
-        document.getElementById('reorder-hint').textContent = 'Tap a seat to move it';
-    }
+let _dragSrcIndex = -1;
+
+function renderReorderList(playerList) {
+    const list = document.getElementById('reorder-list');
+    if (!list) return;
+    list.innerHTML = '';
+    playerList.forEach((p, i) => {
+        const li = document.createElement('li');
+        li.className = 'reorder-item';
+        li.draggable = true;
+        li.dataset.index = i;
+        li.innerHTML = `<span class="reorder-num">${i + 1}</span>${escapeHtml(p.name)}`;
+
+        li.addEventListener('dragstart', e => {
+            _dragSrcIndex = i;
+            li.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        li.addEventListener('dragend', () => li.classList.remove('dragging'));
+        li.addEventListener('dragover', e => { e.preventDefault(); li.classList.add('drag-over'); });
+        li.addEventListener('dragleave', () => li.classList.remove('drag-over'));
+        li.addEventListener('drop', e => {
+            e.preventDefault();
+            li.classList.remove('drag-over');
+            const destIndex = parseInt(li.dataset.index);
+            if (_dragSrcIndex === destIndex) return;
+            const moved = players.splice(_dragSrcIndex, 1)[0];
+            players.splice(destIndex, 0, moved);
+            socket.emit('reorder_players', { order: players.map(p => p.name) });
+            renderRoundTable(players);
+            renderReorderList(players);
+        });
+        list.appendChild(li);
+    });
 }
 
 function renderLobbyPlayers(playerList) {
     players = playerList;
     renderRoundTable(playerList);
+    renderReorderList(playerList);
     const n = playerList.length;
     const dot = document.getElementById('player-count-dot');
     const txt = document.getElementById('player-count-text');
@@ -454,10 +457,40 @@ socket.on('game_created', data => {
 socket.on('host_registered', data => {
     gameCode = data.code;
     players = data.players || [];
+    missionSizes = data.mission_sizes || [];
+    missionResults = data.mission_results || [];
+    currentMission = data.current_mission || 0;
+    consecutiveRejections = data.consecutive_rejections || 0;
+    currentLeaderName = data.current_leader || '';
+    if (data.discussion_time) discussionDuration = data.discussion_time;
+
     if (data.phase === 'LOBBY') {
         playTrack('lobby');
         transition('screen-lobby');
         renderLobbyPlayers(players);
+    } else {
+        // Mid-game reconnect — restore header and show appropriate screen
+        showGameHeader();
+        updateMissionTracker();
+        updateRejectionTracker();
+        if (currentLeaderName) updateLeaderDisplay(currentLeaderName);
+        renderRoundTable(players);
+        playTrack('tension');
+        const phaseScreenMap = {
+            'ROUND_START': 'screen-round',
+            'DISCUSSION': 'screen-round',
+            'TEAM_PROPOSAL': 'screen-proposal',
+            'TEAM_VOTE': 'screen-vote',
+            'VOTE_REVEAL': 'screen-vote-reveal',
+            'MISSION': 'screen-mission',
+            'MISSION_REVEAL': 'screen-mission-reveal',
+            'ASSASSIN_PHASE': 'screen-assassin',
+            'GAME_OVER': 'screen-game-over',
+            'NIGHT_PHASE': 'screen-night',
+        };
+        const targetScreen = phaseScreenMap[data.phase] || 'screen-round';
+        showScreen(targetScreen);
+        document.getElementById('btn-host-settings').style.display = 'block';
     }
 });
 
@@ -483,11 +516,10 @@ socket.on('lobby_update', data => {
     renderLobbyPlayers(players);
     if (data.settings) {
         discussionDuration = data.settings.discussion_time;
-        proposalDuration = data.settings.proposal_time;
-        document.getElementById('discussion-time-display').textContent = fmtTime(discussionDuration);
-        document.getElementById('proposal-time-display').textContent = fmtTime(proposalDuration);
-        document.getElementById('discussion-slider').value = discussionDuration;
-        document.getElementById('proposal-slider').value = proposalDuration;
+        const dispEl = document.getElementById('discussion-time-display');
+        const sliderEl = document.getElementById('discussion-slider');
+        if (dispEl) dispEl.textContent = fmtTime(discussionDuration);
+        if (sliderEl) sliderEl.value = discussionDuration;
     }
 });
 
@@ -515,6 +547,8 @@ socket.on('night_phase_complete', () => {
 });
 
 socket.on('round_start', data => {
+    document.getElementById('btn-next-round').classList.add('hidden');
+    document.getElementById('btn-host-settings').style.display = 'block';
     playTrack('round_fanfare');
     currentMission = data.mission_num - 1;
     currentLeaderName = data.leader_name;
@@ -558,17 +592,7 @@ socket.on('proposal_start', data => {
     document.getElementById('proposal-mission-size').textContent =
         `Select ${data.mission_size} members for the quest`;
     document.getElementById('proposed-players-display').innerHTML = '';
-    timerMax = data.duration_seconds;
-    updateTimerRing('proposal-timer-ring', timerMax, timerMax);
     transition('screen-proposal');
-});
-
-socket.on('proposal_tick', data => {
-    updateTimerRing('proposal-timer-ring', data.remaining_seconds, timerMax);
-});
-
-socket.on('proposal_timer_expired', () => {
-    document.getElementById('proposal-timer-text').textContent = '—';
 });
 
 socket.on('team_preview', data => {
@@ -687,6 +711,12 @@ socket.on('mission_tracker_update', data => {
     }
 });
 
+socket.on('mission_complete', data => {
+    // Switch to pass/fail music and show Next Round button
+    playTrack(data.passed ? 'quest_pass' : 'tension');
+    document.getElementById('btn-next-round').classList.remove('hidden');
+});
+
 socket.on('assassin_phase_start', data => {
     playTrack('assassin');
     document.getElementById('assassin-choosing-text').textContent =
@@ -716,9 +746,18 @@ socket.on('return_to_lobby', data => {
     missionResults = [];
     consecutiveRejections = 0;
     currentLeaderName = '';
+    document.getElementById('btn-host-settings').style.display = 'none';
     hideGameHeader();
     renderLobbyPlayers(players);
     transition('screen-lobby');
+});
+
+socket.on('game_ended', () => {
+    playTrack('lobby');
+    document.getElementById('btn-host-settings').style.display = 'none';
+    hideGameHeader();
+    sessionStorage.removeItem('host_game_code');
+    transition('screen-title');
 });
 
 socket.on('error', data => {
@@ -742,25 +781,32 @@ document.getElementById('btn-skip-discussion').addEventListener('click', async (
     if (ok) socket.emit('skip_discussion', { confirmed: true });
 });
 
-document.getElementById('btn-reorder-toggle').addEventListener('click', () => {
-    reorderMode = !reorderMode;
-    selectedNodeIndex = -1;
-    const btn = document.getElementById('btn-reorder-toggle');
-    const hint = document.getElementById('reorder-hint');
-    if (reorderMode) {
-        btn.textContent = '✓ Done Reordering';
-        btn.style.borderColor = 'var(--gold)';
-        hint.textContent = 'Tap a seat to move it';
-    } else {
-        btn.textContent = '↕ Reorder Seats';
-        btn.style.borderColor = '';
-        hint.textContent = '';
-    }
-    renderRoundTable(players);
+
+document.getElementById('btn-next-round').addEventListener('click', () => {
+    document.getElementById('btn-next-round').classList.add('hidden');
+    socket.emit('advance_after_mission');
 });
 
 document.getElementById('btn-return-lobby').addEventListener('click', () => {
     socket.emit('return_to_lobby');
+});
+
+// In-game settings
+document.getElementById('btn-host-settings').addEventListener('click', () => {
+    document.getElementById('host-settings-modal').style.display = 'flex';
+});
+document.getElementById('btn-host-settings-close').addEventListener('click', () => {
+    document.getElementById('host-settings-modal').style.display = 'none';
+});
+document.getElementById('btn-host-back-lobby').addEventListener('click', async () => {
+    document.getElementById('host-settings-modal').style.display = 'none';
+    const ok = await showConfirm('Back to Lobby?', 'The current game will be abandoned. All players will return to the lobby.');
+    if (ok) socket.emit('return_to_lobby');
+});
+document.getElementById('btn-host-end-game').addEventListener('click', async () => {
+    document.getElementById('host-settings-modal').style.display = 'none';
+    const ok = await showConfirm('End Game?', 'All players will be sent back to the join screen. The game will be deleted.');
+    if (ok) socket.emit('end_game');
 });
 
 // Settings sliders (emit to server — host screen acts as a relay for settings)
@@ -773,11 +819,6 @@ document.getElementById('discussion-slider').addEventListener('input', e => {
     socket.emit('update_settings', { discussion_time: discussionDuration });
 });
 
-document.getElementById('proposal-slider').addEventListener('input', e => {
-    proposalDuration = parseInt(e.target.value);
-    document.getElementById('proposal-time-display').textContent = fmtTime(proposalDuration);
-    socket.emit('update_settings', { proposal_time: proposalDuration });
-});
 
 // Music controls — lobby settings panel
 document.getElementById('music-vol-slider').addEventListener('input', e => {

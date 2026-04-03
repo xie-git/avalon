@@ -249,40 +249,7 @@ function _getAudio(key) {
 }
 
 function playTrack(key, { loop = true } = {}) {
-    if (_currentTrackKey === key) return;
-    _currentTrackKey = key;
-    if (_pendingFade) { clearInterval(_pendingFade); _pendingFade = null; }
-    const prev = _currentAudio;
-    const startNew = () => {
-        const audio = _getAudio(key);
-        audio.loop = loop;
-        audio.currentTime = 0;
-        audio.volume = 0;
-        _currentAudio = audio;
-        audio.play().catch(() => {});
-        if (_masterVolume > 0) {
-            let v = 0;
-            _pendingFade = setInterval(() => {
-                v = Math.min(_masterVolume, v + 0.04);
-                audio.volume = v;
-                if (v >= _masterVolume) { clearInterval(_pendingFade); _pendingFade = null; }
-            }, 80);
-        }
-    };
-    if (prev && !prev.paused) {
-        let v = prev.volume;
-        _pendingFade = setInterval(() => {
-            v = Math.max(0, v - 0.1);
-            prev.volume = v;
-            if (v <= 0) {
-                clearInterval(_pendingFade); _pendingFade = null;
-                prev.pause(); prev.currentTime = 0;
-                startNew();
-            }
-        }, 40);
-    } else {
-        startNew();
-    }
+    // Music is host-screen only — no audio on player phones
 }
 
 function setPlayerMusicVolume(vol) {
@@ -616,6 +583,7 @@ function applyStateSnapshot(snap) {
     isHost = snap.is_host || false;
     gameCode = snap.code;
     window._playerOrder = snap.player_order || [];
+    window._playerNameToId = snap.player_name_to_id || {};
     window._currentLeaderName = snap.current_leader;
     currentLeaderId = snap.current_leader_id;
 
@@ -626,6 +594,24 @@ function applyStateSnapshot(snap) {
 
     document.getElementById('lobby-code-display').textContent = gameCode;
     document.getElementById('lobby-host-controls').classList.toggle('hidden', !isHost);
+    document.getElementById('btn-settings').classList.remove('hidden');
+
+    // Restore mission board state
+    if (snap.mission_sizes && snap.mission_sizes.length) {
+        pbMissionSizes   = snap.mission_sizes;
+        pbMissionResults = snap.mission_results || [];
+        pbRejections     = snap.consecutive_rejections || 0;
+        pbCurrentMission = snap.current_mission || 0;
+        pbTotalPlayers   = (snap.player_order || []).length;
+    }
+
+    const inGame = snap.phase !== 'LOBBY';
+    if (inGame) {
+        document.getElementById('settings-game-actions').classList.remove('hidden');
+        showPlayerBoard();
+        renderPlayerBoard();
+        showChat();
+    }
 
     switch (snap.phase) {
         case 'LOBBY':
@@ -650,8 +636,9 @@ function applyStateSnapshot(snap) {
             }
             showScreen('screen-vote'); break;
         case 'MISSION':
-        case 'MISSION_REVEAL':
             showScreen('screen-mission'); break;
+        case 'MISSION_REVEAL':
+            showScreen('screen-mission-reveal'); break;
         case 'ASSASSIN_PHASE':
             showScreen('screen-assassin'); break;
         case 'GAME_OVER':
@@ -714,6 +701,7 @@ function updateHostStartButton(count) {
 
 socket.on('game_starting', () => {
     flash('white', 400);
+    document.getElementById('settings-game-actions').classList.remove('hidden');
 });
 
 socket.on('role_assigned', data => {
@@ -847,13 +835,13 @@ socket.on('game_over', data => {
 });
 
 socket.on('return_to_lobby', data => {
-    playTrack('tavern');
     myRole = null;
     myTeam = null;
     nightInfo = null;
     document.getElementById('btn-role-reminder').classList.add('hidden');
     document.getElementById('role-overlay').classList.add('hidden');
     document.getElementById('settings-overlay').classList.add('hidden');
+    document.getElementById('settings-game-actions').classList.add('hidden');
     hidePlayerBoard();
     hideChat();
     chatBubbleEls = [];
@@ -865,6 +853,19 @@ socket.on('return_to_lobby', data => {
     document.getElementById('btn-history-toggle').classList.remove('active');
     renderLobbyPlayers(data.players || []);
     showScreen('screen-lobby');
+});
+
+socket.on('game_ended', () => {
+    sessionStorage.removeItem('session_token');
+    sessionStorage.removeItem('player_id');
+    myPlayerId = null; myName = null; myRole = null; myTeam = null;
+    gameCode = null;
+    document.getElementById('btn-settings').classList.add('hidden');
+    document.getElementById('settings-overlay').classList.add('hidden');
+    document.getElementById('settings-game-actions').classList.add('hidden');
+    hidePlayerBoard();
+    hideChat();
+    showScreen('screen-join');
 });
 
 socket.on('error', data => {
@@ -967,11 +968,13 @@ document.getElementById('btn-settings').addEventListener('click', () => {
 document.getElementById('btn-close-settings').addEventListener('click', () => {
     document.getElementById('settings-overlay').classList.add('hidden');
 });
-document.getElementById('settings-music-slider').addEventListener('input', e => {
-    setPlayerMusicVolume(parseInt(e.target.value) / 100);
+document.getElementById('btn-back-to-lobby').addEventListener('click', () => {
+    document.getElementById('settings-overlay').classList.add('hidden');
+    socket.emit('return_to_lobby');
 });
-document.getElementById('btn-settings-mute').addEventListener('click', () => {
-    setPlayerMusicVolume(_masterVolume > 0 ? 0 : 0.45);
+document.getElementById('btn-new-game').addEventListener('click', () => {
+    document.getElementById('settings-overlay').classList.add('hidden');
+    socket.emit('end_game');
 });
 
 document.getElementById('btn-confirm-night').addEventListener('click', () => {

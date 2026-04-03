@@ -413,6 +413,7 @@ function wireHostEvents(sock) {
 
     sock.on('vote_start', d => {
         currentMissionTeamIds = d.team_ids || [];
+        renderAllCards();
     });
 
     sock.on('vote_reveal', d => {
@@ -436,6 +437,12 @@ function wireHostEvents(sock) {
 
     sock.on('mission_reveal', d => {
         log(`Mission ${d.mission_num}: ${d.passed ? 'PASS ✓' : 'FAIL ✗'} (${d.fail_count} fail${d.fail_count !== 1 ? 's' : ''})`, 'event');
+    });
+
+    sock.on('mission_complete', d => {
+        log(`Mission complete — outcome: ${d.outcome} (${d.passed ? 'PASS' : 'FAIL'})`, 'event');
+        // Dev panel auto-advances after a pause (host must click in real game)
+        setTimeout(() => sock.emit('advance_after_mission'), 8000);
     });
 
     sock.on('assassin_phase_start', d => {
