@@ -225,16 +225,16 @@ const ROLE_PORTRAITS = {
 // Audio Manager
 // ---------------------------------------------------------------------------
 const TRACKS = {
-    tavern:         '/static/sounds/dummy_daniel-party-at-the-tavern-468489.mp3',
-    night:          '/static/sounds/energysound-cinema-trailer-music-509286.mp3',
-    round_fanfare:  '/static/sounds/tunetank-medieval-happy-music-412790.mp3',
-    discussion:     '/static/sounds/raspberrymusic-dead-of-night-epic-medieval-video-game-478788.mp3',
-    proposal:       '/static/sounds/siarhei_korbut-medieval-backstreet-atmosphere-short-391172.mp3',
-    tension:        '/static/sounds/nickpanekaiassets-mars-bringer-of-silicon-218150.mp3',
-    mission_reveal: '/static/sounds/kaazoom-together-we-stand-30-sec-edit-military-brass-orchestral-459954.mp3',
-    assassin:       '/static/sounds/nickpanekaiassets-tense-medieval-score-for-video-games-217791.mp3',
-    good_wins:      '/static/sounds/eaglaxle-gaming-victory-464016.mp3',
-    evil_wins:      '/static/sounds/freesound_community-075747_inception-horn-victory-82997.mp3',
+    tavern:         '/static/sounds/music/tavern.mp3',
+    night:          '/static/sounds/music/night.mp3',
+    round_fanfare:  '/static/sounds/music/round-start.mp3',
+    discussion:     '/static/sounds/music/discussion.mp3',
+    proposal:       '/static/sounds/music/proposal.mp3',
+    tension:        '/static/sounds/music/tension.mp3',
+    mission_reveal: '/static/sounds/music/mission-reveal.mp3',
+    assassin:       '/static/sounds/music/assassin.mp3',
+    good_wins:      '/static/sounds/music/good-wins.mp3',
+    evil_wins:      '/static/sounds/music/evil-wins.mp3',
 };
 
 let _currentAudio = null;
