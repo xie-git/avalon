@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Avalon</title>
 <link rel="stylesheet" href="/static/css/common.css">
 <link rel="stylesheet" href="/static/css/player.css">
@@ -85,7 +85,6 @@
                 </div>
                 <div class="role-card-face role-card-front-face" id="role-card-front">
                     <div class="role-team-badge" id="role-team-badge"></div>
-                    <img id="role-portrait-card" class="role-portrait-card" src="" alt="">
                     <div class="role-name" id="role-name-display"></div>
                     <div class="role-description" id="role-desc-display"></div>
                 </div>
@@ -238,7 +237,6 @@
 <div id="role-overlay" class="role-overlay hidden">
     <div class="role-overlay-box">
         <div class="role-overlay-team" id="overlay-team-badge"></div>
-        <img id="overlay-portrait" class="overlay-portrait" src="" alt="">
         <div class="role-overlay-name" id="overlay-role-name"></div>
         <div class="role-overlay-desc" id="overlay-role-desc"></div>
         <div class="role-overlay-knowledge" id="overlay-knowledge"></div>
@@ -249,7 +247,7 @@
 <style>
 .settings-float-btn {
     position: fixed;
-    bottom: 3.75rem;
+    bottom: calc(3.75rem + env(safe-area-inset-bottom));
     left: 1.25rem;
     z-index: 200;
     background: linear-gradient(135deg, #2a2010, #1a1508);
@@ -270,7 +268,7 @@
 
 .role-reminder-btn {
     position: fixed;
-    bottom: 3.75rem;
+    bottom: calc(3.75rem + env(safe-area-inset-bottom));
     right: 1.25rem;
     z-index: 200;
     background: linear-gradient(135deg, #2a2010, #1a1508);
@@ -308,6 +306,8 @@
     text-align: center;
     box-shadow: 0 0 60px rgba(201,168,76,0.2);
     animation: fade-in-scale 0.2s ease-out;
+    max-height: calc(100dvh - 2rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overflow-y: auto;
 }
 .role-overlay-team {
     font-family: var(--font-heading);

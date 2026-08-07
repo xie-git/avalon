@@ -10,6 +10,10 @@ The server can run multiple independent games at once. It keeps game state in
 memory, so restarting the container ends active games. Inactive games are
 automatically reclaimed after 12 hours.
 
+Image and sound source files remain in the repository for future use, but the
+current party build does not reference or ship them. The UI uses text, CSS, and
+inline game symbols only, keeping the phone download small and silent.
+
 ## What remains protected
 
 The simple interface does not expose the underlying controls:
@@ -35,6 +39,29 @@ large, sustained denial-of-service attack.
 5. The host starts after 6–10 players have joined.
 
 Each host receives a different code, so several games can run concurrently.
+
+## Ruleset and player counts
+
+Avalon supports every party size from 6 through 10. The alignment counts and
+quest teams follow the published rulebook:
+
+| Players | Good / Evil | Quest team sizes |
+| --- | --- | --- |
+| 6 | 4 / 2 | 2, 3, 4, 3, 4 |
+| 7 | 4 / 3 | 2, 3, 3, 4, 4 |
+| 8 | 5 / 3 | 3, 4, 4, 5, 5 |
+| 9 | 6 / 3 | 3, 4, 4, 5, 5 |
+| 10 | 6 / 4 | 3, 4, 4, 5, 5 |
+
+Merlin, Percival, Assassin, and Morgana are used at every size. Games with
+7–9 players add a regular Minion of Mordred; 10-player games use Mordred and
+Oberon instead. All players, including the Leader, vote. Ties reject a team;
+five consecutive rejections give Evil the game. Only the fourth quest in a
+7–10 player game requires two Fail cards. Good players must submit Success,
+and after three successful quests the Assassin must name a Good player as
+Merlin. Optional targeting, Lady of the Lake, Plot, Excalibur, and Lancelot
+variants are intentionally not enabled. See the
+[published Avalon rulebook](https://www.rulespal.com/resistance-avalon/rulebook).
 
 ## New Ubuntu VM setup
 
@@ -241,6 +268,8 @@ when `APP_ENV=production`.
 
 - One Gunicorn process is required while state remains in memory; do not add
   application workers.
+- The default discussion timer is 60 seconds and can be adjusted from 10
+  seconds to 10 minutes on the host lobby screen.
 - The process has 100 threads for hosts and players across concurrent rooms.
 - Defaults allow 100 live connections and 50 active room records. A full game
   uses up to 11 connections (one host plus ten players).

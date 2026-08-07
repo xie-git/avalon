@@ -571,36 +571,6 @@ function autoAssassinate() {
 }
 
 // ---------------------------------------------------------------------------
-// Music volume (controls the host iframe's audio manager)
-// ---------------------------------------------------------------------------
-function getHostWindow() {
-    const frame = document.getElementById('host-frame');
-    try { return frame && frame.contentWindow && frame.contentWindow.setMusicVolume ? frame.contentWindow : null; }
-    catch(e) { return null; }
-}
-
-let _devMuted = false;
-let _devLastVol = 0.55;
-
-document.getElementById('dev-music-vol').addEventListener('input', e => {
-    const vol = parseInt(e.target.value) / 100;
-    _devLastVol = vol;
-    _devMuted = vol === 0;
-    document.getElementById('btn-dev-mute').textContent = _devMuted ? 'Unmute' : 'Mute';
-    const hw = getHostWindow();
-    if (hw) hw.setMusicVolume(vol);
-});
-
-document.getElementById('btn-dev-mute').addEventListener('click', () => {
-    _devMuted = !_devMuted;
-    const vol = _devMuted ? 0 : _devLastVol;
-    document.getElementById('dev-music-vol').value = Math.round(vol * 100);
-    document.getElementById('btn-dev-mute').textContent = _devMuted ? 'Unmute' : 'Mute';
-    const hw = getHostWindow();
-    if (hw) hw.setMusicVolume(vol);
-});
-
-// ---------------------------------------------------------------------------
 // Debug state
 // ---------------------------------------------------------------------------
 document.getElementById('btn-dev-state').addEventListener('click', async () => {

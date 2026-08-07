@@ -28,6 +28,7 @@ from game_logic import (
     record_mission_card,
     process_mission_result,
     get_assassin,
+    get_assassin_targets,
     process_assassination,
     get_game_summary,
     build_state_snapshot,
@@ -614,6 +615,24 @@ def on_register_host_screen(data):
                 if game.current_leader()
                 else "",
                 "discussion_time": game.discussion_time,
+                "pending_mission_outcome": game.pending_mission_outcome,
+                "proposed_team": [
+                    game.players[pid].name
+                    for pid in game.proposed_team
+                    if pid in game.players
+                ],
+                "votes": {
+                    game.players[pid].name: vote
+                    for pid, vote in game.votes.items()
+                    if pid in game.players
+                },
+                "mission_cards_played": len(game.mission_cards),
+                "summary": get_game_summary(game)
+                if game.phase == GamePhase.GAME_OVER
+                else None,
+                "assassin_name": (
+                    get_assassin(game).name if get_assassin(game) else "Unknown"
+                ),
             },
         )
     except ValueError as error:
@@ -931,8 +950,6 @@ def on_propose_team(data):
     game.timer_phase_key = None  # Cancel proposal timer
     game.phase = GamePhase.TEAM_VOTE
     team_names = [game.players[pid].name for pid in team_ids]
-    # Leader is auto-approved — they do not cast a vote
-    game.votes[player.player_id] = "approve"
     emit_to_game(
         game.code,
         "team_proposed",
@@ -1105,6 +1122,7 @@ def on_advance_after_mission():
             raise ValueError("No completed mission is awaiting advancement")
         game.pending_mission_outcome = None
         if outcome == "assassin_phase":
+            game.phase = GamePhase.ASSASSIN_PHASE
             assassin = get_assassin(game)
             emit_to_game(
                 game.code,
@@ -1114,14 +1132,22 @@ def on_advance_after_mission():
                     "assassin_id": assassin.player_id if assassin else None,
                     "targets": [
                         {"name": p.name, "player_id": p.player_id}
-                        for p in game.players.values()
-                        if p.player_id != (assassin.player_id if assassin else None)
+                        for p in get_assassin_targets(game)
                     ],
                 },
             )
         elif outcome == "evil_wins":
+            game.phase = GamePhase.GAME_OVER
             emit_to_game(game.code, "game_over", get_game_summary(game))
         else:
+            game.current_mission += 1
+            game.consecutive_rejections = 0
+            game.current_leader_index = (game.current_leader_index + 1) % len(
+                game.player_order
+            )
+            game.proposed_team = []
+            game.votes = {}
+            game.mission_cards = {}
             start_round(game)
     except ValueError as error:
         emit_validation_error(error)
@@ -1161,15 +1187,12 @@ def on_assassinate(data):
 def on_return_to_lobby():
     try:
         game = validate_host(request.sid)
-        for player in game.players.values():
-            if player.session_token:
-                session_tokens.pop(player.session_token, None)
         game.reset()
         emit_to_game(
             game.code,
             "return_to_lobby",
             {
-                "players": [],
+                "players": game.public_players(),
                 "settings": {
                     "discussion_time": game.discussion_time,
                     "proposal_time": game.proposal_time,

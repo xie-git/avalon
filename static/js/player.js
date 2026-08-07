@@ -4,12 +4,6 @@
 
 const socket = io();
 
-['role-portrait-card', 'overlay-portrait'].forEach(id => {
-    document.getElementById(id)?.addEventListener('error', event => {
-        event.currentTarget.style.display = 'none';
-    });
-});
-
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -216,59 +210,6 @@ const ROLE_DESCRIPTIONS = {
     'Minion of Mordred':"Serve evil. Help your allies fail quests without being discovered.",
 };
 
-const ROLE_PORTRAITS = {
-    'Merlin':           'merlin',
-    'Percival':         'percival',
-    'Loyal Servant':    'loyal-servant',
-    'Assassin':         'assassin',
-    'Morgana':          'morgana',
-    'Mordred':          'mordred',
-    'Oberon':           'oberon',
-    'Minion of Mordred':'minion',
-};
-
-// ---------------------------------------------------------------------------
-// Audio Manager
-// ---------------------------------------------------------------------------
-const TRACKS = {
-    tavern:         '/static/sounds/music/tavern.mp3',
-    night:          '/static/sounds/music/night.mp3',
-    round_fanfare:  '/static/sounds/music/round-start.mp3',
-    discussion:     '/static/sounds/music/discussion.mp3',
-    proposal:       '/static/sounds/music/proposal.mp3',
-    tension:        '/static/sounds/music/tension.mp3',
-    mission_reveal: '/static/sounds/music/mission-reveal.mp3',
-    assassin:       '/static/sounds/music/assassin.mp3',
-    good_wins:      '/static/sounds/music/good-wins.mp3',
-    evil_wins:      '/static/sounds/music/evil-wins.mp3',
-};
-
-let _currentAudio = null;
-let _currentTrackKey = null;
-let _pendingFade = null;
-const _audioCache = {};
-let _masterVolume = 0.45;
-
-function _getAudio(key) {
-    if (!_audioCache[key]) _audioCache[key] = new Audio(TRACKS[key]);
-    return _audioCache[key];
-}
-
-function playTrack(key, { loop = true } = {}) {
-    // Music is host-screen only — no audio on player phones
-}
-
-function setPlayerMusicVolume(vol) {
-    _masterVolume = vol;
-    if (_currentAudio) _currentAudio.volume = vol;
-    const slider = document.getElementById('settings-music-slider');
-    const display = document.getElementById('settings-music-display');
-    if (slider) slider.value = Math.round(vol * 100);
-    if (display) display.textContent = Math.round(vol * 100) + '%';
-    const btn = document.getElementById('btn-settings-mute');
-    if (btn) btn.textContent = vol === 0 ? '🔇 Unmute' : '🔊 Mute';
-}
-
 // ---------------------------------------------------------------------------
 // Auto-join via URL param (for dev panel)
 // ---------------------------------------------------------------------------
@@ -328,15 +269,6 @@ function showRoleCard(role, team) {
     nameEl.textContent = role;
     descEl.textContent = ROLE_DESCRIPTIONS[role] || '';
 
-    // Portrait
-    const portrait = document.getElementById('role-portrait-card');
-    if (portrait) {
-        const slug = ROLE_PORTRAITS[role] || role.toLowerCase().replace(/\s+/g, '-');
-        portrait.src = `/static/img/portraits/${slug}.png`;
-        portrait.style.display = '';
-        portrait.onerror = () => { portrait.style.display = 'none'; };
-    }
-
     showScreen('screen-role');
 
     // Shuffle then flip
@@ -359,6 +291,10 @@ function showNightInfo(info) {
     const namesEl = document.getElementById('night-sees-names');
     labelEl.textContent = info.sees_label || 'Your vision';
     namesEl.innerHTML = '';
+    const confirmButton = document.getElementById('btn-confirm-night');
+    confirmButton.disabled = false;
+    confirmButton.classList.remove('hidden');
+    document.getElementById('night-waiting-text').classList.add('hidden');
     if (info.sees && info.sees.length > 0) {
         info.sees.forEach(name => {
             const div = document.createElement('div');
@@ -456,14 +392,10 @@ function showVoteScreen(data) {
         chip.textContent = name;
         teamList.appendChild(chip);
     });
-    // Leader is auto-approved — skip vote buttons
-    const amLeader = myPlayerId && (myPlayerId === currentLeaderId);
-    document.getElementById('vote-buttons').classList.toggle('hidden', amLeader);
-    document.getElementById('vote-cast-waiting').classList.toggle('hidden', !amLeader);
-    if (!amLeader) {
-        document.getElementById('btn-approve').disabled = false;
-        document.getElementById('btn-reject').disabled = false;
-    }
+    document.getElementById('vote-buttons').classList.remove('hidden');
+    document.getElementById('vote-cast-waiting').classList.add('hidden');
+    document.getElementById('btn-approve').disabled = false;
+    document.getElementById('btn-reject').disabled = false;
     showScreen('screen-vote');
 }
 
@@ -596,6 +528,10 @@ function applyStateSnapshot(snap) {
     if (snap.my_role) {
         myRole = snap.my_role;
         myTeam = snap.my_team;
+        nightInfo = snap.night_info || null;
+        window._nightInfoPending = snap.night_info || null;
+        populateRoleOverlay();
+        document.getElementById('btn-role-reminder').classList.remove('hidden');
     }
 
     document.getElementById('lobby-code-display').textContent = gameCode;
@@ -628,25 +564,65 @@ function applyStateSnapshot(snap) {
             if (snap.my_role) {
                 if (snap.night_info) showNightInfo(snap.night_info);
                 else showScreen('screen-role');
+                if (snap.night_acknowledged) {
+                    document.getElementById('btn-confirm-night').disabled = true;
+                    document.getElementById('btn-confirm-night').classList.add('hidden');
+                    document.getElementById('night-waiting-text').classList.remove('hidden');
+                }
             }
             break;
         case 'DISCUSSION':
-            showScreen('screen-discussion'); break;
+            showDiscussion({
+                mission_num: snap.current_mission + 1,
+                mission_size: snap.mission_size,
+                leader_id: snap.current_leader_id,
+                duration_seconds: snap.settings.discussion_time,
+            });
+            break;
         case 'TEAM_PROPOSAL':
-            showScreen('screen-proposal'); break;
+            showProposalScreen({
+                leader_name: snap.current_leader,
+                leader_id: snap.current_leader_id,
+                mission_size: snap.mission_size,
+                player_order: snap.player_order,
+                player_name_to_id: snap.player_name_to_id,
+            });
+            break;
         case 'TEAM_VOTE':
         case 'VOTE_REVEAL':
+            showVoteScreen({
+                team: snap.proposed_team || [],
+                team_ids: snap.proposed_team_ids || [],
+                leader_name: snap.current_leader,
+            });
             if (snap.my_vote) {
                 document.getElementById('vote-buttons').classList.add('hidden');
                 document.getElementById('vote-cast-waiting').classList.remove('hidden');
             }
-            showScreen('screen-vote'); break;
+            break;
         case 'MISSION':
-            showScreen('screen-mission'); break;
+            showMissionScreen({
+                team: snap.proposed_team || [],
+                team_ids: snap.proposed_team_ids || [],
+            });
+            if (snap.my_mission_card) {
+                document.getElementById('mission-on-team').classList.add('hidden');
+                document.getElementById('mission-not-on-team').classList.add('hidden');
+                document.getElementById('mission-card-played').classList.remove('hidden');
+            }
+            break;
         case 'MISSION_REVEAL':
-            showScreen('screen-mission-reveal'); break;
+            showMissionScreen({
+                team: snap.proposed_team || [],
+                team_ids: snap.proposed_team_ids || [],
+            });
+            document.getElementById('mission-on-team').classList.add('hidden');
+            document.getElementById('mission-not-on-team').textContent =
+                'The quest has returned. Watch the host screen for the result.';
+            document.getElementById('mission-not-on-team').classList.remove('hidden');
+            break;
         case 'ASSASSIN_PHASE':
-            showScreen('screen-assassin'); break;
+            showAssassinScreen(snap); break;
         case 'GAME_OVER':
             if (snap.summary) showGameOver(snap.summary);
             break;
@@ -660,7 +636,6 @@ function applyStateSnapshot(snap) {
 // ---------------------------------------------------------------------------
 
 socket.on('join_success', data => {
-    playTrack('tavern');
     document.getElementById('btn-settings').classList.remove('hidden');
     myPlayerId = data.player_id;
     myName = data.player_name;
@@ -711,7 +686,6 @@ socket.on('game_starting', () => {
 });
 
 socket.on('role_assigned', data => {
-    playTrack('night');
     window._nightInfoPending = data.night_info;
     showRoleCard(data.role, data.team);
 });
@@ -729,7 +703,6 @@ socket.on('night_phase_complete', () => {
 });
 
 socket.on('round_start', data => {
-    playTrack('round_fanfare');
     window._playerOrder = data.player_order || window._playerOrder || [];
     window._playerNameToId = data.player_name_to_id || window._playerNameToId || {};
     window._currentLeaderName = data.leader_name;
@@ -747,7 +720,6 @@ socket.on('round_start', data => {
 });
 
 socket.on('discussion_start', data => {
-    playTrack('discussion');
     discussionTimerMax = data.duration_seconds;
     document.getElementById('discussion-timer-player').textContent = fmtTime(discussionTimerMax);
     const missionInfo = document.getElementById('discussion-mission-info');
@@ -764,7 +736,6 @@ socket.on('discussion_tick', data => {
 });
 
 socket.on('proposal_start', data => {
-    playTrack('proposal');
     window._currentLeaderName = data.leader_name;
     currentLeaderId = data.leader_id;
     if (data.player_order) window._playerOrder = data.player_order;
@@ -778,7 +749,6 @@ socket.on('team_proposed', data => {
 });
 
 socket.on('vote_start', data => {
-    playTrack('tension');
     showVoteScreen(data);
 });
 
@@ -806,7 +776,6 @@ socket.on('evil_wins_by_rejection', () => {
 });
 
 socket.on('mission_start', data => {
-    playTrack('tension');
     showMissionScreen(data);
 });
 
@@ -829,14 +798,12 @@ socket.on('mission_tracker_update', data => {
 });
 
 socket.on('assassin_phase_start', data => {
-    playTrack('assassin');
     showAssassinScreen(data);
 });
 
 socket.on('assassination_result', () => {});
 
 socket.on('game_over', data => {
-    playTrack(data.winner === 'good' ? 'good_wins' : 'evil_wins', { loop: true });
     showGameOver(data);
 });
 
@@ -937,7 +904,6 @@ function populateRoleOverlay() {
     const roleName = document.getElementById('overlay-role-name');
     const roleDesc = document.getElementById('overlay-role-desc');
     const knowledge = document.getElementById('overlay-knowledge');
-    const portrait = document.getElementById('overlay-portrait');
     teamBadge.className = `role-overlay-team ${myTeam}`;
     teamBadge.textContent = myTeam === 'good' ? 'Forces of Good' : 'Forces of Evil';
     roleName.textContent = myRole || '—';
@@ -949,12 +915,6 @@ function populateRoleOverlay() {
             : info.sees_label;
     } else {
         knowledge.textContent = '';
-    }
-    if (portrait && myRole) {
-        const slug = ROLE_PORTRAITS[myRole] || myRole.toLowerCase().replace(/\s+/g, '-');
-        portrait.src = `/static/img/portraits/${slug}.png`;
-        portrait.style.display = '';
-        portrait.onerror = () => { portrait.style.display = 'none'; };
     }
 }
 

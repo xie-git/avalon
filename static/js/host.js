@@ -11,7 +11,7 @@ let gameCode = null;
 let currentPhase = null;
 let players = [];
 let playerOrder = [];
-let discussionDuration = 300;
+let discussionDuration = 60;
 let proposalDuration = 60;
 let missionSizes = [];
 let currentMission = 0;
@@ -24,85 +24,6 @@ let timerMax = 0;
 
 
 // ---------------------------------------------------------------------------
-// Audio Manager
-// ---------------------------------------------------------------------------
-const TRACKS = {
-    lobby:          '/static/sounds/music/lobby.mp3',
-    night:          '/static/sounds/music/night.mp3',
-    round_fanfare:  '/static/sounds/music/round-start.mp3',
-    discussion:     '/static/sounds/music/discussion.mp3',
-    proposal:       '/static/sounds/music/proposal.mp3',
-    tension:        '/static/sounds/music/tension.mp3',
-    mission_reveal: '/static/sounds/music/mission-reveal.mp3',
-    quest_pass:     '/static/sounds/music/tavern.mp3',
-    assassin:       '/static/sounds/music/assassin.mp3',
-    good_wins:      '/static/sounds/music/good-wins.mp3',
-    evil_wins:      '/static/sounds/music/evil-wins.mp3',
-};
-
-let _currentAudio = null;
-let _currentTrackKey = null;
-let _pendingFade = null;
-const _audioCache = {};
-let _masterVolume = 0.55;
-
-function _getAudio(key) {
-    if (!_audioCache[key]) _audioCache[key] = new Audio(TRACKS[key]);
-    return _audioCache[key];
-}
-
-function playTrack(key, { loop = true } = {}) {
-    if (_currentTrackKey === key) return;
-    // Set key immediately so rapid calls don't stack
-    _currentTrackKey = key;
-    // Cancel any in-progress fade
-    if (_pendingFade) { clearInterval(_pendingFade); _pendingFade = null; }
-    const prev = _currentAudio;
-    const startNew = () => {
-        const audio = _getAudio(key);
-        audio.loop = loop;
-        audio.currentTime = 0;
-        audio.volume = 0;
-        _currentAudio = audio;
-        audio.play().catch(() => {});
-        if (_masterVolume > 0) {
-            let v = 0;
-            _pendingFade = setInterval(() => {
-                v = Math.min(_masterVolume, v + 0.04);
-                audio.volume = v;
-                if (v >= _masterVolume) { clearInterval(_pendingFade); _pendingFade = null; }
-            }, 80);
-        }
-    };
-    if (prev && !prev.paused) {
-        let v = prev.volume;
-        _pendingFade = setInterval(() => {
-            v = Math.max(0, v - 0.1);
-            prev.volume = v;
-            if (v <= 0) {
-                clearInterval(_pendingFade); _pendingFade = null;
-                prev.pause(); prev.currentTime = 0;
-                startNew();
-            }
-        }, 40);
-    } else {
-        startNew();
-    }
-}
-
-// Exposed globally so dev panel iframe can call this
-window.setMusicVolume = function(vol) {
-    _masterVolume = vol;
-    if (_currentAudio) _currentAudio.volume = vol;
-    const slider = document.getElementById('music-vol-slider');
-    const display = document.getElementById('music-vol-display');
-    if (slider) slider.value = Math.round(vol * 100);
-    if (display) display.textContent = Math.round(vol * 100) + '%';
-    const btn = document.getElementById('btn-mute-music');
-    if (btn) btn.textContent = vol === 0 ? '🔇 Muted' : '🔊 Mute';
-};
-
-// ---------------------------------------------------------------------------
 // Screen management
 // ---------------------------------------------------------------------------
 function showScreen(id) {
@@ -110,7 +31,6 @@ function showScreen(id) {
     const target = document.getElementById(id);
     if (target) target.classList.add('active');
     currentPhase = id.replace('screen-', '');
-    if (typeof _syncMusicButton === 'function') _syncMusicButton();
 }
 
 function transition(id, delay = 0) {
@@ -438,7 +358,6 @@ socket.on('connect', () => {
 });
 
 socket.on('game_created', data => {
-    playTrack('lobby');
     gameCode = data.room_code;
     sessionStorage.setItem('host_game_code', gameCode);
     sessionStorage.setItem('host_token', data.host_token);
@@ -462,7 +381,6 @@ socket.on('host_registered', data => {
     if (data.discussion_time) discussionDuration = data.discussion_time;
 
     if (data.phase === 'LOBBY') {
-        playTrack('lobby');
         transition('screen-lobby');
         renderLobbyPlayers(players);
     } else {
@@ -472,7 +390,6 @@ socket.on('host_registered', data => {
         updateRejectionTracker();
         if (currentLeaderName) updateLeaderDisplay(currentLeaderName);
         renderRoundTable(players);
-        playTrack('tension');
         const phaseScreenMap = {
             'ROUND_START': 'screen-round',
             'DISCUSSION': 'screen-round',
@@ -487,6 +404,39 @@ socket.on('host_registered', data => {
         };
         const targetScreen = phaseScreenMap[data.phase] || 'screen-round';
         showScreen(targetScreen);
+        if (data.phase === 'TEAM_PROPOSAL') {
+            document.getElementById('proposal-leader-name').textContent =
+                currentLeaderName;
+            document.getElementById('proposal-mission-size').textContent =
+                `Select ${missionSizes[currentMission] || '?'} members for the quest`;
+        } else if (data.phase === 'TEAM_VOTE' || data.phase === 'VOTE_REVEAL') {
+            proposedTeam = data.proposed_team || [];
+            document.getElementById('vote-team-names').textContent =
+                proposedTeam.join(', ');
+            document.getElementById('vote-leader-label').textContent =
+                `${currentLeaderName} proposes:`;
+            const voted = Object.keys(data.votes || {});
+            renderVoteStatus(voted, players.map(p => p.name).filter(n => !voted.includes(n)));
+        } else if (data.phase === 'MISSION') {
+            proposedTeam = data.proposed_team || [];
+            const display = document.getElementById('mission-team-display');
+            display.innerHTML = '';
+            proposedTeam.forEach(name => {
+                const card = document.createElement('div');
+                card.className = 'mission-member-card';
+                card.textContent = name;
+                display.appendChild(card);
+            });
+            document.getElementById('mission-played').textContent = data.mission_cards_played;
+            document.getElementById('mission-total').textContent = proposedTeam.length;
+        } else if (data.phase === 'MISSION_REVEAL' && data.pending_mission_outcome) {
+            document.getElementById('btn-next-round').classList.remove('hidden');
+        } else if (data.phase === 'ASSASSIN_PHASE') {
+            document.getElementById('assassin-choosing-text').textContent =
+                `${data.assassin_name} deliberates...`;
+        } else if (data.phase === 'GAME_OVER' && data.summary) {
+            renderGameOver(data.summary);
+        }
         document.getElementById('btn-host-settings').style.display = 'block';
     }
 });
@@ -526,7 +476,6 @@ socket.on('game_starting', data => {
 });
 
 socket.on('night_phase_start', data => {
-    playTrack('night');
     spawnStars();
     document.getElementById('night-total').textContent = data.total_players;
     document.getElementById('night-confirmed').textContent = 0;
@@ -546,7 +495,6 @@ socket.on('night_phase_complete', () => {
 socket.on('round_start', data => {
     document.getElementById('btn-next-round').classList.add('hidden');
     document.getElementById('btn-host-settings').style.display = 'block';
-    playTrack('round_fanfare');
     currentMission = data.mission_num - 1;
     currentLeaderName = data.leader_name;
     consecutiveRejections = data.reject_count;
@@ -564,7 +512,6 @@ socket.on('round_start', data => {
 });
 
 socket.on('discussion_start', data => {
-    playTrack('discussion');
     timerMax = data.duration_seconds;
     updateTimerRing('timer-ring', timerMax, timerMax);
     showScreen('screen-round');
@@ -581,7 +528,6 @@ socket.on('discussion_tick', data => {
 socket.on('discussion_end', () => {});
 
 socket.on('proposal_start', data => {
-    playTrack('proposal');
     currentLeaderName = data.leader_name;
     updateLeaderDisplay(data.leader_name);
     proposedTeam = [];
@@ -616,7 +562,7 @@ socket.on('team_proposed', data => {
 });
 
 socket.on('vote_start', data => {
-    playTrack('tension');
+    document.getElementById('vote-result-banner').classList.add('hidden');
     proposedTeam = data.team || [];
     pendingVoters = players.map(p => p.name);
     document.getElementById('vote-team-names').textContent = proposedTeam.join(', ');
@@ -660,7 +606,6 @@ socket.on('evil_wins_by_rejection', () => {
 });
 
 socket.on('mission_start', data => {
-    playTrack('tension');
     proposedTeam = data.team || [];
     const display = document.getElementById('mission-team-display');
     display.innerHTML = '';
@@ -685,7 +630,6 @@ socket.on('mission_waiting', data => {
 });
 
 socket.on('mission_reveal', data => {
-    playTrack('mission_reveal');
     document.getElementById('mission-result-banner').classList.add('hidden');
     transition('screen-mission-reveal');
     setTimeout(() => {
@@ -709,13 +653,10 @@ socket.on('mission_tracker_update', data => {
 });
 
 socket.on('mission_complete', data => {
-    // Switch to pass/fail music and show Next Round button
-    playTrack(data.passed ? 'quest_pass' : 'tension');
     document.getElementById('btn-next-round').classList.remove('hidden');
 });
 
 socket.on('assassin_phase_start', data => {
-    playTrack('assassin');
     document.getElementById('assassin-choosing-text').textContent =
         `${data.assassin_name} deliberates...`;
     hideGameHeader();
@@ -731,13 +672,11 @@ socket.on('assassination_result', data => {
 });
 
 socket.on('game_over', data => {
-    playTrack(data.winner === 'good' ? 'good_wins' : 'evil_wins', { loop: true });
     renderGameOver(data);
     transition('screen-game-over');
 });
 
 socket.on('return_to_lobby', data => {
-    playTrack('lobby');
     players = data.players || [];
     currentMission = 0;
     missionResults = [];
@@ -750,7 +689,6 @@ socket.on('return_to_lobby', data => {
 });
 
 socket.on('game_ended', () => {
-    playTrack('lobby');
     document.getElementById('btn-host-settings').style.display = 'none';
     hideGameHeader();
     sessionStorage.removeItem('host_game_code');
@@ -824,40 +762,3 @@ document.getElementById('discussion-slider').addEventListener('input', e => {
     document.getElementById('discussion-time-display').textContent = fmtTime(discussionDuration);
     socket.emit('update_settings', { discussion_time: discussionDuration });
 });
-
-
-// Music controls — lobby settings panel
-document.getElementById('music-vol-slider').addEventListener('input', e => {
-    window.setMusicVolume(parseInt(e.target.value) / 100);
-});
-document.getElementById('btn-mute-music').addEventListener('click', () => {
-    window.setMusicVolume(_masterVolume > 0 ? 0 : 0.55);
-});
-
-// Music controls — floating in-game panel
-let _musicPanelOpen = false;
-const _floatPanel = document.getElementById('music-controls-float');
-const _toggleBtn = document.getElementById('btn-music-toggle');
-
-document.getElementById('btn-music-toggle').addEventListener('click', () => {
-    _musicPanelOpen = !_musicPanelOpen;
-    _floatPanel.style.display = _musicPanelOpen ? 'flex' : 'none';
-    _toggleBtn.style.display = _musicPanelOpen ? 'none' : 'block';
-});
-
-document.getElementById('music-vol-float').addEventListener('input', e => {
-    window.setMusicVolume(parseInt(e.target.value) / 100);
-});
-
-document.getElementById('btn-mute-float').addEventListener('click', () => {
-    const newVol = _masterVolume > 0 ? 0 : 0.55;
-    window.setMusicVolume(newVol);
-    document.getElementById('music-vol-float').value = Math.round(newVol * 100);
-});
-
-// Show/hide floating music button during game (not on title/lobby)
-function _syncMusicButton() {
-    const inGame = currentPhase && currentPhase !== 'title' && currentPhase !== 'lobby';
-    _toggleBtn.style.display = inGame ? 'block' : 'none';
-    if (!inGame) { _floatPanel.style.display = 'none'; _musicPanelOpen = false; }
-}

@@ -26,6 +26,7 @@ class Role(str, Enum):
     MORGANA = "Morgana"
     MORDRED = "Mordred"
     OBERON = "Oberon"
+    MINION_OF_MORDRED = "Minion of Mordred"
 
 
 class Team(str, Enum):
@@ -41,6 +42,7 @@ ROLE_TO_TEAM = {
     Role.MORGANA: Team.EVIL,
     Role.MORDRED: Team.EVIL,
     Role.OBERON: Team.EVIL,
+    Role.MINION_OF_MORDRED: Team.EVIL,
 }
 
 # (good_count, evil_count, [good_roles], [evil_roles])
@@ -51,7 +53,7 @@ PLAYER_COUNT_ROLES = {
     ),
     7: (
         [Role.MERLIN, Role.PERCIVAL, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT],
-        [Role.ASSASSIN, Role.MORGANA, Role.MORDRED],
+        [Role.ASSASSIN, Role.MORGANA, Role.MINION_OF_MORDRED],
     ),
     8: (
         [
@@ -61,7 +63,7 @@ PLAYER_COUNT_ROLES = {
             Role.LOYAL_SERVANT,
             Role.LOYAL_SERVANT,
         ],
-        [Role.ASSASSIN, Role.MORGANA, Role.MORDRED],
+        [Role.ASSASSIN, Role.MORGANA, Role.MINION_OF_MORDRED],
     ),
     9: (
         [
@@ -72,7 +74,7 @@ PLAYER_COUNT_ROLES = {
             Role.LOYAL_SERVANT,
             Role.LOYAL_SERVANT,
         ],
-        [Role.ASSASSIN, Role.MORGANA, Role.MORDRED],
+        [Role.ASSASSIN, Role.MORGANA, Role.MINION_OF_MORDRED],
     ),
     10: (
         [
@@ -138,9 +140,7 @@ class GameState:
         self.lock = threading.RLock()  # serialize events for this game only
 
         # Settings
-        self.discussion_time = (
-            10  # seconds (short default for testing; increase for real games)
-        )
+        self.discussion_time = 60
         self.proposal_time = 60
 
         # Round state
@@ -198,10 +198,11 @@ class GameState:
         return self.mission_results.count("fail")
 
     def reset(self) -> None:
-        """Reset all game state for a new game, preserving settings."""
+        """Return the same connected group to the lobby for another game."""
         self.phase = GamePhase.LOBBY
-        self.players = {}
-        self.player_order = []
+        for player in self.players.values():
+            player.role = None
+            player.team = None
         self.current_leader_index = 0
         self.current_mission = 0
         self.mission_results = []
@@ -317,7 +318,12 @@ def get_night_phase_info(game: GameState, player_id: str) -> dict:
         info["sees"] = names_of(targets)
         info["sees_label"] = "One is Merlin, one is Morgana — but which?"
 
-    elif role in (Role.ASSASSIN, Role.MORGANA, Role.MORDRED):
+    elif role in (
+        Role.ASSASSIN,
+        Role.MORGANA,
+        Role.MORDRED,
+        Role.MINION_OF_MORDRED,
+    ):
         # See each other, but NOT Oberon
         evil_visible = [
             pid
@@ -441,23 +447,12 @@ def process_mission_result(game: GameState, passed: bool) -> str:
     evil = game.evil_wins_count()
 
     if good >= 3:
-        game.phase = GamePhase.ASSASSIN_PHASE
         return "assassin_phase"
     elif evil >= 3:
-        game.phase = GamePhase.GAME_OVER
         game.winner = "evil"
         game.win_reason = "missions"
         return "evil_wins"
     else:
-        game.current_mission += 1
-        game.consecutive_rejections = 0
-        game.current_leader_index = (game.current_leader_index + 1) % len(
-            game.player_order
-        )
-        game.proposed_team = []
-        game.votes = {}
-        game.mission_cards = {}
-        game.phase = GamePhase.ROUND_START
         return "next_mission"
 
 
@@ -473,10 +468,17 @@ def get_assassin(game: GameState) -> PlayerInfo | None:
     return None
 
 
+def get_assassin_targets(game: GameState) -> list[PlayerInfo]:
+    """Return the Good players the Assassin may name as Merlin."""
+    return [player for player in game.players.values() if player.team == Team.GOOD]
+
+
 def process_assassination(game: GameState, target_player_id: str) -> dict:
     target = game.players.get(target_player_id)
     if not target:
         raise ValueError("Unknown player")
+    if target.team != Team.GOOD:
+        raise ValueError("The Assassin must target a Good player")
     was_merlin = target.role == Role.MERLIN
     if was_merlin:
         game.winner = "evil"
@@ -519,6 +521,9 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
         "code": game.code,
         "players": game.public_players(),
         "player_order": [game.players[pid].name for pid in game.player_order],
+        "player_name_to_id": {
+            game.players[pid].name: pid for pid in game.player_order
+        },
         "current_mission": game.current_mission,
         "mission_results": game.mission_results,
         "consecutive_rejections": game.consecutive_rejections,
@@ -528,6 +533,8 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
             "proposal_time": game.proposal_time,
         },
     }
+    if game.player_count() in MISSION_SIZES:
+        snap["mission_size"] = game.mission_size()
     if player:
         snap["my_player_id"] = player_id
         snap["my_name"] = player.name
@@ -539,6 +546,7 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
             snap["night_info"] = get_night_phase_info(game, player_id)
         snap["my_vote"] = game.votes.get(player_id)
         snap["my_mission_card"] = game.mission_cards.get(player_id)
+        snap["night_acknowledged"] = player_id in game.night_acks
 
     leader = game.current_leader()
     if leader:
@@ -551,6 +559,22 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
             game.players[pid].name for pid in game.proposed_team if pid in game.players
         ]
         snap["proposed_team_ids"] = game.proposed_team
+        # Client renderers use the event name for this same public value.
+        snap["team"] = snap["proposed_team"]
+        snap["team_ids"] = game.proposed_team
+
+    if game.phase == GamePhase.ASSASSIN_PHASE:
+        assassin = get_assassin(game)
+        snap.update(
+            {
+                "assassin_name": assassin.name if assassin else "Unknown",
+                "assassin_id": assassin.player_id if assassin else None,
+                "targets": [
+                    {"name": p.name, "player_id": p.player_id}
+                    for p in get_assassin_targets(game)
+                ],
+            }
+        )
 
     if game.phase == GamePhase.GAME_OVER:
         snap["summary"] = get_game_summary(game)

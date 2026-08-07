@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Avalon — Host</title>
 <link rel="stylesheet" href="/static/css/common.css">
 <link rel="stylesheet" href="/static/css/host.css">
@@ -116,16 +116,6 @@
 <div id="page-transition"></div>
 <div id="flash-overlay"></div>
 
-<!-- Floating music controls (visible during game, hidden in lobby) -->
-<div id="music-controls-float" style="display:none;position:fixed;bottom:1rem;right:1rem;z-index:400;background:rgba(20,15,5,0.92);border:1px solid var(--border-gold);border-radius:var(--radius-md);padding:0.6rem 0.9rem;display:none;flex-direction:column;gap:0.4rem;min-width:180px;box-shadow:0 0 20px rgba(0,0,0,0.6)">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem">
-        <span style="font-family:var(--font-heading);font-size:0.7rem;letter-spacing:0.1em;color:var(--text-secondary)">MUSIC</span>
-        <button id="btn-mute-float" style="font-size:0.7rem;padding:0.2rem 0.5rem;background:transparent;border:1px solid var(--border-gold);border-radius:var(--radius-sm);color:var(--gold-light);font-family:var(--font-heading);cursor:pointer">🔊 Mute</button>
-    </div>
-    <input type="range" id="music-vol-float" min="0" max="100" step="5" value="55" style="width:100%;accent-color:var(--gold)">
-</div>
-<button id="btn-music-toggle" style="display:none;position:fixed;bottom:1rem;right:1rem;z-index:401;background:rgba(20,15,5,0.85);border:1px solid var(--border-gold);border-radius:var(--radius-pill);padding:0.4rem 0.75rem;font-family:var(--font-heading);font-size:0.7rem;letter-spacing:0.1em;color:var(--gold-light);cursor:pointer">🎵</button>
-
 <!-- Game header (mission tracker) — shown during gameplay -->
 <div id="game-header">
     <div class="mission-tracker" id="mission-tracker"></div>
@@ -179,15 +169,8 @@
             <div class="panel settings-panel">
                 <h3>Settings</h3>
                 <div class="setting-row">
-                    <label>Discussion Time <span class="value-display" id="discussion-time-display">10 sec</span></label>
-                    <input type="range" id="discussion-slider" min="10" max="600" step="5" value="10">
-                </div>
-                <div class="setting-row">
-                    <label>Music Volume <span class="value-display" id="music-vol-display">55%</span></label>
-                    <input type="range" id="music-vol-slider" min="0" max="100" step="5" value="55">
-                </div>
-                <div class="setting-row" style="justify-content:flex-end">
-                    <button class="btn" id="btn-mute-music" style="font-size:0.75rem;padding:0.3rem 0.9rem">🔊 Mute</button>
+                    <label>Discussion Time <span class="value-display" id="discussion-time-display">60 sec</span></label>
+                    <input type="range" id="discussion-slider" min="10" max="600" step="5" value="60">
                 </div>
             </div>
             <div class="start-btn-wrapper">

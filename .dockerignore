@@ -12,5 +12,7 @@ __pycache__
 htmlcov
 logs
 tests
+static/img
+static/sounds
 README.md
 compose.yaml
