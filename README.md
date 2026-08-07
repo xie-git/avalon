@@ -1,113 +1,250 @@
 # Avalon
 
-A small, real-time Avalon game for one host display and 6–10 player phones.
-Game state is intentionally in memory: run exactly one application worker, and
-expect an application restart to end active games.
+A Jackbox-style, real-time Avalon game for one host display and 6–10 player
+phones. The host opens `/host`, clicks **Create Game**, and receives a
+four-letter room code. Everyone else opens the main URL and joins with that
+same code—no account, app, VPN, or Tailscale installation is required for
+players.
 
-## Security model
+The server can run multiple independent games at once. It keeps game state in
+memory, so restarting the container ends active games. Inactive games are
+automatically reclaimed after 12 hours.
 
-- Only the host display can create and control games.
-- Creating a game requires `HOST_ADMIN_PASSWORD`.
-- A successful creation returns a separate random host capability, retained in
-  the host browser's session storage for reconnects.
-- Players receive random reconnect capabilities but never host authority.
-- Room codes are six cryptographically generated characters.
-- Production refuses to start without explicit secrets and an HTTPS public URL.
-- `/dev` and `/debug` are absent in production.
-- The container publishes only to host loopback; public ingress should be an
-  outbound tunnel such as Tailscale Funnel.
+## What remains protected
 
-This is defense in depth for a hobby service, not a guarantee against every
-denial-of-service attack. Keep the VM isolated from other home-network systems.
+The simple interface does not expose the underlying controls:
 
-## Local development
+- The host browser receives a private random capability after creating a game.
+- Knowing or guessing the four-letter room code lets someone join as a player,
+  but does not grant host controls.
+- Player reconnect tokens and roles are private to each browser.
+- Production accepts WebSockets only from the configured public origin.
+- The application validates and rate-limits requests.
+- Development and debug routes are unavailable in production.
+- Docker exposes Avalon only on VM loopback for Tailscale Funnel to proxy.
+
+This is appropriate for a small party game. It is not intended to resist a
+large, sustained denial-of-service attack.
+
+## Host and player flow
+
+1. Open `https://YOUR-VM-NAME.YOUR-TAILNET.ts.net/host` on the shared display.
+2. Click **Create Game**.
+3. Players open `https://YOUR-VM-NAME.YOUR-TAILNET.ts.net` on their phones.
+4. They enter the displayed four-letter code and a name.
+5. The host starts after 6–10 players have joined.
+
+Each host receives a different code, so several games can run concurrently.
+
+## New Ubuntu VM setup
+
+These instructions assume Ubuntu 24.04 or 26.04 and that this repository is
+already cloned. Commands using `sudo` will ask for the VM user's password.
+
+### 1. Update the VM
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
-HOST_ADMIN_PASSWORD=local-test-password .venv/bin/python server.py
+sudo apt update
+sudo apt upgrade -y
+sudo apt install -y ca-certificates curl git
 ```
 
-Open `http://127.0.0.1:5001/host`. Development defaults to same-origin
-WebSockets and uses an ephemeral Flask secret on each start. Development-only
-routes require `ENABLE_DEV_ROUTES=true` and are still forbidden in production.
-
-Run tests:
+Reboot if Ubuntu reports that a reboot is required:
 
 ```bash
-.venv/bin/pytest -q
+sudo reboot
 ```
 
-## Production configuration
+### 2. Install Docker Engine and Compose
 
-Copy the template without committing the result:
+Skip this section if both `sudo docker version` and
+`sudo docker compose version` already work.
 
 ```bash
-cp .env.example .env
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+sudo docker run --rm hello-world
+```
+
+These are the commands from Docker's official Ubuntu installation method. The
+Compose file continues using `sudo`, so membership in the root-equivalent
+`docker` group is not required. See the
+[official Docker instructions](https://docs.docker.com/engine/install/ubuntu/)
+if Ubuntu or Docker changes these steps.
+
+### 3. Pull Avalon
+
+From the existing clone:
+
+```bash
+cd ~/avalon
+git pull --ff-only
+git rev-parse --short HEAD
+```
+
+The expected commit is the latest commit on `main`.
+
+### 4. Install and connect Tailscale
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale status
+```
+
+Open the authentication URL printed by `tailscale up`. Then obtain the VM's
+full MagicDNS name:
+
+```bash
+tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))'
+```
+
+It will look similar to `avalon-vm.example-tailnet.ts.net`.
+See the [official Tailscale Linux instructions](https://tailscale.com/docs/install/linux)
+if the installer reports an unsupported distribution.
+
+### 5. Create the production configuration
+
+```bash
+cd ~/avalon
+cp -n .env.example .env
 python3 -c 'import secrets; print(secrets.token_hex(32))'
-python3 -c 'import secrets; print(secrets.token_urlsafe(24))'
-chmod 600 .env
+nano .env
 ```
 
-Put the first output in `SECRET_KEY` and use a different value for
-`HOST_ADMIN_PASSWORD`. Once Tailscale gives the VM its DNS name, set both
-`PUBLIC_BASE_URL` and `PUBLIC_ORIGIN` to the exact HTTPS URL, with no trailing
-slash. Do not quote values in `.env` unless the quotes are intended to be part
-of the value.
+Replace `SECRET_KEY` with the generated value. Replace both example URLs with
+the exact HTTPS URL formed from the Tailscale DNS name, without a trailing
+slash. For example:
 
-## Build and verify without publishing
+```dotenv
+APP_ENV=production
+SECRET_KEY=PASTE_THE_GENERATED_VALUE_HERE
+PUBLIC_BASE_URL=https://avalon-vm.example-tailnet.ts.net
+PUBLIC_ORIGIN=https://avalon-vm.example-tailnet.ts.net
+TRUST_PROXY_HEADERS=true
+ENABLE_DEV_ROUTES=false
+MAX_CONNECTIONS=100
+MAX_GAMES=50
+MAX_RATE_KEYS=5000
+GAME_TTL_SECONDS=43200
+```
+
+Protect the file and validate the Compose configuration:
 
 ```bash
-sudo docker compose config
+chmod 600 .env
+sudo docker compose config --quiet
+```
+
+The application intentionally refuses to start with the example secret.
+Never commit `.env`.
+
+### 6. Build and start Avalon locally
+
+```bash
 sudo docker compose build --pull
 sudo docker compose up -d
 sudo docker compose ps
 curl --fail http://127.0.0.1:5001/healthz
 ```
 
-The expected health response is `{"status":"ok"}`. Port 5001 must not be
-reachable through the VM's LAN address because Compose binds it to
-`127.0.0.1` only.
+The expected response is `{"status":"ok"}` and Compose should report the
+container as healthy. Port 5001 is bound only to `127.0.0.1`; do not add a
+router port-forward or change it to `0.0.0.0`.
 
-Inspect logs without printing `.env`:
+View logs without exposing `.env`:
 
 ```bash
 sudo docker compose logs --tail=100 avalon
 ```
 
-## Tailscale Funnel (only after local verification)
+### 7. Publish through Tailscale Funnel
+
+Only do this after the local health check succeeds:
 
 ```bash
 sudo tailscale funnel --bg 5001
 tailscale funnel status
 ```
 
-Funnel terminates public HTTPS and proxies to `127.0.0.1:5001`. Do not create
-an Xfinity port forward. Stop public access with:
+The first run may print an approval URL. Funnel terminates public HTTPS and
+proxies only to Avalon's loopback port. Anyone can use the resulting `ts.net`
+URL; players do not need Tailscale.
+The current command options are documented in the
+[official Funnel CLI reference](https://tailscale.com/docs/reference/tailscale-cli/funnel).
+
+Test both pages from a phone with Wi-Fi turned off:
+
+```text
+https://YOUR-VM-NAME.YOUR-TAILNET.ts.net
+https://YOUR-VM-NAME.YOUR-TAILNET.ts.net/host
+```
+
+Stop public access without stopping the local container:
 
 ```bash
 sudo tailscale funnel reset
 ```
 
-## Updating and rollback
+## Updating
 
-Before updating, record the current commit:
+Update between games because restarting clears all active rooms:
 
 ```bash
-git rev-parse HEAD
+cd ~/avalon
 git pull --ff-only
 sudo docker compose build --pull
 sudo docker compose up -d
 curl --fail http://127.0.0.1:5001/healthz
 ```
 
-If verification fails, reset Funnel first, then check out the recorded commit,
-rebuild, and restart. A restart clears active games, so update between sessions.
+Useful status commands:
 
-## Operational notes
+```bash
+sudo docker compose ps
+sudo docker compose logs --tail=100 avalon
+tailscale funnel status
+```
 
-- Never scale Gunicorn above one worker while state remains in memory.
-- Rotate both production secrets after suspected disclosure.
-- Host capabilities live only until the process restarts or the game ends.
+## Local development
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python server.py
+```
+
+Open `http://127.0.0.1:5001/host`. Run the test suite with:
+
+```bash
+.venv/bin/pytest -q
+```
+
+Development-only routes require `ENABLE_DEV_ROUTES=true` and remain forbidden
+when `APP_ENV=production`.
+
+## Capacity and operational notes
+
+- One Gunicorn process is required while state remains in memory; do not add
+  application workers.
+- The process has 100 threads for hosts and players across concurrent rooms.
+- Defaults allow 100 live connections and 50 active room records. A full game
+  uses up to 11 connections (one host plus ten players).
+- `GAME_TTL_SECONDS=43200` reclaims inactive rooms after 12 hours when another
+  room is created.
+- A container restart ends all games and invalidates all reconnect tokens.
 - Keep Ubuntu, Docker, Tailscale, and Python dependencies patched.
-- Back up source/configuration, not transient game state. Never commit `.env`.

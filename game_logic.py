@@ -1,4 +1,5 @@
 import secrets
+import threading
 from enum import Enum
 
 
@@ -134,6 +135,7 @@ class GameState:
         self.player_order: list[str] = []  # ordered list of player_ids
         self.host_sid: str | None = None  # host display screen sid
         self.host_token: str | None = None  # unguessable host-screen capability
+        self.lock = threading.RLock()  # serialize events for this game only
 
         # Settings
         self.discussion_time = (
@@ -222,7 +224,7 @@ class GameState:
 
 def generate_game_code(existing_codes: set[str]) -> str:
     for _ in range(1000):
-        code = "".join(secrets.choice(ROOM_CODE_CHARS) for _ in range(6))
+        code = "".join(secrets.choice(ROOM_CODE_CHARS) for _ in range(4))
         if code not in existing_codes:
             return code
     raise RuntimeError("Could not generate unique game code")

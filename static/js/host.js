@@ -442,8 +442,8 @@ socket.on('game_created', data => {
     gameCode = data.room_code;
     sessionStorage.setItem('host_game_code', gameCode);
     sessionStorage.setItem('host_token', data.host_token);
-    document.getElementById('host-admin-password').value = '';
-    document.getElementById('host-auth-error').textContent = '';
+    document.getElementById('host-create-error').textContent = '';
+    document.getElementById('btn-create-game').disabled = false;
     document.getElementById('room-code-display').textContent = gameCode;
     document.getElementById('join-url-display').textContent = `Join at ${data.join_url}`;
     transition('screen-lobby');
@@ -755,14 +755,16 @@ socket.on('game_ended', () => {
     hideGameHeader();
     sessionStorage.removeItem('host_game_code');
     sessionStorage.removeItem('host_token');
+    document.getElementById('btn-create-game').disabled = false;
     transition('screen-title');
 });
 
 socket.on('error', data => {
     console.warn('[server error]', data.message);
-    const errorEl = document.getElementById('host-auth-error');
+    const errorEl = document.getElementById('host-create-error');
     if (errorEl && document.getElementById('screen-title').classList.contains('active')) {
         errorEl.textContent = data.message;
+        document.getElementById('btn-create-game').disabled = false;
     }
 });
 
@@ -771,13 +773,9 @@ socket.on('error', data => {
 // ---------------------------------------------------------------------------
 
 document.getElementById('btn-create-game').addEventListener('click', () => {
-    const password = document.getElementById('host-admin-password').value;
-    document.getElementById('host-auth-error').textContent = '';
-    if (!password) {
-        document.getElementById('host-auth-error').textContent = 'Enter the host password.';
-        return;
-    }
-    socket.emit('create_game', { admin_password: password });
+    document.getElementById('host-create-error').textContent = '';
+    document.getElementById('btn-create-game').disabled = true;
+    socket.emit('create_game');
 });
 
 document.getElementById('btn-start-game').addEventListener('click', () => {

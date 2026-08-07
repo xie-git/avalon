@@ -892,8 +892,8 @@ document.getElementById('btn-join').addEventListener('click', () => {
     const code = document.getElementById('input-room-code').value.trim().toUpperCase();
     const name = document.getElementById('input-name').value.trim();
     document.getElementById('join-error').textContent = '';
-    if (!code || code.length !== 6) {
-        document.getElementById('join-error').textContent = 'Enter the 6-letter room code.';
+    if (!code || code.length !== 4) {
+        document.getElementById('join-error').textContent = 'Enter the 4-letter room code.';
         return;
     }
     if (!name) {

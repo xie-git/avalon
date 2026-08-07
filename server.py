@@ -6,6 +6,7 @@ import threading
 import time
 import uuid
 from collections import defaultdict, deque
+from contextlib import nullcontext
 from functools import wraps
 from urllib.parse import urlsplit
 
@@ -36,7 +37,6 @@ from game_logic import (
 APP_ENV = os.environ.get("APP_ENV", "development").lower()
 IS_PRODUCTION = APP_ENV == "production"
 SECRET_KEY = os.environ.get("SECRET_KEY")
-HOST_ADMIN_PASSWORD = os.environ.get("HOST_ADMIN_PASSWORD")
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
 PUBLIC_ORIGIN = os.environ.get("PUBLIC_ORIGIN", "").rstrip("/")
 ENABLE_DEV_ROUTES = os.environ.get("ENABLE_DEV_ROUTES", "false").lower() == "true"
@@ -48,7 +48,6 @@ if IS_PRODUCTION:
         name
         for name, value in (
             ("SECRET_KEY", SECRET_KEY),
-            ("HOST_ADMIN_PASSWORD", HOST_ADMIN_PASSWORD),
             ("PUBLIC_BASE_URL", PUBLIC_BASE_URL),
             ("PUBLIC_ORIGIN", PUBLIC_ORIGIN),
         )
@@ -60,11 +59,7 @@ if IS_PRODUCTION:
         )
     if len(SECRET_KEY) < 32:
         raise RuntimeError("SECRET_KEY must be at least 32 characters")
-    if len(HOST_ADMIN_PASSWORD) < 16:
-        raise RuntimeError("HOST_ADMIN_PASSWORD must be at least 16 characters")
-    if SECRET_KEY.startswith("replace-with-") or HOST_ADMIN_PASSWORD.startswith(
-        "replace-with-"
-    ):
+    if SECRET_KEY.startswith("replace-with-"):
         raise RuntimeError("Replace the example production secrets before starting")
     parsed_public_url = urlsplit(PUBLIC_BASE_URL)
     if parsed_public_url.scheme != "https" or not parsed_public_url.netloc:
@@ -120,6 +115,7 @@ def no_cache(response):
 # Global state
 # ---------------------------------------------------------------------------
 games: dict[str, GameState] = {}  # code -> GameState
+game_activity: dict[str, float] = {}  # code -> last activity (monotonic seconds)
 sid_to_info: dict[str, dict] = {}  # sid -> {game_code, player_id, is_host_screen}
 session_tokens: dict[str, tuple] = {}  # token -> (game_code, player_id)
 state_lock = threading.RLock()
@@ -136,8 +132,9 @@ EVENT_LIMITS = {
     "default": (120, 60),
 }
 MAX_CONNECTIONS = int(os.environ.get("MAX_CONNECTIONS", 100))
-MAX_GAMES = int(os.environ.get("MAX_GAMES", 20))
+MAX_GAMES = int(os.environ.get("MAX_GAMES", 50))
 MAX_RATE_KEYS = max(100, int(os.environ.get("MAX_RATE_KEYS", 5000)))
+GAME_TTL_SECONDS = max(3600, int(os.environ.get("GAME_TTL_SECONDS", 43200)))
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -190,6 +187,37 @@ def public_base_url() -> str:
     return PUBLIC_BASE_URL or request.host_url.rstrip("/")
 
 
+def discard_game(game_code: str, *, notify: bool = False) -> None:
+    """Remove one game and all of its reconnect/authorization state."""
+    with state_lock:
+        if notify:
+            emit_to_game(game_code, "game_ended", {})
+        games.pop(game_code, None)
+        game_activity.pop(game_code, None)
+        for token, (token_game_code, _) in list(session_tokens.items()):
+            if token_game_code == game_code:
+                del session_tokens[token]
+        for sid, info in list(sid_to_info.items()):
+            if info.get("game_code") == game_code:
+                del sid_to_info[sid]
+
+
+def cleanup_stale_games() -> None:
+    cutoff = time.monotonic() - GAME_TTL_SECONDS
+    with state_lock:
+        candidates = [
+            (game_code, games.get(game_code))
+            for game_code, last_activity in game_activity.items()
+            if last_activity <= cutoff
+        ]
+    for game_code, game in candidates:
+        if not game:
+            continue
+        with game.lock:
+            if game_activity.get(game_code, time.monotonic()) <= cutoff:
+                discard_game(game_code, notify=True)
+
+
 def pause(seconds: float) -> None:
     """Socket.IO-compatible sleep, disabled in tests."""
     if not app.config.get("TESTING"):
@@ -230,6 +258,24 @@ def require_integer(data: dict, key: str, *, minimum: int, maximum: int) -> int:
     if not minimum <= value <= maximum:
         raise ValueError(f"{key} must be between {minimum} and {maximum}")
     return value
+
+
+def event_game_lock(args):
+    """Resolve the room touched by an event without trusting its payload."""
+    with state_lock:
+        info = sid_to_info.get(request.sid)
+        game_code = info.get("game_code") if info else None
+        data = args[0] if args and isinstance(args[0], dict) else {}
+        if not game_code:
+            candidate = data.get("game_code") or data.get("room_code")
+            if isinstance(candidate, str):
+                game_code = candidate.upper()
+        if not game_code:
+            token = data.get("session_token")
+            token_entry = session_tokens.get(token) if isinstance(token, str) else None
+            game_code = token_entry[0] if token_entry else None
+        game = games.get(game_code)
+        return game.lock if game else nullcontext()
 
 
 def rate_limited(bucket: str = "default"):
@@ -286,11 +332,14 @@ def rate_limited(bucket: str = "default"):
                     windows.append(window)
                 for window in windows:
                     window.append(now)
-            # The service deliberately runs one process with multiple threads.
-            # Serialize in-memory game mutations so simultaneous phone events
-            # cannot overfill a lobby or advance the same phase twice.
-            with state_lock:
-                return func(*args, **kwargs)
+            # Preserve ordering within one room without blocking other games.
+            with event_game_lock(args):
+                result = func(*args, **kwargs)
+                info = sid_to_info.get(request.sid)
+                game_code = info.get("game_code") if info else None
+                if game_code in games:
+                    game_activity[game_code] = time.monotonic()
+                return result
 
         return wrapper
 
@@ -354,13 +403,17 @@ def validate_caller(
 def run_discussion_timer(game_code: str, phase_key: str, duration: int):
     for remaining in range(duration, -1, -1):
         socketio.sleep(1)
-        with state_lock:
-            game = games.get(game_code)
+        game = games.get(game_code)
+        if not game:
+            return
+        with game.lock:
             if not game or game.timer_phase_key != phase_key:
                 return  # cancelled or phase changed
             emit_to_game(game_code, "discussion_tick", {"remaining_seconds": remaining})
-    with state_lock:
-        game = games.get(game_code)
+    game = games.get(game_code)
+    if not game:
+        return
+    with game.lock:
         if game and game.timer_phase_key == phase_key:
             transition_to_team_proposal(game)
 
@@ -368,14 +421,18 @@ def run_discussion_timer(game_code: str, phase_key: str, duration: int):
 def run_proposal_timer(game_code: str, phase_key: str, duration: int):
     for remaining in range(duration, -1, -1):
         socketio.sleep(1)
-        with state_lock:
-            game = games.get(game_code)
+        game = games.get(game_code)
+        if not game:
+            return
+        with game.lock:
             if not game or game.timer_phase_key != phase_key:
                 return
             emit_to_game(game_code, "proposal_tick", {"remaining_seconds": remaining})
     # Timer expired — just notify host, don't auto-advance (advisory timer)
-    with state_lock:
-        game = games.get(game_code)
+    game = games.get(game_code)
+    if not game:
+        return
+    with game.lock:
         if game and game.timer_phase_key == phase_key:
             emit_to_game(game_code, "proposal_timer_expired", {})
 
@@ -497,22 +554,23 @@ def on_disconnect(reason=None):
     game = games.get(game_code)
     if not game:
         return
-    if info.get("is_host_screen"):
-        game.host_sid = None
-        return
-    player_id = info.get("player_id")
-    if player_id and player_id in game.players:
-        game.players[player_id].connected = False
-        game.players[player_id].sid = None
-        emit_to_game(
-            game_code,
-            "player_disconnected",
-            {
-                "player_id": player_id,
-                "player_name": game.players[player_id].name,
-                "players": game.public_players(),
-            },
-        )
+    with game.lock:
+        if info.get("is_host_screen"):
+            game.host_sid = None
+            return
+        player_id = info.get("player_id")
+        if player_id and player_id in game.players:
+            game.players[player_id].connected = False
+            game.players[player_id].sid = None
+            emit_to_game(
+                game_code,
+                "player_disconnected",
+                {
+                    "player_id": player_id,
+                    "player_name": game.players[player_id].name,
+                    "players": game.public_players(),
+                },
+            )
 
 
 # --- Host screen registration ---
@@ -523,7 +581,7 @@ def on_disconnect(reason=None):
 def on_register_host_screen(data):
     try:
         data = require_object(data)
-        game_code = require_string(data, "game_code", minimum=6, maximum=6).upper()
+        game_code = require_string(data, "game_code", minimum=4, maximum=4).upper()
         host_token = require_string(data, "host_token", minimum=32, maximum=128)
         game = games.get(game_code)
         if (
@@ -567,22 +625,34 @@ def on_register_host_screen(data):
 
 @socketio.on("create_game")
 @rate_limited("create_game")
-def on_create_game(data):
+def on_create_game(data=None):
     try:
-        data = require_object(data)
-        password = require_string(data, "admin_password", minimum=1, maximum=256)
-        if not HOST_ADMIN_PASSWORD or not hmac.compare_digest(
-            password, HOST_ADMIN_PASSWORD
-        ):
-            raise ValueError("Invalid host password")
+        cleanup_stale_games()
         with state_lock:
+            sid = request.sid
+            existing_info = sid_to_info.get(sid)
+            existing_game = (
+                games.get(existing_info.get("game_code"))
+                if existing_info and existing_info.get("is_host_screen")
+                else None
+            )
+            if existing_game:
+                emit(
+                    "game_created",
+                    {
+                        "room_code": existing_game.code,
+                        "host_token": existing_game.host_token,
+                        "join_url": public_base_url(),
+                    },
+                )
+                return
             if len(games) >= MAX_GAMES:
                 raise ValueError("The server has reached its active-game limit")
             code = generate_game_code(set(games.keys()))
             game = GameState(code)
             game.host_token = secrets.token_urlsafe(32)
             games[code] = game
-            sid = request.sid
+            game_activity[code] = time.monotonic()
             game.host_sid = sid
             join_room(code)
             sid_to_info[sid] = {
@@ -610,7 +680,7 @@ def on_create_game(data):
 def on_join_game(data):
     try:
         data = require_object(data)
-        code = require_string(data, "room_code", minimum=6, maximum=6).upper()
+        code = require_string(data, "room_code", minimum=4, maximum=4).upper()
         name = require_string(data, "player_name", minimum=1, maximum=12)
         game = games.get(code)
         if not game:
@@ -1119,11 +1189,7 @@ def on_end_game():
     try:
         game = validate_host(request.sid)
         game_code = game.code
-        emit_to_game(game_code, "game_ended", {})
-        for player in game.players.values():
-            if player.session_token:
-                session_tokens.pop(player.session_token, None)
-        games.pop(game_code, None)
+        discard_game(game_code, notify=True)
     except ValueError as error:
         emit_validation_error(error)
 

@@ -6,7 +6,6 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault("APP_ENV", "development")
-os.environ.setdefault("HOST_ADMIN_PASSWORD", "correct horse battery staple")
 
 import server  # noqa: E402
 
@@ -15,12 +14,14 @@ import server  # noqa: E402
 def reset_server_state():
     server.app.config["TESTING"] = True
     server.games.clear()
+    server.game_activity.clear()
     server.sid_to_info.clear()
     server.session_tokens.clear()
     server.connected_sids.clear()
     server.rate_windows.clear()
     yield
     server.games.clear()
+    server.game_activity.clear()
     server.sid_to_info.clear()
     server.session_tokens.clear()
     server.connected_sids.clear()
@@ -45,7 +46,7 @@ def received(client, event):
 @pytest.fixture
 def create_game():
     def factory(client):
-        client.emit("create_game", {"admin_password": "correct horse battery staple"})
+        client.emit("create_game")
         packets = client.get_received()
         created = [
             packet["args"][0] for packet in packets if packet["name"] == "game_created"

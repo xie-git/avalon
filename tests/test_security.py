@@ -22,19 +22,27 @@ def test_security_headers_and_development_routes_are_closed():
     assert client.get("/dev").status_code == 404
     assert client.get("/debug/state/ABCDEF").status_code == 404
     assert client.get("/healthz").json == {"status": "ok"}
+    assert b'maxlength="4"' in response.data
+    host_response = client.get("/host")
+    assert b"host-admin-password" not in host_response.data
+    assert b"Create Game" in host_response.data
 
 
-def test_game_creation_requires_password_and_returns_separate_capability(socket_client):
-    socket_client.emit("create_game", {"admin_password": "wrong"})
-    assert packets_for(socket_client, "error")[0]["message"] == "Invalid host password"
-
-    socket_client.emit(
-        "create_game", {"admin_password": "correct horse battery staple"}
-    )
+def test_game_creation_is_one_click_and_returns_separate_capability(socket_client):
+    socket_client.emit("create_game")
     result = packets_for(socket_client, "game_created")[0]
-    assert re.fullmatch(r"[ABCDEFGHJKMNPQRSTUVWXYZ]{6}", result["room_code"])
+    assert re.fullmatch(r"[ABCDEFGHJKMNPQRSTUVWXYZ]{4}", result["room_code"])
     assert len(result["host_token"]) >= 32
     assert result["host_token"] != result["room_code"]
+
+
+def test_repeated_create_from_same_host_is_idempotent(socket_client):
+    socket_client.emit("create_game")
+    first = packets_for(socket_client, "game_created")[0]
+    socket_client.emit("create_game")
+    second = packets_for(socket_client, "game_created")[0]
+    assert second["room_code"] == first["room_code"]
+    assert len(server.games) == 1
 
 
 def test_host_reconnect_rejects_room_code_without_capability(
@@ -79,16 +87,14 @@ def test_player_never_receives_host_authority(socket_client, create_game):
 
 
 def test_malformed_payload_is_controlled(socket_client):
-    socket_client.emit("create_game", ["not", "an", "object"])
+    socket_client.emit("join_game", ["not", "an", "object"])
     errors = packets_for(socket_client, "error")
     assert errors == [{"message": "Invalid request"}]
 
 
 def test_join_attempts_are_rate_limited(socket_client):
     for _ in range(16):
-        socket_client.emit(
-            "join_game", {"room_code": "ABCDEF", "player_name": "Arthur"}
-        )
+        socket_client.emit("join_game", {"room_code": "ABCD", "player_name": "Arthur"})
     messages = [packet["message"] for packet in packets_for(socket_client, "error")]
     assert "Too many requests. Please wait and try again." in messages
 
@@ -155,7 +161,6 @@ def test_production_configuration_fails_closed_when_secrets_are_missing():
     environment["APP_ENV"] = "production"
     for name in (
         "SECRET_KEY",
-        "HOST_ADMIN_PASSWORD",
         "PUBLIC_BASE_URL",
         "PUBLIC_ORIGIN",
     ):
@@ -178,7 +183,6 @@ def test_production_configuration_rejects_example_secrets():
         {
             "APP_ENV": "production",
             "SECRET_KEY": "replace-with-output-of-python-secrets-command",
-            "HOST_ADMIN_PASSWORD": "replace-with-a-long-unique-password",
             "PUBLIC_BASE_URL": "https://avalon.example.ts.net",
             "PUBLIC_ORIGIN": "https://avalon.example.ts.net",
         }
@@ -193,3 +197,36 @@ def test_production_configuration_rejects_example_secrets():
     )
     assert result.returncode != 0
     assert "Replace the example production secrets" in result.stderr
+
+
+def test_multiple_games_are_isolated(create_game):
+    host_one = server.socketio.test_client(server.app)
+    host_two = server.socketio.test_client(server.app)
+    first = create_game(host_one)
+    second = create_game(host_two)
+    assert first["room_code"] != second["room_code"]
+
+    host_one.get_received()
+    host_two.get_received()
+    player = server.socketio.test_client(server.app)
+    player.emit("join_game", {"room_code": first["room_code"], "player_name": "Arthur"})
+    assert len(packets_for(host_one, "player_joined")) == 1
+    assert packets_for(host_two, "player_joined") == []
+
+    player.disconnect()
+    host_one.disconnect()
+    host_two.disconnect()
+
+
+def test_stale_games_are_reclaimed_when_a_new_game_is_created(
+    socket_client, create_game
+):
+    stale = create_game(socket_client)
+    stale_code = stale["room_code"]
+    server.game_activity[stale_code] = (
+        server.time.monotonic() - server.GAME_TTL_SECONDS - 1
+    )
+    socket_client.emit("create_game")
+    new_game = packets_for(socket_client, "game_created")[0]
+    assert stale_code not in server.games
+    assert new_game["room_code"] in server.games

@@ -22,11 +22,11 @@ def make_game(count=6):
     return game
 
 
-def test_room_codes_are_six_characters_and_unique():
+def test_room_codes_are_four_characters_and_unique():
     codes = set()
     for _ in range(200):
         code = generate_game_code(codes)
-        assert len(code) == 6
+        assert len(code) == 4
         assert code not in codes
         codes.add(code)
 
