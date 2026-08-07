@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon — Host</title>
 <link rel="stylesheet" href="/static/css/common.css?v=20260807">
-<link rel="stylesheet" href="/static/css/host.css?v=20260807-beta2">
+<link rel="stylesheet" href="/static/css/host.css?v=20260807-beta3">
 <style>
 /* In-game confirmation modal */
 #confirm-modal {
@@ -124,7 +124,7 @@
     <div class="mission-tracker" id="mission-tracker"></div>
     <div class="leader-display" id="leader-display"></div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.4rem">
-        <div class="rejection-tracker" id="rejection-tracker"></div>
+        <div class="game-stats"><div><span>FAILED</span><strong id="host-fails">0/3</strong></div><div><span>TIME</span><strong id="host-game-time">00:00</strong></div></div>
     </div>
 </div>
 
@@ -178,8 +178,9 @@
                 <div class="beta-test-setting">
                     <div class="beta-test-copy">
                         <strong>Beta Test Mode</strong>
-                        <span>Fill to 6 with random bot players</span>
+                        <span>Fill the lobby with random bot players</span>
                     </div>
+                    <select id="beta-player-count" aria-label="Beta test player count"><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select>
                     <button type="button" id="btn-beta-test-mode" class="beta-toggle" aria-pressed="false">
                         <span class="beta-toggle-state">OFF</span>
                     </button>
@@ -280,6 +281,6 @@
 </div>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/host.js?v=20260807-beta2"></script>
+<script src="/static/js/host.js?v=20260807-beta3"></script>
 </body>
 </html>

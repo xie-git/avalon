@@ -232,6 +232,7 @@ body {
     letter-spacing: 0.06em;
 }
 .beta-test-copy span { font-size: 0.74rem; color: var(--text-secondary); line-height: 1.25; }
+#beta-player-count { background:#100d09; color:var(--gold-light); border:1px solid var(--border-gold); border-radius:6px; padding:0.45rem; font-family:var(--font-heading); }
 .beta-toggle {
     width: 66px;
     min-width: 66px;
@@ -340,33 +341,10 @@ input[type="range"] {
     border-radius: 3px;
 }
 
-/* Rejection tracker */
-.rejection-tracker {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0.4rem;
-}
-.rejection-label {
-    font-family: var(--font-heading);
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    letter-spacing: 0.1em;
-}
-.rejection-dots {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-}
-.rejection-token {
-    width: 26px; height: 26px;
-    border-radius: 50%;
-    border: 2px solid var(--text-dim);
-    background: transparent;
-    transition: all 0.3s ease;
-}
-.rejection-token.filled { background: var(--red-glow); border-color: var(--red-glow); box-shadow: 0 0 12px var(--red-glow); }
-.rejection-token:nth-child(5).filled { animation: glow-pulse-red 0.8s ease-in-out infinite; }
+.game-stats { display:flex; gap:1rem; }
+.game-stats div { display:flex; flex-direction:column; align-items:flex-end; }
+.game-stats span { font-family:var(--font-heading); font-size:0.65rem; color:var(--text-secondary); letter-spacing:.1em; }
+.game-stats strong { font-family:var(--font-heading); font-size:0.9rem; color:var(--gold-light); white-space:nowrap; }
 
 /* Leader display */
 .leader-display {

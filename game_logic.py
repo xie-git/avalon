@@ -145,6 +145,8 @@ class GameState:
         self.discussion_time = 60
         self.proposal_time = 60
         self.beta_test_mode = False
+        self.beta_test_player_count = 6
+        self.started_at: float | None = None
 
         # Round state
         self.current_leader_index = 0
@@ -219,6 +221,7 @@ class GameState:
         self.win_reason = None
         self.timer_phase_key = None
         self.pending_mission_outcome = None
+        self.started_at = None
 
 
 # ---------------------------------------------------------------------------
@@ -530,6 +533,7 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
         "current_mission": game.current_mission,
         "mission_results": game.mission_results,
         "consecutive_rejections": game.consecutive_rejections,
+        "game_started_at": game.started_at,
         "mission_sizes": MISSION_SIZES.get(game.player_count(), []),
         "settings": {
             "discussion_time": game.discussion_time,

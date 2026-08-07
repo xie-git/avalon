@@ -375,6 +375,7 @@ def lobby_payload(game: GameState) -> dict:
             "discussion_time": game.discussion_time,
             "proposal_time": game.proposal_time,
             "beta_test_mode": game.beta_test_mode,
+            "beta_test_player_count": game.beta_test_player_count,
         },
     }
 
@@ -399,6 +400,16 @@ def remove_beta_bots(game: GameState) -> None:
             game.players.pop(player_id, None)
             if player_id in game.player_order:
                 game.player_order.remove(player_id)
+
+
+def sync_beta_bots(game: GameState, target_count: int) -> None:
+    while game.player_count() > target_count:
+        bot = next((p for p in reversed(game.player_order) if game.players[p].is_bot), None)
+        if bot is None:
+            break
+        game.players.pop(bot, None)
+        game.player_order.remove(bot)
+    add_beta_bots(game, target_count)
 
 
 def bot_players(game: GameState):
@@ -498,6 +509,7 @@ def start_round(game: GameState):
             "mission_results": game.mission_results,
             "mission_sizes": mission_sizes,
             "requires_double_fail": game.requires_double_fail(),
+            "game_started_at": game.started_at,
             # Player ordering info — needed by the leader's proposal screen
             "player_order": [game.players[pid].name for pid in game.player_order],
             "player_name_to_id": {
@@ -805,6 +817,8 @@ def on_register_host_screen(data):
                 else "",
                 "discussion_time": game.discussion_time,
                 "beta_test_mode": game.beta_test_mode,
+                "beta_test_player_count": game.beta_test_player_count,
+                "game_started_at": game.started_at,
                 "pending_mission_outcome": game.pending_mission_outcome,
                 "proposed_team": [
                     game.players[pid].name
@@ -895,6 +909,11 @@ def on_join_game(data):
         if not game:
             raise ValueError("Room not found. Check the code and try again.")
         sid = request.sid
+        if game.beta_test_mode and game.player_count() >= game.beta_test_player_count:
+            bot = next((p for p in reversed(game.player_order) if game.players[p].is_bot), None)
+            if bot is not None:
+                game.players.pop(bot, None)
+                game.player_order.remove(bot)
         player_id = str(uuid.uuid4())
         player = add_player(game, name, player_id)
         token = secrets.token_urlsafe(32)
@@ -916,6 +935,7 @@ def on_join_game(data):
                     "discussion_time": game.discussion_time,
                     "proposal_time": game.proposal_time,
                     "beta_test_mode": game.beta_test_mode,
+                    "beta_test_player_count": game.beta_test_player_count,
                 },
             },
         )
@@ -1026,9 +1046,11 @@ def on_set_beta_test_mode(data):
         enabled = data.get("enabled")
         if not isinstance(enabled, bool):
             raise ValueError("enabled must be true or false")
+        target_count = require_integer(data, "target_count", minimum=6, maximum=10) if "target_count" in data else game.beta_test_player_count
+        game.beta_test_player_count = target_count
         game.beta_test_mode = enabled
         if enabled:
-            add_beta_bots(game)
+            sync_beta_bots(game, target_count)
         else:
             remove_beta_bots(game)
         emit_to_game(game.code, "lobby_update", lobby_payload(game))
@@ -1072,7 +1094,8 @@ def on_start_game():
         if n < 6 or n > 10:
             raise ValueError(f"Need 6-10 players. Currently {n}.")
         assign_roles(game)
-        emit_to_game(game.code, "game_starting", {"player_count": n})
+        game.started_at = time.time()
+        emit_to_game(game.code, "game_starting", {"player_count": n, "game_started_at": game.started_at})
         pause(1)
         transition_to_night_phase(game)
     except ValueError as error:
@@ -1303,6 +1326,7 @@ def on_return_to_lobby():
                     "discussion_time": game.discussion_time,
                     "proposal_time": game.proposal_time,
                     "beta_test_mode": game.beta_test_mode,
+                    "beta_test_player_count": game.beta_test_player_count,
                 },
             },
         )

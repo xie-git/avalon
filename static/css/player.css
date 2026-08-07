@@ -661,36 +661,19 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
 .pb-icon { font-size: 0.7rem; line-height: 1; }
 .pb-double { font-size: 0.45rem; color: var(--red-glow); position: absolute; top: 2px; right: 3px; font-family: var(--font-heading); }
 
-.pb-right {
+.pb-stats {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 3px;
+    gap: 0.45rem;
     flex-shrink: 0;
 }
-.pb-reject-label {
+.pb-stat { display:flex; flex-direction:column; align-items:flex-end; }
+.pb-stat span {
     font-family: var(--font-heading);
-    font-size: 0.5rem;
+    font-size: 0.42rem;
     color: var(--text-dim);
     letter-spacing: 0.08em;
 }
-.pb-dots {
-    display: flex;
-    gap: 3px;
-}
-.pb-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.15);
-    background: transparent;
-    transition: background 0.3s, border-color 0.3s;
-}
-.pb-dot.filled {
-    background: var(--red-glow);
-    border-color: var(--red-glow);
-    box-shadow: 0 0 4px var(--red-glow);
-}
+.pb-stat strong { font-family:var(--font-heading); font-size:0.62rem; color:var(--gold-light); white-space:nowrap; }
 
 /* ============================================================
    CHAT

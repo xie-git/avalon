@@ -24,9 +24,10 @@ let discussionTimerMax = 300;
 // Mission board state
 let pbMissionSizes = [];
 let pbMissionResults = [];
-let pbRejections = 0;
 let pbCurrentMission = 0;
 let pbTotalPlayers = 0;
+let gameStartedAt = null;
+let gameClockInterval = null;
 
 // Chat state
 let chatBubbleEls = [];
@@ -70,6 +71,25 @@ function fmtTime(sec) {
     return m > 0 ? `${m}:${String(s).padStart(2,'0')}` : sec.toString();
 }
 
+function formatElapsed(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function updateGameClock() {
+    const el = document.getElementById('pb-game-time');
+    if (el && gameStartedAt) el.textContent = formatElapsed(Math.max(0, Math.floor((Date.now() - gameStartedAt) / 1000)));
+}
+function startGameClock(epochSeconds) {
+    if (!epochSeconds) return;
+    gameStartedAt = Number(epochSeconds) * 1000;
+    clearInterval(gameClockInterval);
+    updateGameClock();
+    gameClockInterval = setInterval(updateGameClock, 1000);
+}
+function stopGameClock() { clearInterval(gameClockInterval); gameClockInterval = null; gameStartedAt = null; }
+
 // ---------------------------------------------------------------------------
 // Player mission board
 // ---------------------------------------------------------------------------
@@ -84,7 +104,6 @@ function hidePlayerBoard() {
 
 function renderPlayerBoard() {
     const shieldsEl = document.getElementById('pb-shields');
-    const dotsEl = document.getElementById('pb-dots');
     if (!shieldsEl) return;
 
     shieldsEl.innerHTML = '';
@@ -105,10 +124,8 @@ function renderPlayerBoard() {
         </div>`;
     }
 
-    dotsEl.innerHTML = '';
-    for (let i = 0; i < 5; i++) {
-        dotsEl.innerHTML += `<div class="pb-dot${i < pbRejections ? ' filled' : ''}"></div>`;
-    }
+    document.getElementById('pb-fails').textContent = `${pbMissionResults.filter(r => r === 'fail').length}/3`;
+    updateGameClock();
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +142,7 @@ function hideChat() {
 
 function fmtChatTime() {
     const d = new Date();
-    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 }
 
 function addChatBubble(name, message, isSelf) {
@@ -542,13 +559,13 @@ function applyStateSnapshot(snap) {
     if (snap.mission_sizes && snap.mission_sizes.length) {
         pbMissionSizes   = snap.mission_sizes;
         pbMissionResults = snap.mission_results || [];
-        pbRejections     = snap.consecutive_rejections || 0;
         pbCurrentMission = snap.current_mission || 0;
         pbTotalPlayers   = (snap.player_order || []).length;
     }
 
     const inGame = snap.phase !== 'LOBBY';
     if (inGame) {
+        startGameClock(snap.game_started_at);
         document.getElementById('settings-game-actions').classList.remove('hidden');
         showPlayerBoard();
         renderPlayerBoard();
@@ -680,7 +697,8 @@ function updateHostStartButton(count) {
     hint.textContent = valid ? '' : (count < 6 ? `Need ${6 - count} more player(s)` : 'Too many players');
 }
 
-socket.on('game_starting', () => {
+socket.on('game_starting', data => {
+    startGameClock(data.game_started_at);
     flash('white', 400);
     document.getElementById('settings-game-actions').classList.remove('hidden');
 });
@@ -711,7 +729,7 @@ socket.on('round_start', data => {
     // Board state
     pbMissionSizes    = data.mission_sizes || pbMissionSizes;
     pbMissionResults  = data.mission_results || pbMissionResults;
-    pbRejections      = data.reject_count || 0;
+    if (data.game_started_at && !gameStartedAt) startGameClock(data.game_started_at);
     pbCurrentMission  = (data.mission_num || 1) - 1;
     pbTotalPlayers    = (data.player_order || []).length || pbTotalPlayers;
     showPlayerBoard();
@@ -767,8 +785,6 @@ socket.on('vote_reveal', data => {
 socket.on('rejection_warning', data => {
     window._currentLeaderName = data.leader_name;
     currentLeaderId = data.leader_id;
-    pbRejections = data.consecutive || pbRejections;
-    renderPlayerBoard();
 });
 
 socket.on('evil_wins_by_rejection', () => {
@@ -793,7 +809,6 @@ socket.on('mission_reveal', () => {
 socket.on('mission_tracker_update', data => {
     pbMissionResults = data.mission_results || pbMissionResults;
     if (data.good_wins < 3 && data.evil_wins < 3) pbCurrentMission++;
-    pbRejections = 0; // new mission resets consecutive rejections
     renderPlayerBoard();
 });
 
@@ -808,6 +823,7 @@ socket.on('game_over', data => {
 });
 
 socket.on('return_to_lobby', data => {
+    stopGameClock();
     myRole = null;
     myTeam = null;
     nightInfo = null;
@@ -829,6 +845,7 @@ socket.on('return_to_lobby', data => {
 });
 
 socket.on('game_ended', () => {
+    stopGameClock();
     sessionStorage.removeItem('session_token');
     sessionStorage.removeItem('player_id');
     myPlayerId = null; myName = null; myRole = null; myTeam = null;

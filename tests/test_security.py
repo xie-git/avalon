@@ -222,8 +222,9 @@ def test_one_human_can_start_beta_game_and_bots_confirm_night(
     player.disconnect()
 
 
+@pytest.mark.parametrize("beta_count", range(6, 11))
 def test_one_human_and_random_bots_can_finish_a_complete_game(
-    socket_client, create_game
+    socket_client, create_game, beta_count
 ):
     created = create_game(socket_client)
     player = server.socketio.test_client(server.app)
@@ -233,7 +234,10 @@ def test_one_human_and_random_bots_can_finish_a_complete_game(
     joined = packets_for(player, "join_success")[0]
     human_id = joined["player_id"]
     socket_client.get_received()
-    socket_client.emit("set_beta_test_mode", {"enabled": True})
+    socket_client.emit(
+        "set_beta_test_mode", {"enabled": True, "target_count": beta_count}
+    )
+    assert server.games[created["room_code"]].player_count() == beta_count
     socket_client.emit("start_game")
     player.get_received()
     player.emit("night_phase_ack")

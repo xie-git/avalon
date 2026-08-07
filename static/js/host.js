@@ -22,6 +22,9 @@ let proposedTeam = [];
 let pendingVoters = [];
 let timerMax = 0;
 let betaTestMode = false;
+let betaTestPlayerCount = 6;
+let gameStartedAt = null;
+let gameClockInterval = null;
 
 
 // ---------------------------------------------------------------------------
@@ -89,13 +92,20 @@ function updateMissionTracker() {
     }
 }
 
-function updateRejectionTracker() {
-    const tracker = document.getElementById('rejection-tracker');
-    tracker.innerHTML = `<span class="rejection-label">REJECTIONS</span><div class="rejection-dots">${
-        Array.from({length: 5}, (_, i) =>
-            `<div class="rejection-token${i < consecutiveRejections ? ' filled' : ''}"></div>`
-        ).join('')
-    }</div>`;
+function formatElapsed(seconds) {
+    const h = Math.floor(seconds / 3600), m = Math.floor((seconds % 3600) / 60), s = seconds % 60;
+    return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function updateGameStats() {
+    document.getElementById('host-fails').textContent = `${missionResults.filter(r => r === 'fail').length}/3`;
+    if (gameStartedAt) document.getElementById('host-game-time').textContent = formatElapsed(Math.max(0, Math.floor((Date.now() - gameStartedAt) / 1000)));
+}
+function startGameClock(epochSeconds) {
+    if (!epochSeconds) return;
+    gameStartedAt = Number(epochSeconds) * 1000;
+    clearInterval(gameClockInterval);
+    updateGameStats();
+    gameClockInterval = setInterval(updateGameStats, 1000);
 }
 
 function updateLeaderDisplay(name) {
@@ -185,8 +195,10 @@ function renderLobbyPlayers(playerList) {
         : (n < 6 ? `Need ${6 - n} more player(s)` : 'Too many players (max 10)');
 }
 
-function renderBetaTestMode(enabled) {
+function renderBetaTestMode(enabled, targetCount = betaTestPlayerCount) {
     betaTestMode = Boolean(enabled);
+    betaTestPlayerCount = Number(targetCount) || 6;
+    document.getElementById('beta-player-count').value = String(betaTestPlayerCount);
     const toggle = document.getElementById('btn-beta-test-mode');
     toggle.classList.toggle('enabled', betaTestMode);
     toggle.setAttribute('aria-pressed', String(betaTestMode));
@@ -393,17 +405,19 @@ socket.on('host_registered', data => {
     consecutiveRejections = data.consecutive_rejections || 0;
     currentLeaderName = data.current_leader || '';
     betaTestMode = Boolean(data.beta_test_mode);
+    betaTestPlayerCount = Number(data.beta_test_player_count) || 6;
+    if (data.game_started_at) startGameClock(data.game_started_at);
     if (data.discussion_time) discussionDuration = data.discussion_time;
 
     if (data.phase === 'LOBBY') {
         transition('screen-lobby');
         renderLobbyPlayers(players);
-        renderBetaTestMode(betaTestMode);
+        renderBetaTestMode(betaTestMode, betaTestPlayerCount);
     } else {
         // Mid-game reconnect — restore header and show appropriate screen
         showGameHeader();
         updateMissionTracker();
-        updateRejectionTracker();
+        updateGameStats();
         if (currentLeaderName) updateLeaderDisplay(currentLeaderName);
         renderRoundTable(players);
         const phaseScreenMap = {
@@ -483,12 +497,13 @@ socket.on('lobby_update', data => {
         const sliderEl = document.getElementById('discussion-slider');
         if (dispEl) dispEl.textContent = fmtTime(discussionDuration);
         if (sliderEl) sliderEl.value = discussionDuration;
-        renderBetaTestMode(data.settings.beta_test_mode);
+        renderBetaTestMode(data.settings.beta_test_mode, data.settings.beta_test_player_count);
     }
 });
 
 socket.on('game_starting', data => {
     players = players; // keep
+    startGameClock(data.game_started_at);
     flash('white', 500);
 });
 
@@ -522,7 +537,7 @@ socket.on('round_start', data => {
     document.getElementById('round-title').textContent = `Mission ${data.mission_num}`;
     document.getElementById('round-leader-name').textContent = data.leader_name;
     updateMissionTracker();
-    updateRejectionTracker();
+    updateGameStats();
     updateLeaderDisplay(data.leader_name);
     showGameHeader();
     transition('screen-round');
@@ -610,7 +625,6 @@ socket.on('vote_reveal', data => {
 
 socket.on('rejection_warning', data => {
     consecutiveRejections = data.consecutive;
-    updateRejectionTracker();
     updateLeaderDisplay(data.leader_name);
 });
 
@@ -664,6 +678,7 @@ socket.on('mission_reveal', data => {
 socket.on('mission_tracker_update', data => {
     missionResults = data.mission_results || [];
     updateMissionTracker();
+    updateGameStats();
     if (data.good_wins < 3 && data.evil_wins < 3) {
         currentMission++;
     }
@@ -694,6 +709,8 @@ socket.on('game_over', data => {
 });
 
 socket.on('return_to_lobby', data => {
+    clearInterval(gameClockInterval); gameClockInterval = null; gameStartedAt = null;
+    document.getElementById('host-game-time').textContent = '00:00';
     players = data.players || [];
     currentMission = 0;
     missionResults = [];
@@ -706,6 +723,7 @@ socket.on('return_to_lobby', data => {
 });
 
 socket.on('game_ended', () => {
+    clearInterval(gameClockInterval);
     document.getElementById('btn-host-settings').style.display = 'none';
     hideGameHeader();
     sessionStorage.removeItem('host_game_code');
@@ -738,7 +756,11 @@ document.getElementById('btn-start-game').addEventListener('click', () => {
 });
 
 document.getElementById('btn-beta-test-mode').addEventListener('click', () => {
-    socket.emit('set_beta_test_mode', { enabled: !betaTestMode });
+    socket.emit('set_beta_test_mode', { enabled: !betaTestMode, target_count: betaTestPlayerCount });
+});
+document.getElementById('beta-player-count').addEventListener('change', event => {
+    betaTestPlayerCount = Number(event.target.value);
+    socket.emit('set_beta_test_mode', { enabled: betaTestMode, target_count: betaTestPlayerCount });
 });
 
 document.getElementById('btn-skip-discussion').addEventListener('click', async () => {
