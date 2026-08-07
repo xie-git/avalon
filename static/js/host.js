@@ -430,18 +430,10 @@ document.getElementById('confirm-no').addEventListener('click', () => {
 // ---------------------------------------------------------------------------
 
 socket.on('connect', () => {
-    // Check URL fragment for dev panel auto-registration (e.g. /host#auto_code=ABCD)
-    const hashMatch = window.location.hash.match(/auto_code=([A-Z]{4})/);
-    if (hashMatch) {
-        gameCode = hashMatch[1];
-        sessionStorage.setItem('host_game_code', gameCode);
-        socket.emit('register_host_screen', { game_code: gameCode });
-        return;
-    }
-    // Otherwise try session storage reconnect
     const stored = sessionStorage.getItem('host_game_code');
-    if (stored) {
-        socket.emit('register_host_screen', { game_code: stored });
+    const hostToken = sessionStorage.getItem('host_token');
+    if (stored && hostToken) {
+        socket.emit('register_host_screen', { game_code: stored, host_token: hostToken });
     }
 });
 
@@ -449,6 +441,9 @@ socket.on('game_created', data => {
     playTrack('lobby');
     gameCode = data.room_code;
     sessionStorage.setItem('host_game_code', gameCode);
+    sessionStorage.setItem('host_token', data.host_token);
+    document.getElementById('host-admin-password').value = '';
+    document.getElementById('host-auth-error').textContent = '';
     document.getElementById('room-code-display').textContent = gameCode;
     document.getElementById('join-url-display').textContent = `Join at ${data.join_url}`;
     transition('screen-lobby');
@@ -456,6 +451,8 @@ socket.on('game_created', data => {
 
 socket.on('host_registered', data => {
     gameCode = data.code;
+    document.getElementById('room-code-display').textContent = gameCode;
+    document.getElementById('join-url-display').textContent = `Join at ${data.join_url}`;
     players = data.players || [];
     missionSizes = data.mission_sizes || [];
     missionResults = data.mission_results || [];
@@ -757,11 +754,16 @@ socket.on('game_ended', () => {
     document.getElementById('btn-host-settings').style.display = 'none';
     hideGameHeader();
     sessionStorage.removeItem('host_game_code');
+    sessionStorage.removeItem('host_token');
     transition('screen-title');
 });
 
 socket.on('error', data => {
     console.warn('[server error]', data.message);
+    const errorEl = document.getElementById('host-auth-error');
+    if (errorEl && document.getElementById('screen-title').classList.contains('active')) {
+        errorEl.textContent = data.message;
+    }
 });
 
 // ---------------------------------------------------------------------------
@@ -769,7 +771,13 @@ socket.on('error', data => {
 // ---------------------------------------------------------------------------
 
 document.getElementById('btn-create-game').addEventListener('click', () => {
-    socket.emit('create_game');
+    const password = document.getElementById('host-admin-password').value;
+    document.getElementById('host-auth-error').textContent = '';
+    if (!password) {
+        document.getElementById('host-auth-error').textContent = 'Enter the host password.';
+        return;
+    }
+    socket.emit('create_game', { admin_password: password });
 });
 
 document.getElementById('btn-start-game').addEventListener('click', () => {

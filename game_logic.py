@@ -1,4 +1,4 @@
-import random
+import secrets
 from enum import Enum
 
 
@@ -44,24 +44,54 @@ ROLE_TO_TEAM = {
 
 # (good_count, evil_count, [good_roles], [evil_roles])
 PLAYER_COUNT_ROLES = {
-    6:  ([Role.MERLIN, Role.PERCIVAL, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT],
-         [Role.ASSASSIN, Role.MORGANA]),
-    7:  ([Role.MERLIN, Role.PERCIVAL, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT],
-         [Role.ASSASSIN, Role.MORGANA, Role.MORDRED]),
-    8:  ([Role.MERLIN, Role.PERCIVAL, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT],
-         [Role.ASSASSIN, Role.MORGANA, Role.MORDRED]),
-    9:  ([Role.MERLIN, Role.PERCIVAL, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT],
-         [Role.ASSASSIN, Role.MORGANA, Role.MORDRED]),
-    10: ([Role.MERLIN, Role.PERCIVAL, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT],
-         [Role.ASSASSIN, Role.MORGANA, Role.MORDRED, Role.OBERON]),
+    6: (
+        [Role.MERLIN, Role.PERCIVAL, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT],
+        [Role.ASSASSIN, Role.MORGANA],
+    ),
+    7: (
+        [Role.MERLIN, Role.PERCIVAL, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT],
+        [Role.ASSASSIN, Role.MORGANA, Role.MORDRED],
+    ),
+    8: (
+        [
+            Role.MERLIN,
+            Role.PERCIVAL,
+            Role.LOYAL_SERVANT,
+            Role.LOYAL_SERVANT,
+            Role.LOYAL_SERVANT,
+        ],
+        [Role.ASSASSIN, Role.MORGANA, Role.MORDRED],
+    ),
+    9: (
+        [
+            Role.MERLIN,
+            Role.PERCIVAL,
+            Role.LOYAL_SERVANT,
+            Role.LOYAL_SERVANT,
+            Role.LOYAL_SERVANT,
+            Role.LOYAL_SERVANT,
+        ],
+        [Role.ASSASSIN, Role.MORGANA, Role.MORDRED],
+    ),
+    10: (
+        [
+            Role.MERLIN,
+            Role.PERCIVAL,
+            Role.LOYAL_SERVANT,
+            Role.LOYAL_SERVANT,
+            Role.LOYAL_SERVANT,
+            Role.LOYAL_SERVANT,
+        ],
+        [Role.ASSASSIN, Role.MORGANA, Role.MORDRED, Role.OBERON],
+    ),
 }
 
 # Mission sizes per player count: [M1, M2, M3, M4, M5]
 MISSION_SIZES = {
-    6:  [2, 3, 4, 3, 4],
-    7:  [2, 3, 3, 4, 4],
-    8:  [3, 4, 4, 5, 5],
-    9:  [3, 4, 4, 5, 5],
+    6: [2, 3, 4, 3, 4],
+    7: [2, 3, 3, 4, 4],
+    8: [3, 4, 4, 5, 5],
+    9: [3, 4, 4, 5, 5],
     10: [3, 4, 4, 5, 5],
 }
 
@@ -71,6 +101,7 @@ DOUBLE_FAIL_THRESHOLD = 7
 
 # Safe character set for room codes (no O, I, L, 0, 1)
 ROOM_CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ"
+secure_random = secrets.SystemRandom()
 
 
 class PlayerInfo:
@@ -101,11 +132,13 @@ class GameState:
         self.phase = GamePhase.LOBBY
         self.players: dict[str, PlayerInfo] = {}  # player_id -> PlayerInfo
         self.player_order: list[str] = []  # ordered list of player_ids
-        self.host_player_id: str | None = None  # first player to join via phone
         self.host_sid: str | None = None  # host display screen sid
+        self.host_token: str | None = None  # unguessable host-screen capability
 
         # Settings
-        self.discussion_time = 10   # seconds (short default for testing; increase for real games)
+        self.discussion_time = (
+            10  # seconds (short default for testing; increase for real games)
+        )
         self.proposal_time = 60
 
         # Round state
@@ -126,7 +159,9 @@ class GameState:
         self.win_reason: str | None = None
 
         # Pending mission advance (set after mission_reveal; cleared when host clicks Next Round)
-        self.pending_mission_outcome: str | None = None  # "next_mission" | "assassin_phase" | "evil_wins"
+        self.pending_mission_outcome: str | None = (
+            None  # "next_mission" | "assassin_phase" | "evil_wins"
+        )
 
         # Timer cancellation flag
         self.timer_phase_key: str | None = None
@@ -150,7 +185,9 @@ class GameState:
         return MISSION_SIZES[self.player_count()][self.current_mission]
 
     def requires_double_fail(self) -> bool:
-        return self.current_mission == 3 and self.player_count() >= DOUBLE_FAIL_THRESHOLD
+        return (
+            self.current_mission == 3 and self.player_count() >= DOUBLE_FAIL_THRESHOLD
+        )
 
     def good_wins(self) -> int:
         return self.mission_results.count("pass")
@@ -163,7 +200,6 @@ class GameState:
         self.phase = GamePhase.LOBBY
         self.players = {}
         self.player_order = []
-        self.host_player_id = None
         self.current_leader_index = 0
         self.current_mission = 0
         self.mission_results = []
@@ -183,9 +219,10 @@ class GameState:
 # Pure functions
 # ---------------------------------------------------------------------------
 
+
 def generate_game_code(existing_codes: set[str]) -> str:
     for _ in range(1000):
-        code = "".join(random.choices(ROOM_CODE_CHARS, k=4))
+        code = "".join(secrets.choice(ROOM_CODE_CHARS) for _ in range(6))
         if code not in existing_codes:
             return code
     raise RuntimeError("Could not generate unique game code")
@@ -210,8 +247,6 @@ def add_player(game: GameState, name: str, player_id: str) -> PlayerInfo:
     player = PlayerInfo(player_id=player_id, name=name)
     game.players[player_id] = player
     game.player_order.append(player_id)
-    if game.host_player_id is None:
-        game.host_player_id = player_id
     return player
 
 
@@ -220,8 +255,6 @@ def remove_player(game: GameState, player_id: str) -> None:
         del game.players[player_id]
     if player_id in game.player_order:
         game.player_order.remove(player_id)
-    if game.host_player_id == player_id:
-        game.host_player_id = game.player_order[0] if game.player_order else None
 
 
 def reorder_players(game: GameState, ordered_names: list[str]) -> None:
@@ -236,18 +269,19 @@ def reorder_players(game: GameState, ordered_names: list[str]) -> None:
 # Role assignment
 # ---------------------------------------------------------------------------
 
+
 def assign_roles(game: GameState) -> None:
     n = game.player_count()
     if n not in PLAYER_COUNT_ROLES:
         raise ValueError(f"Invalid player count: {n}")
     good_roles, evil_roles = PLAYER_COUNT_ROLES[n]
     all_roles = list(good_roles) + list(evil_roles)
-    random.shuffle(all_roles)
+    secure_random.shuffle(all_roles)
     for pid, role in zip(game.player_order, all_roles):
         player = game.players[pid]
         player.role = role
         player.team = ROLE_TO_TEAM[role]
-    game.current_leader_index = random.randrange(n)
+    game.current_leader_index = secure_random.randrange(n)
     game.phase = GamePhase.ROLE_ASSIGNMENT
 
 
@@ -263,7 +297,8 @@ def get_night_phase_info(game: GameState, player_id: str) -> dict:
     if role == Role.MERLIN:
         # Sees all evil EXCEPT Mordred
         evil_visible = [
-            pid for pid, p in game.players.items()
+            pid
+            for pid, p in game.players.items()
             if p.team == Team.EVIL and p.role != Role.MORDRED
         ]
         info["sees"] = names_of(evil_visible)
@@ -272,17 +307,19 @@ def get_night_phase_info(game: GameState, player_id: str) -> dict:
     elif role == Role.PERCIVAL:
         # Sees Merlin and Morgana, but not which is which
         targets = [
-            pid for pid, p in game.players.items()
+            pid
+            for pid, p in game.players.items()
             if p.role in (Role.MERLIN, Role.MORGANA)
         ]
-        random.shuffle(targets)
+        secure_random.shuffle(targets)
         info["sees"] = names_of(targets)
         info["sees_label"] = "One is Merlin, one is Morgana — but which?"
 
     elif role in (Role.ASSASSIN, Role.MORGANA, Role.MORDRED):
         # See each other, but NOT Oberon
         evil_visible = [
-            pid for pid, p in game.players.items()
+            pid
+            for pid, p in game.players.items()
             if p.team == Team.EVIL and p.role != Role.OBERON and pid != player_id
         ]
         info["sees"] = names_of(evil_visible)
@@ -302,6 +339,7 @@ def get_night_phase_info(game: GameState, player_id: str) -> dict:
 # ---------------------------------------------------------------------------
 # Team proposal and voting
 # ---------------------------------------------------------------------------
+
 
 def validate_team_proposal(game: GameState, team_player_ids: list[str]) -> None:
     required = game.mission_size()
@@ -348,7 +386,9 @@ def process_vote_result(game: GameState, approved: bool) -> str:
             game.win_reason = "rejections"
             return "evil_wins_by_rejection"
         # Advance leader
-        game.current_leader_index = (game.current_leader_index + 1) % len(game.player_order)
+        game.current_leader_index = (game.current_leader_index + 1) % len(
+            game.player_order
+        )
         game.phase = GamePhase.TEAM_PROPOSAL
         return "next_proposal"
 
@@ -356,6 +396,7 @@ def process_vote_result(game: GameState, approved: bool) -> str:
 # ---------------------------------------------------------------------------
 # Mission execution
 # ---------------------------------------------------------------------------
+
 
 def record_mission_card(game: GameState, player_id: str, card: str) -> dict | None:
     """Record a mission card. Returns result dict when all have played, else None.
@@ -385,7 +426,9 @@ def evaluate_mission(game: GameState) -> dict:
         "fail_count": fail_count,
         "success_count": cards.count("success"),
         "total_cards": len(cards),
-        "cards_shuffled": random.sample(cards, len(cards)),  # shuffled for reveal
+        "cards_shuffled": secure_random.sample(
+            cards, len(cards)
+        ),  # shuffled for reveal
     }
 
 
@@ -406,7 +449,9 @@ def process_mission_result(game: GameState, passed: bool) -> str:
     else:
         game.current_mission += 1
         game.consecutive_rejections = 0
-        game.current_leader_index = (game.current_leader_index + 1) % len(game.player_order)
+        game.current_leader_index = (game.current_leader_index + 1) % len(
+            game.player_order
+        )
         game.proposed_team = []
         game.votes = {}
         game.mission_cards = {}
@@ -417,6 +462,7 @@ def process_mission_result(game: GameState, passed: bool) -> str:
 # ---------------------------------------------------------------------------
 # Assassin phase
 # ---------------------------------------------------------------------------
+
 
 def get_assassin(game: GameState) -> PlayerInfo | None:
     for p in game.players.values():
@@ -450,7 +496,9 @@ def get_game_summary(game: GameState) -> dict:
     return {
         "winner": game.winner,
         "win_reason": game.win_reason,
-        "roles": {p.name: {"role": p.role, "team": p.team} for p in game.players.values()},
+        "roles": {
+            p.name: {"role": p.role, "team": p.team} for p in game.players.values()
+        },
         "mission_results": game.mission_results,
         "player_order": [game.players[pid].name for pid in game.player_order],
     }
@@ -459,6 +507,7 @@ def get_game_summary(game: GameState) -> dict:
 # ---------------------------------------------------------------------------
 # Reconnection state snapshot
 # ---------------------------------------------------------------------------
+
 
 def build_state_snapshot(game: GameState, player_id: str) -> dict:
     """Full state snapshot for a reconnecting player."""
@@ -480,7 +529,8 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
     if player:
         snap["my_player_id"] = player_id
         snap["my_name"] = player.name
-        snap["is_host"] = player_id == game.host_player_id
+        # Host authority belongs only to the separately authenticated display.
+        snap["is_host"] = False
         if player.role:
             snap["my_role"] = player.role
             snap["my_team"] = player.team
@@ -495,8 +545,9 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
         snap["i_am_leader"] = player_id == leader.player_id if player else False
 
     if game.proposed_team:
-        snap["proposed_team"] = [game.players[pid].name for pid in game.proposed_team
-                                  if pid in game.players]
+        snap["proposed_team"] = [
+            game.players[pid].name for pid in game.proposed_team if pid in game.players
+        ]
         snap["proposed_team_ids"] = game.proposed_team
 
     if game.phase == GamePhase.GAME_OVER:

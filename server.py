@@ -1,76 +1,325 @@
+import hmac
+import logging
+import os
+import secrets
+import threading
+import time
 import uuid
-import eventlet
-eventlet.monkey_patch()
+from collections import defaultdict, deque
+from functools import wraps
+from urllib.parse import urlsplit
 
-from flask import Flask, render_template, request, session
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask import Flask, abort, jsonify, render_template, request
+from flask_socketio import SocketIO, emit, join_room
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from game_logic import (
-    GameState, GamePhase, Role, Team,
-    generate_game_code, add_player, remove_player, reorder_players,
-    assign_roles, get_night_phase_info,
-    validate_team_proposal, record_vote, process_vote_result,
-    record_mission_card, process_mission_result,
-    get_assassin, process_assassination, get_game_summary,
-    build_state_snapshot, MISSION_SIZES,
+    GameState,
+    GamePhase,
+    generate_game_code,
+    add_player,
+    reorder_players,
+    assign_roles,
+    get_night_phase_info,
+    validate_team_proposal,
+    record_vote,
+    process_vote_result,
+    record_mission_card,
+    process_mission_result,
+    get_assassin,
+    process_assassination,
+    get_game_summary,
+    build_state_snapshot,
+    MISSION_SIZES,
 )
 
-import os
-import time as _time
+APP_ENV = os.environ.get("APP_ENV", "development").lower()
+IS_PRODUCTION = APP_ENV == "production"
+SECRET_KEY = os.environ.get("SECRET_KEY")
+HOST_ADMIN_PASSWORD = os.environ.get("HOST_ADMIN_PASSWORD")
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+PUBLIC_ORIGIN = os.environ.get("PUBLIC_ORIGIN", "").rstrip("/")
+ENABLE_DEV_ROUTES = os.environ.get("ENABLE_DEV_ROUTES", "false").lower() == "true"
+TRUST_PROXY_HEADERS = os.environ.get("TRUST_PROXY_HEADERS", "false").lower() == "true"
+PORT = int(os.environ.get("PORT", 5001))
+
+if IS_PRODUCTION:
+    missing = [
+        name
+        for name, value in (
+            ("SECRET_KEY", SECRET_KEY),
+            ("HOST_ADMIN_PASSWORD", HOST_ADMIN_PASSWORD),
+            ("PUBLIC_BASE_URL", PUBLIC_BASE_URL),
+            ("PUBLIC_ORIGIN", PUBLIC_ORIGIN),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(
+            f"Missing required production settings: {', '.join(missing)}"
+        )
+    if len(SECRET_KEY) < 32:
+        raise RuntimeError("SECRET_KEY must be at least 32 characters")
+    if len(HOST_ADMIN_PASSWORD) < 16:
+        raise RuntimeError("HOST_ADMIN_PASSWORD must be at least 16 characters")
+    if SECRET_KEY.startswith("replace-with-") or HOST_ADMIN_PASSWORD.startswith(
+        "replace-with-"
+    ):
+        raise RuntimeError("Replace the example production secrets before starting")
+    parsed_public_url = urlsplit(PUBLIC_BASE_URL)
+    if parsed_public_url.scheme != "https" or not parsed_public_url.netloc:
+        raise RuntimeError(
+            "PUBLIC_BASE_URL must be an absolute HTTPS URL in production"
+        )
+    if PUBLIC_ORIGIN != f"{parsed_public_url.scheme}://{parsed_public_url.netloc}":
+        raise RuntimeError("PUBLIC_ORIGIN must match the origin of PUBLIC_BASE_URL")
+
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "avalon-secret-key-change-in-prod"
-app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0  # Disable static file caching
-socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*")
+app.config.update(
+    SECRET_KEY=SECRET_KEY or secrets.token_hex(32),
+    SEND_FILE_MAX_AGE_DEFAULT=3600,
+    MAX_CONTENT_LENGTH=64 * 1024,
+)
+if TRUST_PROXY_HEADERS:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# None keeps Flask-SocketIO's secure same-origin default for local development.
+allowed_origins = [PUBLIC_ORIGIN] if PUBLIC_ORIGIN else None
+socketio = SocketIO(
+    app,
+    async_mode="threading",
+    cors_allowed_origins=allowed_origins,
+    max_http_buffer_size=64 * 1024,
+    ping_interval=25,
+    ping_timeout=20,
+)
+logger = logging.getLogger("avalon")
+
 
 @app.after_request
 def no_cache(response):
-    if request.path.startswith("/static/"):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "
+        "script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "media-src 'self'; connect-src 'self' ws: wss:; form-action 'self'"
+    )
+    if request.path.startswith(("/host", "/debug", "/dev")):
         response.headers["Cache-Control"] = "no-store"
+    if request.is_secure:
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
     return response
+
 
 # ---------------------------------------------------------------------------
 # Global state
 # ---------------------------------------------------------------------------
-games: dict[str, GameState] = {}           # code -> GameState
-sid_to_info: dict[str, dict] = {}          # sid -> {game_code, player_id, is_host_screen}
-session_tokens: dict[str, tuple] = {}       # token -> (game_code, player_id)
+games: dict[str, GameState] = {}  # code -> GameState
+sid_to_info: dict[str, dict] = {}  # sid -> {game_code, player_id, is_host_screen}
+session_tokens: dict[str, tuple] = {}  # token -> (game_code, player_id)
+state_lock = threading.RLock()
+rate_lock = threading.Lock()
+rate_windows: dict[tuple[str, str], deque] = defaultdict(deque)
+connected_sids: set[str] = set()
 
-HOST_IP = os.environ.get("HOST_IP", "localhost")
-PORT = int(os.environ.get("PORT", 5001))
+EVENT_LIMITS = {
+    "create_game": (5, 60),
+    "register_host": (10, 60),
+    "join_game": (15, 60),
+    "reconnect_game": (20, 60),
+    "chat": (30, 60),
+    "default": (120, 60),
+}
+MAX_CONNECTIONS = int(os.environ.get("MAX_CONNECTIONS", 100))
+MAX_GAMES = int(os.environ.get("MAX_GAMES", 20))
+MAX_RATE_KEYS = max(100, int(os.environ.get("MAX_RATE_KEYS", 5000)))
 
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
+
 @app.route("/")
 def player_screen():
     return render_template("player.html")
+
 
 @app.route("/host")
 def host_screen():
     return render_template("host.html")
 
-@app.route("/dev")
-def dev_screen():
-    return render_template("dev.html")
+
+@app.get("/healthz")
+def healthcheck():
+    return jsonify(status="ok")
+
+
+if ENABLE_DEV_ROUTES and not IS_PRODUCTION:
+
+    @app.route("/dev")
+    def dev_screen():
+        return render_template("dev.html")
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def emit_to_game(game_code: str, event: str, data: dict):
     socketio.emit(event, data, room=game_code)
+
 
 def emit_to_player(sid: str, event: str, data: dict):
     socketio.emit(event, data, room=sid)
 
+
 def get_game(game_code: str) -> GameState | None:
     return games.get(game_code)
+
 
 def get_caller_info(sid: str) -> dict | None:
     return sid_to_info.get(sid)
 
-def validate_caller(sid: str, require_phase=None, require_leader=False, require_assassin=False):
+
+def public_base_url() -> str:
+    return PUBLIC_BASE_URL or request.host_url.rstrip("/")
+
+
+def pause(seconds: float) -> None:
+    """Socket.IO-compatible sleep, disabled in tests."""
+    if not app.config.get("TESTING"):
+        socketio.sleep(seconds)
+
+
+def require_object(data) -> dict:
+    if not isinstance(data, dict):
+        raise ValueError("Invalid request")
+    return data
+
+
+def require_string(
+    data: dict, key: str, *, minimum: int = 1, maximum: int = 256
+) -> str:
+    value = data.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be text")
+    value = value.strip()
+    if not minimum <= len(value) <= maximum:
+        raise ValueError(f"{key} must be between {minimum} and {maximum} characters")
+    return value
+
+
+def require_string_list(data: dict, key: str, *, maximum: int = 10) -> list[str]:
+    value = data.get(key)
+    if not isinstance(value, list) or len(value) > maximum:
+        raise ValueError(f"{key} must be a list of at most {maximum} items")
+    if not all(isinstance(item, str) and 1 <= len(item) <= 128 for item in value):
+        raise ValueError(f"{key} contains an invalid item")
+    return value
+
+
+def require_integer(data: dict, key: str, *, minimum: int, maximum: int) -> int:
+    value = data.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{key} must be an integer")
+    if not minimum <= value <= maximum:
+        raise ValueError(f"{key} must be between {minimum} and {maximum}")
+    return value
+
+
+def rate_limited(bucket: str = "default"):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            limit, period = EVENT_LIMITS[bucket]
+            now = time.monotonic()
+            keys = [(request.sid, bucket, limit)]
+            # Fresh sockets must not bypass authentication/join throttles. The
+            # multiplier avoids penalizing a normal household behind one NAT.
+            if bucket in {
+                "create_game",
+                "register_host",
+                "join_game",
+                "reconnect_game",
+            }:
+                keys.append(
+                    (f"ip:{request.remote_addr or 'unknown'}", bucket, limit * 3)
+                )
+            with rate_lock:
+                if len(rate_windows) >= MAX_RATE_KEYS:
+                    oldest_allowed = now - max(
+                        period for _, period in EVENT_LIMITS.values()
+                    )
+                    for rate_key, stale_window in list(rate_windows.items()):
+                        while stale_window and stale_window[0] <= oldest_allowed:
+                            stale_window.popleft()
+                        if not stale_window:
+                            del rate_windows[rate_key]
+                new_keys = sum(
+                    (identity, bucket_name) not in rate_windows
+                    for identity, bucket_name, _ in keys
+                )
+                if len(rate_windows) + new_keys > MAX_RATE_KEYS:
+                    emit(
+                        "error",
+                        {"message": "Server is busy. Please try again shortly."},
+                    )
+                    return None
+                windows = []
+                for identity, bucket_name, key_limit in keys:
+                    window = rate_windows[(identity, bucket_name)]
+                    while window and window[0] <= now - period:
+                        window.popleft()
+                    if len(window) >= key_limit:
+                        emit(
+                            "error",
+                            {
+                                "message": "Too many requests. Please wait and try again."
+                            },
+                        )
+                        return None
+                    windows.append(window)
+                for window in windows:
+                    window.append(now)
+            # The service deliberately runs one process with multiple threads.
+            # Serialize in-memory game mutations so simultaneous phone events
+            # cannot overfill a lobby or advance the same phase twice.
+            with state_lock:
+                return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def validate_host(sid: str, *, require_phase=None):
+    info = sid_to_info.get(sid)
+    if not info or not info.get("is_host_screen"):
+        raise ValueError("Host authorization required")
+    game = games.get(info.get("game_code"))
+    if not game:
+        raise ValueError("Game not found")
+    if not game.host_token or not hmac.compare_digest(
+        info.get("host_token", ""), game.host_token
+    ):
+        raise ValueError("Host authorization required")
+    if require_phase and game.phase != require_phase:
+        raise ValueError(f"Wrong game phase: {game.phase}")
+    return game
+
+
+def emit_validation_error(error: Exception) -> None:
+    emit("error", {"message": str(error)})
+
+
+def validate_caller(
+    sid: str, require_phase=None, require_leader=False, require_assassin=False
+):
     """Returns (game, player) or raises ValueError."""
     info = sid_to_info.get(sid)
     if not info:
@@ -96,66 +345,85 @@ def validate_caller(sid: str, require_phase=None, require_leader=False, require_
             raise ValueError("You are not the Assassin")
     return game, player
 
+
 # ---------------------------------------------------------------------------
 # Background task: Discussion timer
 # ---------------------------------------------------------------------------
 
+
 def run_discussion_timer(game_code: str, phase_key: str, duration: int):
     for remaining in range(duration, -1, -1):
-        eventlet.sleep(1)
+        socketio.sleep(1)
+        with state_lock:
+            game = games.get(game_code)
+            if not game or game.timer_phase_key != phase_key:
+                return  # cancelled or phase changed
+            emit_to_game(game_code, "discussion_tick", {"remaining_seconds": remaining})
+    with state_lock:
         game = games.get(game_code)
-        if not game or game.timer_phase_key != phase_key:
-            return  # cancelled or phase changed
-        emit_to_game(game_code, "discussion_tick", {"remaining_seconds": remaining})
-    game = games.get(game_code)
-    if game and game.timer_phase_key == phase_key:
-        transition_to_team_proposal(game)
+        if game and game.timer_phase_key == phase_key:
+            transition_to_team_proposal(game)
 
 
 def run_proposal_timer(game_code: str, phase_key: str, duration: int):
     for remaining in range(duration, -1, -1):
-        eventlet.sleep(1)
-        game = games.get(game_code)
-        if not game or game.timer_phase_key != phase_key:
-            return
-        emit_to_game(game_code, "proposal_tick", {"remaining_seconds": remaining})
+        socketio.sleep(1)
+        with state_lock:
+            game = games.get(game_code)
+            if not game or game.timer_phase_key != phase_key:
+                return
+            emit_to_game(game_code, "proposal_tick", {"remaining_seconds": remaining})
     # Timer expired — just notify host, don't auto-advance (advisory timer)
-    game = games.get(game_code)
-    if game and game.timer_phase_key == phase_key:
-        emit_to_game(game_code, "proposal_timer_expired", {})
+    with state_lock:
+        game = games.get(game_code)
+        if game and game.timer_phase_key == phase_key:
+            emit_to_game(game_code, "proposal_timer_expired", {})
 
 
 # ---------------------------------------------------------------------------
 # Phase transition helpers
 # ---------------------------------------------------------------------------
 
+
 def start_round(game: GameState):
     game.phase = GamePhase.ROUND_START
     leader = game.current_leader()
     player_count = game.player_count()
     mission_sizes = MISSION_SIZES.get(player_count, [])
-    emit_to_game(game.code, "round_start", {
-        "mission_num": game.current_mission + 1,  # 1-indexed for display
-        "leader_name": leader.name if leader else "Unknown",
-        "leader_id": leader.player_id if leader else None,
-        "mission_size": game.mission_size(),
-        "reject_count": game.consecutive_rejections,
-        "mission_results": game.mission_results,
-        "mission_sizes": mission_sizes,
-        "requires_double_fail": game.requires_double_fail(),
-        # Player ordering info — needed by the leader's proposal screen
-        "player_order": [game.players[pid].name for pid in game.player_order],
-        "player_name_to_id": {game.players[pid].name: pid for pid in game.player_order},
-    })
+    emit_to_game(
+        game.code,
+        "round_start",
+        {
+            "mission_num": game.current_mission + 1,  # 1-indexed for display
+            "leader_name": leader.name if leader else "Unknown",
+            "leader_id": leader.player_id if leader else None,
+            "mission_size": game.mission_size(),
+            "reject_count": game.consecutive_rejections,
+            "mission_results": game.mission_results,
+            "mission_sizes": mission_sizes,
+            "requires_double_fail": game.requires_double_fail(),
+            # Player ordering info — needed by the leader's proposal screen
+            "player_order": [game.players[pid].name for pid in game.player_order],
+            "player_name_to_id": {
+                game.players[pid].name: pid for pid in game.player_order
+            },
+        },
+    )
     # Immediately go to discussion
     game.phase = GamePhase.DISCUSSION
     phase_key = str(uuid.uuid4())
     game.timer_phase_key = phase_key
-    emit_to_game(game.code, "discussion_start", {
-        "duration_seconds": game.discussion_time,
-        "mission_num": game.current_mission + 1,
-    })
-    socketio.start_background_task(run_discussion_timer, game.code, phase_key, game.discussion_time)
+    emit_to_game(
+        game.code,
+        "discussion_start",
+        {
+            "duration_seconds": game.discussion_time,
+            "mission_num": game.current_mission + 1,
+        },
+    )
+    socketio.start_background_task(
+        run_discussion_timer, game.code, phase_key, game.discussion_time
+    )
 
 
 def transition_to_team_proposal(game: GameState):
@@ -166,44 +434,62 @@ def transition_to_team_proposal(game: GameState):
     leader = game.current_leader()
     phase_key = str(uuid.uuid4())
     game.timer_phase_key = phase_key
-    emit_to_game(game.code, "proposal_start", {
-        "leader_name": leader.name if leader else "Unknown",
-        "leader_id": leader.player_id if leader else None,
-        "mission_size": game.mission_size(),
-        "player_order": [game.players[pid].name for pid in game.player_order],
-        "player_name_to_id": {game.players[pid].name: pid for pid in game.player_order},
-    })
+    emit_to_game(
+        game.code,
+        "proposal_start",
+        {
+            "leader_name": leader.name if leader else "Unknown",
+            "leader_id": leader.player_id if leader else None,
+            "mission_size": game.mission_size(),
+            "player_order": [game.players[pid].name for pid in game.player_order],
+            "player_name_to_id": {
+                game.players[pid].name: pid for pid in game.player_order
+            },
+        },
+    )
 
 
 def transition_to_night_phase(game: GameState):
     game.phase = GamePhase.NIGHT_PHASE
     game.night_acks = set()
-    emit_to_game(game.code, "night_phase_start", {
-        "total_players": game.player_count()
-    })
+    emit_to_game(game.code, "night_phase_start", {"total_players": game.player_count()})
     # Send private role info to each player
     for pid, player in game.players.items():
         if player.sid:
             night_info = get_night_phase_info(game, pid)
-            emit_to_player(player.sid, "role_assigned", {
-                "role": player.role,
-                "team": player.team,
-                "night_info": night_info,
-            })
+            emit_to_player(
+                player.sid,
+                "role_assigned",
+                {
+                    "role": player.role,
+                    "team": player.team,
+                    "night_info": night_info,
+                },
+            )
 
 
 # ---------------------------------------------------------------------------
 # SocketIO events
 # ---------------------------------------------------------------------------
 
+
 @socketio.on("connect")
-def on_connect():
-    pass  # Just establishing connection
+def on_connect(auth=None):
+    with state_lock:
+        if len(connected_sids) >= MAX_CONNECTIONS:
+            return False
+        connected_sids.add(request.sid)
+    return None
 
 
 @socketio.on("disconnect")
-def on_disconnect():
+def on_disconnect(reason=None):
     sid = request.sid
+    with state_lock:
+        connected_sids.discard(sid)
+    with rate_lock:
+        for key in [key for key in rate_windows if key[0] == sid]:
+            del rate_windows[key]
     info = sid_to_info.pop(sid, None)
     if not info:
         return
@@ -218,513 +504,635 @@ def on_disconnect():
     if player_id and player_id in game.players:
         game.players[player_id].connected = False
         game.players[player_id].sid = None
-        emit_to_game(game_code, "player_disconnected", {
-            "player_id": player_id,
-            "player_name": game.players[player_id].name,
-            "players": game.public_players(),
-        })
+        emit_to_game(
+            game_code,
+            "player_disconnected",
+            {
+                "player_id": player_id,
+                "player_name": game.players[player_id].name,
+                "players": game.public_players(),
+            },
+        )
 
 
 # --- Host screen registration ---
 
+
 @socketio.on("register_host_screen")
+@rate_limited("register_host")
 def on_register_host_screen(data):
-    sid = request.sid
-    game_code = data.get("game_code", "").upper()
-    game = games.get(game_code)
-    if game:
+    try:
+        data = require_object(data)
+        game_code = require_string(data, "game_code", minimum=6, maximum=6).upper()
+        host_token = require_string(data, "host_token", minimum=32, maximum=128)
+        game = games.get(game_code)
+        if (
+            not game
+            or not game.host_token
+            or not hmac.compare_digest(host_token, game.host_token)
+        ):
+            raise ValueError("Game not found or host authorization invalid")
+        sid = request.sid
         game.host_sid = sid
         join_room(game_code)
-        sid_to_info[sid] = {"game_code": game_code, "is_host_screen": True}
+        sid_to_info[sid] = {
+            "game_code": game_code,
+            "is_host_screen": True,
+            "host_token": host_token,
+        }
         player_count = game.player_count()
-        emit("host_registered", {
-            "code": game_code,
-            "players": game.public_players(),
-            "phase": game.phase,
-            "mission_sizes": MISSION_SIZES.get(player_count, []),
-            "mission_results": game.mission_results,
-            "current_mission": game.current_mission,
-            "consecutive_rejections": game.consecutive_rejections,
-            "current_leader": game.current_leader().name if game.current_leader() else "",
-            "discussion_time": game.discussion_time,
-        })
-    else:
-        emit("error", {"message": "Game not found"})
+        emit(
+            "host_registered",
+            {
+                "code": game_code,
+                "join_url": public_base_url(),
+                "players": game.public_players(),
+                "phase": game.phase,
+                "mission_sizes": MISSION_SIZES.get(player_count, []),
+                "mission_results": game.mission_results,
+                "current_mission": game.current_mission,
+                "consecutive_rejections": game.consecutive_rejections,
+                "current_leader": game.current_leader().name
+                if game.current_leader()
+                else "",
+                "discussion_time": game.discussion_time,
+            },
+        )
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 # --- Create game (host screen initiates) ---
 
+
 @socketio.on("create_game")
-def on_create_game():
-    sid = request.sid
-    code = generate_game_code(set(games.keys()))
-    game = GameState(code)
-    games[code] = game
-    game.host_sid = sid
-    join_room(code)
-    sid_to_info[sid] = {"game_code": code, "is_host_screen": True}
-    emit("game_created", {
-        "room_code": code,
-        "join_url": f"http://{HOST_IP}:{PORT}",
-    })
+@rate_limited("create_game")
+def on_create_game(data):
+    try:
+        data = require_object(data)
+        password = require_string(data, "admin_password", minimum=1, maximum=256)
+        if not HOST_ADMIN_PASSWORD or not hmac.compare_digest(
+            password, HOST_ADMIN_PASSWORD
+        ):
+            raise ValueError("Invalid host password")
+        with state_lock:
+            if len(games) >= MAX_GAMES:
+                raise ValueError("The server has reached its active-game limit")
+            code = generate_game_code(set(games.keys()))
+            game = GameState(code)
+            game.host_token = secrets.token_urlsafe(32)
+            games[code] = game
+            sid = request.sid
+            game.host_sid = sid
+            join_room(code)
+            sid_to_info[sid] = {
+                "game_code": code,
+                "is_host_screen": True,
+                "host_token": game.host_token,
+            }
+        emit(
+            "game_created",
+            {
+                "room_code": code,
+                "host_token": game.host_token,
+                "join_url": public_base_url(),
+            },
+        )
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 # --- Player joins ---
 
+
 @socketio.on("join_game")
+@rate_limited("join_game")
 def on_join_game(data):
-    sid = request.sid
-    code = data.get("room_code", "").upper().strip()
-    name = data.get("player_name", "").strip()
-    game = games.get(code)
-    if not game:
-        emit("error", {"message": "Room not found. Check the code and try again."})
-        return
     try:
+        data = require_object(data)
+        code = require_string(data, "room_code", minimum=6, maximum=6).upper()
+        name = require_string(data, "player_name", minimum=1, maximum=12)
+        game = games.get(code)
+        if not game:
+            raise ValueError("Room not found. Check the code and try again.")
+        sid = request.sid
         player_id = str(uuid.uuid4())
         player = add_player(game, name, player_id)
-    except ValueError as e:
-        emit("error", {"message": str(e)})
-        return
-    token = str(uuid.uuid4())
-    player.session_token = token
-    player.sid = sid
-    session_tokens[token] = (code, player_id)
-    join_room(code)
-    sid_to_info[sid] = {"game_code": code, "player_id": player_id}
-    emit("join_success", {
-        "player_id": player_id,
-        "session_token": token,
-        "player_name": player.name,
-        "is_host": player_id == game.host_player_id,
-        "room_code": code,
-        "players": game.public_players(),
-        "settings": {"discussion_time": game.discussion_time, "proposal_time": game.proposal_time},
-    })
-    emit_to_game(code, "player_joined", {
-        "new_player": player.name,
-        "players": game.public_players(),
-        "player_count": game.player_count(),
-    })
+        token = secrets.token_urlsafe(32)
+        player.session_token = token
+        player.sid = sid
+        session_tokens[token] = (code, player_id)
+        join_room(code)
+        sid_to_info[sid] = {"game_code": code, "player_id": player_id}
+        emit(
+            "join_success",
+            {
+                "player_id": player_id,
+                "session_token": token,
+                "player_name": player.name,
+                "is_host": False,
+                "room_code": code,
+                "players": game.public_players(),
+                "settings": {
+                    "discussion_time": game.discussion_time,
+                    "proposal_time": game.proposal_time,
+                },
+            },
+        )
+        emit_to_game(
+            code,
+            "player_joined",
+            {
+                "new_player": player.name,
+                "players": game.public_players(),
+                "player_count": game.player_count(),
+            },
+        )
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 # --- Reconnect ---
 
+
 @socketio.on("reconnect_game")
+@rate_limited("reconnect_game")
 def on_reconnect_game(data):
-    sid = request.sid
-    token = data.get("session_token")
-    entry = session_tokens.get(token)
-    if not entry:
-        emit("error", {"message": "Session not found. Please rejoin."})
-        return
-    game_code, player_id = entry
-    game = games.get(game_code)
-    if not game:
-        emit("error", {"message": "Game no longer exists."})
-        return
-    player = game.players.get(player_id)
-    if not player:
-        emit("error", {"message": "Player not found in game."})
-        return
-    old_sid = player.sid
-    if old_sid and old_sid in sid_to_info:
-        del sid_to_info[old_sid]
-    player.sid = sid
-    player.connected = True
-    join_room(game_code)
-    sid_to_info[sid] = {"game_code": game_code, "player_id": player_id}
-    snapshot = build_state_snapshot(game, player_id)
-    emit("state_snapshot", snapshot)
-    emit_to_game(game_code, "player_reconnected", {
-        "player_id": player_id,
-        "player_name": player.name,
-        "players": game.public_players(),
-    })
+    try:
+        data = require_object(data)
+        token = require_string(data, "session_token", minimum=32, maximum=128)
+        entry = session_tokens.get(token)
+        if not entry:
+            raise ValueError("Session not found. Please rejoin.")
+        game_code, player_id = entry
+        game = games.get(game_code)
+        if not game:
+            raise ValueError("Game no longer exists.")
+        player = game.players.get(player_id)
+        if not player:
+            raise ValueError("Player not found in game.")
+        sid = request.sid
+        old_sid = player.sid
+        if old_sid and old_sid in sid_to_info:
+            del sid_to_info[old_sid]
+        player.sid = sid
+        player.connected = True
+        join_room(game_code)
+        sid_to_info[sid] = {"game_code": game_code, "player_id": player_id}
+        snapshot = build_state_snapshot(game, player_id)
+        emit("state_snapshot", snapshot)
+        emit_to_game(
+            game_code,
+            "player_reconnected",
+            {
+                "player_id": player_id,
+                "player_name": player.name,
+                "players": game.public_players(),
+            },
+        )
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 # --- Lobby management ---
 
+
 @socketio.on("reorder_players")
+@rate_limited()
 def on_reorder_players(data):
-    sid = request.sid
     try:
-        game, player = validate_caller(sid)
-    except ValueError as e:
-        emit("error", {"message": str(e)}); return
-    if player.player_id != game.host_player_id:
-        emit("error", {"message": "Only the host can reorder players"}); return
-    ordered_names = data.get("player_order", [])
-    try:
+        game = validate_host(request.sid, require_phase=GamePhase.LOBBY)
+        data = require_object(data)
+        ordered_names = require_string_list(data, "order")
         reorder_players(game, ordered_names)
-    except ValueError as e:
-        emit("error", {"message": str(e)}); return
-    emit_to_game(game.code, "lobby_update", {
-        "players": game.public_players(),
-        "settings": {"discussion_time": game.discussion_time, "proposal_time": game.proposal_time},
-    })
+        emit_to_game(
+            game.code,
+            "lobby_update",
+            {
+                "players": game.public_players(),
+                "settings": {
+                    "discussion_time": game.discussion_time,
+                    "proposal_time": game.proposal_time,
+                },
+            },
+        )
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 @socketio.on("update_settings")
+@rate_limited()
 def on_update_settings(data):
-    sid = request.sid
-    info = sid_to_info.get(sid)
-    if not info:
-        emit("error", {"message": "Not connected to a game"}); return
-    game = games.get(info["game_code"])
-    if not game:
-        emit("error", {"message": "Game not found"}); return
-    # Allow both the host screen and the host player to change settings
-    if not info.get("is_host_screen"):
-        player_id = info.get("player_id")
-        if not player_id or player_id != game.host_player_id:
-            emit("error", {"message": "Only the host can change settings"}); return
-    if game.phase != GamePhase.LOBBY:
-        return  # silently ignore during gameplay
-    if "discussion_time" in data:
-        game.discussion_time = max(10, min(600, int(data["discussion_time"])))
-    if "proposal_time" in data:
-        game.proposal_time = max(30, min(120, int(data["proposal_time"])))
-    emit_to_game(game.code, "lobby_update", {
-        "players": game.public_players(),
-        "settings": {"discussion_time": game.discussion_time, "proposal_time": game.proposal_time},
-    })
+    try:
+        game = validate_host(request.sid, require_phase=GamePhase.LOBBY)
+        data = require_object(data)
+        if "discussion_time" in data:
+            game.discussion_time = require_integer(
+                data, "discussion_time", minimum=10, maximum=600
+            )
+        if "proposal_time" in data:
+            game.proposal_time = require_integer(
+                data, "proposal_time", minimum=30, maximum=120
+            )
+        emit_to_game(
+            game.code,
+            "lobby_update",
+            {
+                "players": game.public_players(),
+                "settings": {
+                    "discussion_time": game.discussion_time,
+                    "proposal_time": game.proposal_time,
+                },
+            },
+        )
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 @socketio.on("preview_team")
+@rate_limited()
 def on_preview_team(data):
     """Leader broadcasts their in-progress team selection to host screen."""
     sid = request.sid
-    info = sid_to_info.get(sid)
-    if not info:
-        return
-    game = games.get(info["game_code"])
-    if not game or game.phase != GamePhase.TEAM_PROPOSAL:
-        return
-    # Broadcast the preview (names only, not IDs) to the room
-    names = data.get("team_names", [])
-    emit_to_game(game.code, "team_preview", {"team_names": names})
+    try:
+        game, player = validate_caller(
+            sid, require_phase=GamePhase.TEAM_PROPOSAL, require_leader=True
+        )
+        data = require_object(data)
+        names = require_string_list(data, "team_names")
+        valid_names = {p.name for p in game.players.values()}
+        if (
+            len(names) > game.mission_size()
+            or len(set(names)) != len(names)
+            or not set(names) <= valid_names
+        ):
+            raise ValueError("Invalid team preview")
+        emit_to_game(game.code, "team_preview", {"team_names": names})
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 @socketio.on("start_game")
+@rate_limited()
 def on_start_game():
-    sid = request.sid
-    info = sid_to_info.get(sid)
-    if not info:
-        emit("error", {"message": "Not connected to a game"}); return
-    game = games.get(info["game_code"])
-    if not game:
-        emit("error", {"message": "Game not found"}); return
-    if game.phase != GamePhase.LOBBY:
-        emit("error", {"message": "Game has already started"}); return
-    # Allow host screen OR host player to start
-    if not info.get("is_host_screen"):
-        player_id = info.get("player_id")
-        if not player_id or player_id != game.host_player_id:
-            emit("error", {"message": "Only the host can start the game"}); return
-    n = game.player_count()
-    if n < 6 or n > 10:
-        emit("error", {"message": f"Need 6-10 players. Currently {n}."}); return
-    assign_roles(game)
-    emit_to_game(game.code, "game_starting", {"player_count": n})
-    eventlet.sleep(1)  # Brief delay for animation
-    transition_to_night_phase(game)
+    try:
+        game = validate_host(request.sid, require_phase=GamePhase.LOBBY)
+        n = game.player_count()
+        if n < 6 or n > 10:
+            raise ValueError(f"Need 6-10 players. Currently {n}.")
+        assign_roles(game)
+        emit_to_game(game.code, "game_starting", {"player_count": n})
+        pause(1)
+        transition_to_night_phase(game)
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 # --- Night phase ---
 
+
 @socketio.on("night_phase_ack")
+@rate_limited()
 def on_night_phase_ack():
     sid = request.sid
     try:
         game, player = validate_caller(sid, require_phase=GamePhase.NIGHT_PHASE)
     except ValueError as e:
-        emit("error", {"message": str(e)}); return
+        emit("error", {"message": str(e)})
+        return
     if player.player_id in game.night_acks:
         return  # Already acked, ignore duplicate
     game.night_acks.add(player.player_id)
     confirmed = len(game.night_acks)
     total = game.player_count()
-    emit_to_game(game.code, "night_phase_progress", {
-        "confirmed": confirmed,
-        "total": total,
-    })
+    emit_to_game(
+        game.code,
+        "night_phase_progress",
+        {
+            "confirmed": confirmed,
+            "total": total,
+        },
+    )
     if confirmed >= total:
         game.phase = GamePhase.ROUND_START  # Prevent re-entry
         emit_to_game(game.code, "night_phase_complete", {})
-        eventlet.sleep(1)
+        pause(1)
         start_round(game)
 
 
 # --- Discussion ---
 
+
 @socketio.on("skip_discussion")
+@rate_limited()
 def on_skip_discussion(data):
-    sid = request.sid
-    info = sid_to_info.get(sid)
-    if not info:
-        emit("error", {"message": "Not connected to a game"}); return
-    game = games.get(info["game_code"])
-    if not game:
-        emit("error", {"message": "Game not found"}); return
-    if game.phase != GamePhase.DISCUSSION:
-        emit("error", {"message": f"Not in discussion phase (phase={game.phase})"}); return
-    if not info.get("is_host_screen"):
-        player_id = info.get("player_id")
-        if not player_id or player_id != game.host_player_id:
-            emit("error", {"message": "Only the host can skip discussion"}); return
-    game.timer_phase_key = None  # Cancel timer
-    emit_to_game(game.code, "discussion_end", {})
-    transition_to_team_proposal(game)
+    try:
+        require_object(data)
+        game = validate_host(request.sid, require_phase=GamePhase.DISCUSSION)
+        game.timer_phase_key = None
+        emit_to_game(game.code, "discussion_end", {})
+        transition_to_team_proposal(game)
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 # --- Team proposal ---
 
+
 @socketio.on("propose_team")
+@rate_limited()
 def on_propose_team(data):
     sid = request.sid
     try:
-        game, player = validate_caller(sid, require_phase=GamePhase.TEAM_PROPOSAL, require_leader=True)
+        game, player = validate_caller(
+            sid, require_phase=GamePhase.TEAM_PROPOSAL, require_leader=True
+        )
     except ValueError as e:
-        emit("error", {"message": str(e)}); return
-    team_ids = data.get("team", [])
+        emit("error", {"message": str(e)})
+        return
     try:
+        data = require_object(data)
+        team_ids = require_string_list(data, "team")
         validate_team_proposal(game, team_ids)
     except ValueError as e:
-        emit("error", {"message": str(e)}); return
+        emit("error", {"message": str(e)})
+        return
     game.proposed_team = team_ids
     game.timer_phase_key = None  # Cancel proposal timer
     game.phase = GamePhase.TEAM_VOTE
     team_names = [game.players[pid].name for pid in team_ids]
     # Leader is auto-approved — they do not cast a vote
     game.votes[player.player_id] = "approve"
-    emit_to_game(game.code, "team_proposed", {
-        "team": team_names,
-        "team_ids": team_ids,
-        "leader_name": player.name,
-    })
-    emit_to_game(game.code, "vote_start", {
-        "team": team_names,
-        "team_ids": team_ids,
-        "leader_name": player.name,
-    })
+    emit_to_game(
+        game.code,
+        "team_proposed",
+        {
+            "team": team_names,
+            "team_ids": team_ids,
+            "leader_name": player.name,
+        },
+    )
+    emit_to_game(
+        game.code,
+        "vote_start",
+        {
+            "team": team_names,
+            "team_ids": team_ids,
+            "leader_name": player.name,
+        },
+    )
 
 
 @socketio.on("skip_proposal_timer")
+@rate_limited()
 def on_skip_proposal_timer():
-    sid = request.sid
-    info = sid_to_info.get(sid)
-    if not info:
-        emit("error", {"message": "Not connected to a game"}); return
-    game = games.get(info["game_code"])
-    if not game:
-        emit("error", {"message": "Game not found"}); return
-    if game.phase != GamePhase.TEAM_PROPOSAL:
-        return  # Silently ignore if not in proposal phase
-    if not info.get("is_host_screen"):
-        player_id = info.get("player_id")
-        if not player_id or player_id != game.host_player_id:
-            emit("error", {"message": "Only the host can skip the proposal timer"}); return
-    game.timer_phase_key = None
-    emit_to_game(game.code, "proposal_timer_expired", {})
+    try:
+        game = validate_host(request.sid, require_phase=GamePhase.TEAM_PROPOSAL)
+        game.timer_phase_key = None
+        emit_to_game(game.code, "proposal_timer_expired", {})
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 # --- Voting ---
 
+
 @socketio.on("cast_vote")
+@rate_limited()
 def on_cast_vote(data):
     sid = request.sid
     try:
         game, player = validate_caller(sid, require_phase=GamePhase.TEAM_VOTE)
     except ValueError as e:
-        emit("error", {"message": str(e)}); return
-    vote = data.get("vote")
+        emit("error", {"message": str(e)})
+        return
     try:
+        data = require_object(data)
+        vote = require_string(data, "vote", minimum=6, maximum=7)
         result = record_vote(game, player.player_id, vote)
     except ValueError as e:
-        emit("error", {"message": str(e)}); return
+        emit("error", {"message": str(e)})
+        return
     emit("vote_cast_ack", {}, room=sid)
     voted_names = [game.players[pid].name for pid in game.votes]
-    remaining_names = [p.name for p in game.players.values() if p.player_id not in game.votes]
-    emit_to_game(game.code, "vote_waiting", {
-        "voted": voted_names,
-        "remaining": remaining_names,
-    })
+    remaining_names = [
+        p.name for p in game.players.values() if p.player_id not in game.votes
+    ]
+    emit_to_game(
+        game.code,
+        "vote_waiting",
+        {
+            "voted": voted_names,
+            "remaining": remaining_names,
+        },
+    )
     if result:
         game.phase = GamePhase.VOTE_REVEAL
         emit_to_game(game.code, "vote_reveal", result)
-        eventlet.sleep(3)  # Dramatic pause for reveal animation
+        pause(3)  # Dramatic pause for reveal animation
         outcome = process_vote_result(game, result["approved"])
         if outcome == "mission":
-            emit_to_game(game.code, "mission_start", {
-                "team": [game.players[pid].name for pid in game.proposed_team],
-                "team_ids": game.proposed_team,
-                "mission_num": game.current_mission + 1,
-            })
+            emit_to_game(
+                game.code,
+                "mission_start",
+                {
+                    "team": [game.players[pid].name for pid in game.proposed_team],
+                    "team_ids": game.proposed_team,
+                    "mission_num": game.current_mission + 1,
+                },
+            )
         elif outcome == "evil_wins_by_rejection":
             emit_to_game(game.code, "evil_wins_by_rejection", {})
-            eventlet.sleep(2)
+            pause(2)
             emit_to_game(game.code, "game_over", get_game_summary(game))
         else:  # next_proposal
-            emit_to_game(game.code, "rejection_warning", {
-                "consecutive": game.consecutive_rejections,
-                "leader_name": game.current_leader().name if game.current_leader() else "Unknown",
-            })
-            eventlet.sleep(2)
+            emit_to_game(
+                game.code,
+                "rejection_warning",
+                {
+                    "consecutive": game.consecutive_rejections,
+                    "leader_name": game.current_leader().name
+                    if game.current_leader()
+                    else "Unknown",
+                },
+            )
+            pause(2)
             transition_to_team_proposal(game)
 
 
 # --- Mission ---
 
+
 @socketio.on("play_mission_card")
+@rate_limited()
 def on_play_mission_card(data):
     sid = request.sid
     try:
         game, player = validate_caller(sid, require_phase=GamePhase.MISSION)
     except ValueError as e:
-        emit("error", {"message": str(e)}); return
-    card = data.get("card")
+        emit("error", {"message": str(e)})
+        return
     try:
+        data = require_object(data)
+        card = require_string(data, "card", minimum=4, maximum=7)
         result = record_mission_card(game, player.player_id, card)
     except ValueError as e:
-        emit("error", {"message": str(e)}); return
+        emit("error", {"message": str(e)})
+        return
     emit("mission_card_ack", {}, room=sid)
     played = len(game.mission_cards)
     total = len(game.proposed_team)
     emit_to_game(game.code, "mission_waiting", {"played": played, "total": total})
     if result:
         game.phase = GamePhase.MISSION_REVEAL
-        emit_to_game(game.code, "mission_reveal", {
-            "cards_shuffled": result["cards_shuffled"],
-            "fail_count": result["fail_count"],
-            "success_count": result["success_count"],
-            "passed": result["passed"],
-            "mission_num": game.current_mission + 1,
-            "requires_double_fail": game.requires_double_fail(),
-        })
-        eventlet.sleep(4)  # Animation time
+        emit_to_game(
+            game.code,
+            "mission_reveal",
+            {
+                "cards_shuffled": result["cards_shuffled"],
+                "fail_count": result["fail_count"],
+                "success_count": result["success_count"],
+                "passed": result["passed"],
+                "mission_num": game.current_mission + 1,
+                "requires_double_fail": game.requires_double_fail(),
+            },
+        )
+        pause(4)  # Animation time
         outcome = process_mission_result(game, result["passed"])
-        emit_to_game(game.code, "mission_tracker_update", {
-            "mission_results": game.mission_results,
-            "good_wins": game.good_wins(),
-            "evil_wins": game.evil_wins_count(),
-        })
+        emit_to_game(
+            game.code,
+            "mission_tracker_update",
+            {
+                "mission_results": game.mission_results,
+                "good_wins": game.good_wins(),
+                "evil_wins": game.evil_wins_count(),
+            },
+        )
         # Store outcome and wait for host to click "Next Round"
         game.pending_mission_outcome = outcome
-        emit_to_game(game.code, "mission_complete", {
-            "outcome": outcome,
-            "passed": result["passed"],
-            "good_wins": game.good_wins(),
-            "evil_wins": game.evil_wins_count(),
-        })
+        emit_to_game(
+            game.code,
+            "mission_complete",
+            {
+                "outcome": outcome,
+                "passed": result["passed"],
+                "good_wins": game.good_wins(),
+                "evil_wins": game.evil_wins_count(),
+            },
+        )
 
 
 # --- Advance after mission (host clicks "Next Round") ---
 
+
 @socketio.on("advance_after_mission")
+@rate_limited()
 def on_advance_after_mission():
-    sid = request.sid
-    info = sid_to_info.get(sid)
-    if not info:
-        emit("error", {"message": "Not connected"}); return
-    game = games.get(info["game_code"])
-    if not game:
-        emit("error", {"message": "Game not found"}); return
-    outcome = game.pending_mission_outcome
-    if not outcome:
-        return  # already advanced or not waiting
-    game.pending_mission_outcome = None
-    if outcome == "assassin_phase":
-        assassin = get_assassin(game)
-        emit_to_game(game.code, "assassin_phase_start", {
-            "assassin_name": assassin.name if assassin else "Unknown",
-            "assassin_id": assassin.player_id if assassin else None,
-            "targets": [
-                {"name": p.name, "player_id": p.player_id}
-                for p in game.players.values()
-                if p.player_id != (assassin.player_id if assassin else None)
-            ],
-        })
-    elif outcome == "evil_wins":
-        emit_to_game(game.code, "game_over", get_game_summary(game))
-    else:  # next_mission
-        start_round(game)
+    try:
+        game = validate_host(request.sid)
+        outcome = game.pending_mission_outcome
+        if not outcome:
+            raise ValueError("No completed mission is awaiting advancement")
+        game.pending_mission_outcome = None
+        if outcome == "assassin_phase":
+            assassin = get_assassin(game)
+            emit_to_game(
+                game.code,
+                "assassin_phase_start",
+                {
+                    "assassin_name": assassin.name if assassin else "Unknown",
+                    "assassin_id": assassin.player_id if assassin else None,
+                    "targets": [
+                        {"name": p.name, "player_id": p.player_id}
+                        for p in game.players.values()
+                        if p.player_id != (assassin.player_id if assassin else None)
+                    ],
+                },
+            )
+        elif outcome == "evil_wins":
+            emit_to_game(game.code, "game_over", get_game_summary(game))
+        else:
+            start_round(game)
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 # --- Assassination ---
 
+
 @socketio.on("assassinate")
+@rate_limited()
 def on_assassinate(data):
     sid = request.sid
     try:
-        game, player = validate_caller(sid, require_phase=GamePhase.ASSASSIN_PHASE, require_assassin=True)
+        game, player = validate_caller(
+            sid, require_phase=GamePhase.ASSASSIN_PHASE, require_assassin=True
+        )
     except ValueError as e:
-        emit("error", {"message": str(e)}); return
-    target_id = data.get("target_player_id")
+        emit("error", {"message": str(e)})
+        return
     try:
+        data = require_object(data)
+        target_id = require_string(data, "target_player_id", minimum=32, maximum=64)
         result = process_assassination(game, target_id)
     except ValueError as e:
-        emit("error", {"message": str(e)}); return
+        emit("error", {"message": str(e)})
+        return
     emit_to_game(game.code, "assassination_result", result)
-    eventlet.sleep(3)
+    pause(3)
     emit_to_game(game.code, "game_over", get_game_summary(game))
 
 
 # --- Return to lobby ---
 
+
 @socketio.on("return_to_lobby")
+@rate_limited()
 def on_return_to_lobby():
-    sid = request.sid
-    info = sid_to_info.get(sid)
-    if not info:
-        emit("error", {"message": "Not connected to a game"}); return
-    game = games.get(info["game_code"])
-    if not game:
-        emit("error", {"message": "Game not found"}); return
-    if not info.get("is_host_screen"):
-        player_id = info.get("player_id")
-        if not player_id or player_id != game.host_player_id:
-            emit("error", {"message": "Only the host can return to lobby"}); return
-    # Jackbox-style: clear ALL players so everyone rejoins fresh
-    # Invalidate all player session tokens
-    for p in game.players.values():
-        if p.session_token and p.session_token in session_tokens:
-            del session_tokens[p.session_token]
-    game.reset()
-    emit_to_game(game.code, "return_to_lobby", {
-        "players": [],
-        "settings": {"discussion_time": game.discussion_time, "proposal_time": game.proposal_time},
-    })
+    try:
+        game = validate_host(request.sid)
+        for player in game.players.values():
+            if player.session_token:
+                session_tokens.pop(player.session_token, None)
+        game.reset()
+        emit_to_game(
+            game.code,
+            "return_to_lobby",
+            {
+                "players": [],
+                "settings": {
+                    "discussion_time": game.discussion_time,
+                    "proposal_time": game.proposal_time,
+                },
+            },
+        )
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 # --- End game (delete game, send everyone back to join screen) ---
 
+
 @socketio.on("end_game")
+@rate_limited()
 def on_end_game():
-    sid = request.sid
-    info = sid_to_info.get(sid)
-    if not info:
-        emit("error", {"message": "Not connected to a game"}); return
-    game = games.get(info["game_code"])
-    if not game:
-        emit("error", {"message": "Game not found"}); return
-    # Only host screen or host player can end game
-    if not info.get("is_host_screen"):
-        player_id = info.get("player_id")
-        if not player_id or player_id != game.host_player_id:
-            emit("error", {"message": "Only the host can end the game"}); return
-    game_code = game.code
-    emit_to_game(game_code, "game_ended", {})
-    # Clean up
-    for pid, player in game.players.items():
-        if player.session_token and player.session_token in session_tokens:
-            del session_tokens[player.session_token]
-    del games[game_code]
+    try:
+        game = validate_host(request.sid)
+        game_code = game.code
+        emit_to_game(game_code, "game_ended", {})
+        for player in game.players.values():
+            if player.session_token:
+                session_tokens.pop(player.session_token, None)
+        games.pop(game_code, None)
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 # --- Chat ---
 
+
 @socketio.on("send_chat")
+@rate_limited("chat")
 def on_send_chat(data):
     sid = request.sid
     info = sid_to_info.get(sid)
@@ -739,42 +1147,53 @@ def on_send_chat(data):
     player = game.players.get(player_id)
     if not player:
         return
-    msg = str(data.get("message", "")).strip()[:100]
-    if not msg:
+    try:
+        data = require_object(data)
+        msg = require_string(data, "message", minimum=1, maximum=100)
+    except ValueError as error:
+        emit_validation_error(error)
         return
-    emit_to_game(game.code, "chat_message", {
-        "name": player.name,
-        "message": msg,
-    })
+    emit_to_game(
+        game.code,
+        "chat_message",
+        {
+            "name": player.name,
+            "message": msg,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
-# Debug endpoint
+# Development-only debug endpoint
 # ---------------------------------------------------------------------------
 
-@app.route("/debug/state/<game_code>")
-def debug_state(game_code):
-    game = games.get(game_code.upper())
-    if not game:
-        return {"error": "Not found"}, 404
-    return {
-        "code": game.code,
-        "phase": game.phase,
-        "player_count": game.player_count(),
-        "players": [
-            {"name": p.name, "role": p.role, "team": p.team, "connected": p.connected}
-            for p in game.players.values()
-        ],
-        "player_order": [game.players[pid].name for pid in game.player_order],
-        "current_mission": game.current_mission,
-        "mission_results": game.mission_results,
-        "consecutive_rejections": game.consecutive_rejections,
-        "current_leader": game.current_leader().name if game.current_leader() else None,
-        "proposed_team": [game.players[pid].name for pid in game.proposed_team if pid in game.players],
-        "votes": {game.players[pid].name: v for pid, v in game.votes.items() if pid in game.players},
-        "winner": game.winner,
-        "win_reason": game.win_reason,
-    }
+if ENABLE_DEV_ROUTES and not IS_PRODUCTION:
+
+    @app.route("/debug/state/<game_code>")
+    def debug_state(game_code):
+        game = games.get(game_code.upper())
+        if not game:
+            abort(404)
+        return {
+            "code": game.code,
+            "phase": game.phase,
+            "player_count": game.player_count(),
+            "players": [
+                {
+                    "name": p.name,
+                    "role": p.role,
+                    "team": p.team,
+                    "connected": p.connected,
+                }
+                for p in game.players.values()
+            ],
+        }
+
+
+@socketio.on_error_default
+def handle_socket_error(error):
+    logger.exception("Unhandled Socket.IO error")
+    emit("error", {"message": "Invalid request"})
 
 
 # ---------------------------------------------------------------------------
@@ -784,8 +1203,7 @@ def debug_state(game_code):
 if __name__ == "__main__":
     print("=" * 40)
     print("  AVALON - The Resistance")
-    print(f"  Host screen: http://{HOST_IP}:{PORT}/host")
-    print(f"  Players join: http://{HOST_IP}:{PORT}")
-    print(f"  Dev panel:    http://{HOST_IP}:{PORT}/dev")
+    print(f"  Host screen: http://127.0.0.1:{PORT}/host")
+    print(f"  Players join: http://127.0.0.1:{PORT}")
     print("=" * 40)
-    socketio.run(app, host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
+    socketio.run(app, host="127.0.0.1", port=PORT, debug=False, use_reloader=False)

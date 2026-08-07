@@ -47,8 +47,8 @@
         <div class="join-form">
             <div class="form-group">
                 <label for="input-room-code">Room Code</label>
-                <input type="text" id="input-room-code" maxlength="4" autocomplete="off"
-                       autocapitalize="characters" placeholder="ABCD" inputmode="text">
+                <input type="text" id="input-room-code" maxlength="6" autocomplete="off"
+                       autocapitalize="characters" placeholder="ABCDEF" inputmode="text">
             </div>
             <div class="form-group">
                 <label for="input-name">Thy Name</label>
@@ -63,7 +63,7 @@
     <div class="screen" id="screen-lobby">
         <div class="screen-header">
             <div class="screen-title-small">AVALON</div>
-            <div class="screen-subtitle">Room: <span id="lobby-code-display" style="color:var(--gold)">----</span></div>
+            <div class="screen-subtitle">Room: <span id="lobby-code-display" style="color:var(--gold)">------</span></div>
         </div>
         <div id="lobby-host-controls" class="hidden" style="width:100%;text-align:center;margin-bottom:1rem">
             <button class="btn btn-primary" id="btn-host-start" style="width:100%">Begin the Quest</button>
@@ -85,7 +85,7 @@
                 </div>
                 <div class="role-card-face role-card-front-face" id="role-card-front">
                     <div class="role-team-badge" id="role-team-badge"></div>
-                    <img id="role-portrait-card" class="role-portrait-card" src="" alt="" onerror="this.style.display='none'">
+                    <img id="role-portrait-card" class="role-portrait-card" src="" alt="">
                     <div class="role-name" id="role-name-display"></div>
                     <div class="role-description" id="role-desc-display"></div>
                 </div>
@@ -238,7 +238,7 @@
 <div id="role-overlay" class="role-overlay hidden">
     <div class="role-overlay-box">
         <div class="role-overlay-team" id="overlay-team-badge"></div>
-        <img id="overlay-portrait" class="overlay-portrait" src="" alt="" onerror="this.style.display='none'">
+        <img id="overlay-portrait" class="overlay-portrait" src="" alt="">
         <div class="role-overlay-name" id="overlay-role-name"></div>
         <div class="role-overlay-desc" id="overlay-role-desc"></div>
         <div class="role-overlay-knowledge" id="overlay-knowledge"></div>

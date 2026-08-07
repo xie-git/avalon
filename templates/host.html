@@ -143,6 +143,12 @@
             <span class="avalon-logo">AVALON</span>
         </div>
         <p class="tagline">The Resistance Awaits</p>
+        <div class="form-group" style="width:min(22rem,90vw);margin:0 auto 1rem">
+            <label for="host-admin-password">Host password</label>
+            <input type="password" id="host-admin-password" maxlength="256"
+                   autocomplete="current-password" placeholder="Server host password">
+            <div class="error-message" id="host-auth-error"></div>
+        </div>
         <button class="btn btn-primary" id="btn-create-game">Create Game</button>
     </div>
 
