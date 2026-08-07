@@ -21,6 +21,7 @@ let currentLeaderName = '';
 let proposedTeam = [];
 let pendingVoters = [];
 let timerMax = 0;
+let betaTestMode = false;
 
 
 // ---------------------------------------------------------------------------
@@ -177,7 +178,20 @@ function renderLobbyPlayers(playerList) {
     const btn = document.getElementById('btn-start-game');
     const hint = document.getElementById('start-game-hint');
     btn.disabled = !valid;
-    hint.textContent = valid ? '' : (n < 6 ? `Need ${6 - n} more player(s)` : 'Too many players (max 10)');
+    btn.classList.toggle('beta-start', betaTestMode && valid);
+    btn.textContent = betaTestMode ? 'Start Beta Test Game' : 'Begin the Quest';
+    hint.textContent = valid
+        ? (betaTestMode ? 'Bots make random legal moves automatically' : '')
+        : (n < 6 ? `Need ${6 - n} more player(s)` : 'Too many players (max 10)');
+}
+
+function renderBetaTestMode(enabled) {
+    betaTestMode = Boolean(enabled);
+    const toggle = document.getElementById('btn-beta-test-mode');
+    toggle.classList.toggle('enabled', betaTestMode);
+    toggle.setAttribute('aria-pressed', String(betaTestMode));
+    toggle.querySelector('.beta-toggle-state').textContent = betaTestMode ? 'ON' : 'OFF';
+    renderLobbyPlayers(players);
 }
 
 // ---------------------------------------------------------------------------
@@ -378,11 +392,13 @@ socket.on('host_registered', data => {
     currentMission = data.current_mission || 0;
     consecutiveRejections = data.consecutive_rejections || 0;
     currentLeaderName = data.current_leader || '';
+    betaTestMode = Boolean(data.beta_test_mode);
     if (data.discussion_time) discussionDuration = data.discussion_time;
 
     if (data.phase === 'LOBBY') {
         transition('screen-lobby');
         renderLobbyPlayers(players);
+        renderBetaTestMode(betaTestMode);
     } else {
         // Mid-game reconnect — restore header and show appropriate screen
         showGameHeader();
@@ -467,6 +483,7 @@ socket.on('lobby_update', data => {
         const sliderEl = document.getElementById('discussion-slider');
         if (dispEl) dispEl.textContent = fmtTime(discussionDuration);
         if (sliderEl) sliderEl.value = discussionDuration;
+        renderBetaTestMode(data.settings.beta_test_mode);
     }
 });
 
@@ -718,6 +735,10 @@ document.getElementById('btn-create-game').addEventListener('click', () => {
 
 document.getElementById('btn-start-game').addEventListener('click', () => {
     socket.emit('start_game');
+});
+
+document.getElementById('btn-beta-test-mode').addEventListener('click', () => {
+    socket.emit('set_beta_test_mode', { enabled: !betaTestMode });
 });
 
 document.getElementById('btn-skip-discussion').addEventListener('click', async () => {

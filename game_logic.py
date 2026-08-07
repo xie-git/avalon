@@ -108,7 +108,7 @@ secure_random = secrets.SystemRandom()
 
 
 class PlayerInfo:
-    def __init__(self, player_id: str, name: str):
+    def __init__(self, player_id: str, name: str, *, is_bot: bool = False):
         self.player_id = player_id
         self.name = name
         self.sid = None
@@ -116,12 +116,14 @@ class PlayerInfo:
         self.team: Team | None = None
         self.connected = True
         self.session_token = None
+        self.is_bot = is_bot
 
     def to_dict(self, include_role=False):
         d = {
             "player_id": self.player_id,
             "name": self.name,
             "connected": self.connected,
+            "is_bot": self.is_bot,
         }
         if include_role:
             d["role"] = self.role
@@ -142,6 +144,7 @@ class GameState:
         # Settings
         self.discussion_time = 60
         self.proposal_time = 60
+        self.beta_test_mode = False
 
         # Round state
         self.current_leader_index = 0

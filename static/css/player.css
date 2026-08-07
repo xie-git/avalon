@@ -42,7 +42,8 @@ html, body {
     padding-top: max(2rem, env(safe-area-inset-top));
     padding-bottom: max(2rem, env(safe-area-inset-bottom));
 }
-.screen.active { opacity: 1; pointer-events: all; }
+.screen.active { opacity: 1; pointer-events: all; visibility: visible; }
+.screen:not(.active) { visibility: hidden; }
 
 /* ============================================================
    SHARED ELEMENTS
@@ -103,6 +104,14 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    position: relative;
+    z-index: 2;
+    padding: clamp(1rem, 4dvh, 1.5rem);
+    background: #15120e;
+    border: 1px solid var(--border-gold);
+    border-radius: var(--radius-md);
+    box-shadow: 0 16px 50px rgba(0,0,0,0.65), inset 0 0 24px rgba(0,0,0,0.35);
+    isolation: isolate;
 }
 .form-group {
     display: flex;
@@ -830,3 +839,170 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
     touch-action: manipulation;
 }
 .chat-send-btn:active { background: rgba(201,168,76,0.25); }
+
+/* ============================================================
+   RESPONSIVE VIEWPORT FIT
+   Keep every action reachable on short iPhones while allowing
+   larger phones to breathe. dvh follows Safari's dynamic chrome.
+   ============================================================ */
+:root {
+    --phone-gutter: clamp(0.9rem, 4.5vw, 1.25rem);
+    --phone-space: clamp(0.75rem, 2.4dvh, 1.5rem);
+    --phone-top: max(clamp(0.75rem, 3dvh, 2rem), env(safe-area-inset-top));
+    --phone-bottom: max(clamp(0.75rem, 3dvh, 2rem), env(safe-area-inset-bottom));
+    --player-board-height: 50px;
+    --player-chat-height: 52px;
+}
+
+html,
+body {
+    width: 100%;
+    min-height: 100%;
+    font-size: clamp(16px, 1.9dvh, 18px);
+}
+
+#app {
+    width: 100%;
+    min-height: 100svh;
+    min-height: 100dvh;
+}
+
+.screen {
+    left: 50%;
+    right: auto;
+    width: min(100%, 480px);
+    max-width: 480px;
+    min-height: 100svh;
+    min-height: 100dvh;
+    height: 100svh;
+    height: 100dvh;
+    transform: translateX(-50%);
+    padding: var(--phone-top)
+        max(var(--phone-gutter), env(safe-area-inset-right))
+        var(--phone-bottom)
+        max(var(--phone-gutter), env(safe-area-inset-left));
+    scrollbar-gutter: stable both-edges;
+}
+
+.screen-header {
+    margin-bottom: var(--phone-space);
+}
+
+#screen-join,
+#screen-lobby,
+#screen-role,
+#screen-night,
+#screen-discussion,
+#screen-proposal,
+#screen-vote,
+#screen-mission,
+#screen-assassin,
+#screen-game-over {
+    gap: var(--phone-space);
+}
+
+#screen-join {
+    padding-block: var(--phone-top) var(--phone-bottom);
+}
+
+.join-logo {
+    font-size: clamp(2.25rem, 11vw, 3rem);
+}
+
+.join-form {
+    gap: clamp(0.7rem, 1.8dvh, 1rem);
+}
+
+.form-group input {
+    padding-block: clamp(0.7rem, 2dvh, 0.9rem);
+}
+
+.role-card-wrapper {
+    width: clamp(200px, min(64vw, 32dvh), 260px);
+    height: auto;
+    aspect-ratio: 13 / 18;
+    flex: 0 1 auto;
+}
+
+.role-card-face {
+    padding: clamp(0.85rem, 2.5dvh, 1.5rem);
+    gap: clamp(0.4rem, 1.4dvh, 0.75rem);
+}
+
+.role-name {
+    font-size: clamp(1.45rem, 5.5vw, 2rem);
+}
+
+.night-info-panel {
+    padding: clamp(0.85rem, 2.5dvh, 1.5rem);
+}
+
+.player-select-list,
+.assassin-target-list,
+.roles-list {
+    gap: clamp(0.35rem, 1dvh, 0.5rem);
+}
+
+.player-select-btn,
+.assassin-target-btn {
+    padding-block: clamp(0.62rem, 1.5dvh, 0.9rem);
+}
+
+.mission-card-choices {
+    gap: clamp(0.65rem, 2dvh, 1rem);
+}
+
+.mission-choice-btn {
+    padding-block: clamp(1.1rem, 4dvh, 2rem);
+}
+
+.player-board {
+    min-height: calc(var(--player-board-height) + env(safe-area-inset-top));
+    height: calc(var(--player-board-height) + env(safe-area-inset-top));
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+}
+
+body.board-visible .screen {
+    padding-top: calc(var(--player-board-height) + env(safe-area-inset-top) + clamp(0.75rem, 2dvh, 1.5rem));
+}
+
+body.chat-visible .screen {
+    padding-bottom: calc(var(--player-chat-height) + env(safe-area-inset-bottom) + clamp(0.75rem, 2dvh, 1.5rem));
+}
+
+.chat-container {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+}
+
+@media (max-height: 720px) {
+    :root {
+        --phone-space: 0.65rem;
+    }
+
+    .screen-header { margin-bottom: 0.45rem; }
+    .screen-title-small { font-size: 1.25rem; }
+    .waiting-text { font-size: 0.95rem; }
+    .timer-small { font-size: 2.4rem; }
+    .role-description { font-size: 0.86rem; line-height: 1.35; }
+    .role-card-wrapper { width: clamp(190px, min(58vw, 30dvh), 220px); }
+    .vote-buttons .btn { padding: 0.85rem 0.5rem; }
+    .choice-icon { font-size: 2.1rem; }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+    .screen {
+        width: min(100%, 760px);
+        max-width: 760px;
+    }
+
+    #screen-join {
+        justify-content: flex-start;
+    }
+
+    .join-logo { font-size: 2rem; margin: 0; }
+    .join-tagline { margin-top: -0.5rem; }
+    .role-card-wrapper { width: min(36dvh, 190px); }
+    .role-card-face { padding: 0.6rem; }
+}

@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon — Host</title>
-<link rel="stylesheet" href="/static/css/common.css">
-<link rel="stylesheet" href="/static/css/host.css">
+<link rel="stylesheet" href="/static/css/common.css?v=20260807">
+<link rel="stylesheet" href="/static/css/host.css?v=20260807-beta2">
 <style>
 /* In-game confirmation modal */
 #confirm-modal {
@@ -22,9 +22,12 @@
     background: var(--bg-parchment);
     border: 2px solid var(--gold);
     border-radius: var(--radius-lg);
-    padding: 2.5rem 3rem;
+    padding: clamp(1.25rem, 4vmin, 2.5rem) clamp(1rem, 5vmin, 3rem);
     text-align: center;
+    width: min(460px, calc(100vw - 2rem));
     max-width: 460px;
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
     box-shadow: 0 0 60px rgba(201,168,76,0.25);
     animation: fade-in-scale 0.25s ease-out;
 }
@@ -102,7 +105,7 @@
 
 <!-- In-game settings menu -->
 <div id="host-settings-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:500;align-items:center;justify-content:center">
-    <div class="confirm-box" style="min-width:320px">
+    <div class="confirm-box">
         <h2 style="font-family:var(--font-title);font-size:1.3rem;color:var(--gold);margin-bottom:1.5rem">⚙ Game Settings</h2>
         <div class="confirm-actions" style="flex-direction:column;gap:0.75rem">
             <button class="btn btn-primary" id="btn-host-back-lobby" style="width:100%">↩ Back to Lobby</button>
@@ -171,6 +174,15 @@
                 <div class="setting-row">
                     <label>Discussion Time <span class="value-display" id="discussion-time-display">60 sec</span></label>
                     <input type="range" id="discussion-slider" min="10" max="600" step="5" value="60">
+                </div>
+                <div class="beta-test-setting">
+                    <div class="beta-test-copy">
+                        <strong>Beta Test Mode</strong>
+                        <span>Fill to 6 with random bot players</span>
+                    </div>
+                    <button type="button" id="btn-beta-test-mode" class="beta-toggle" aria-pressed="false">
+                        <span class="beta-toggle-state">OFF</span>
+                    </button>
                 </div>
             </div>
             <div class="start-btn-wrapper">
@@ -268,6 +280,6 @@
 </div>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/host.js"></script>
+<script src="/static/js/host.js?v=20260807-beta2"></script>
 </body>
 </html>

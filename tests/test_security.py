@@ -173,6 +173,108 @@ def test_host_can_reorder_players_with_browser_payload(socket_client, create_gam
         player.disconnect()
 
 
+def test_beta_mode_is_host_only_and_fills_then_removes_bots(
+    socket_client, create_game
+):
+    created = create_game(socket_client)
+    player = server.socketio.test_client(server.app)
+    player.emit(
+        "join_game", {"room_code": created["room_code"], "player_name": "Arthur"}
+    )
+    player.get_received()
+
+    player.emit("set_beta_test_mode", {"enabled": True})
+    assert packets_for(player, "error")[0]["message"] == "Host authorization required"
+
+    socket_client.emit("set_beta_test_mode", {"enabled": True})
+    game = server.games[created["room_code"]]
+    assert game.beta_test_mode is True
+    assert game.player_count() == 6
+    assert sum(p.is_bot for p in game.players.values()) == 5
+    assert all("is_bot" in p for p in game.public_players())
+
+    socket_client.emit("set_beta_test_mode", {"enabled": False})
+    assert game.beta_test_mode is False
+    assert game.player_count() == 1
+    assert not any(p.is_bot for p in game.players.values())
+    player.disconnect()
+
+
+def test_one_human_can_start_beta_game_and_bots_confirm_night(
+    socket_client, create_game
+):
+    created = create_game(socket_client)
+    player = server.socketio.test_client(server.app)
+    player.emit(
+        "join_game", {"room_code": created["room_code"], "player_name": "Arthur"}
+    )
+    player.get_received()
+    socket_client.get_received()
+
+    socket_client.emit("set_beta_test_mode", {"enabled": True})
+    socket_client.emit("start_game")
+    game = server.games[created["room_code"]]
+    assert game.phase == server.GamePhase.NIGHT_PHASE
+    assert len(game.night_acks) == 5
+
+    player.emit("night_phase_ack")
+    assert game.phase == server.GamePhase.DISCUSSION
+    player.disconnect()
+
+
+def test_one_human_and_random_bots_can_finish_a_complete_game(
+    socket_client, create_game
+):
+    created = create_game(socket_client)
+    player = server.socketio.test_client(server.app)
+    player.emit(
+        "join_game", {"room_code": created["room_code"], "player_name": "Arthur"}
+    )
+    joined = packets_for(player, "join_success")[0]
+    human_id = joined["player_id"]
+    socket_client.get_received()
+    socket_client.emit("set_beta_test_mode", {"enabled": True})
+    socket_client.emit("start_game")
+    player.get_received()
+    player.emit("night_phase_ack")
+    game = server.games[created["room_code"]]
+
+    for _ in range(100):
+        if game.phase == server.GamePhase.GAME_OVER:
+            break
+        if game.phase == server.GamePhase.DISCUSSION:
+            socket_client.emit("skip_discussion", {"confirmed": True})
+        elif game.phase == server.GamePhase.TEAM_PROPOSAL:
+            assert game.current_leader().player_id == human_id
+            player.emit(
+                "propose_team",
+                {"team": game.player_order[: game.mission_size()]},
+            )
+        elif game.phase == server.GamePhase.TEAM_VOTE:
+            player.emit("cast_vote", {"vote": "approve"})
+        elif game.phase == server.GamePhase.MISSION:
+            assert human_id in game.proposed_team
+            player.emit("play_mission_card", {"card": "success"})
+        elif game.phase == server.GamePhase.MISSION_REVEAL:
+            socket_client.emit("advance_after_mission")
+        elif game.phase == server.GamePhase.ASSASSIN_PHASE:
+            assert server.get_assassin(game).player_id == human_id
+            player.emit(
+                "assassinate",
+                {
+                    "target_player_id": server.get_assassin_targets(game)[
+                        0
+                    ].player_id
+                },
+            )
+        else:
+            pytest.fail(f"Beta game stalled in {game.phase}")
+
+    assert game.phase == server.GamePhase.GAME_OVER
+    assert game.winner in {"good", "evil"}
+    player.disconnect()
+
+
 def test_production_configuration_fails_closed_when_secrets_are_missing():
     environment = os.environ.copy()
     environment["APP_ENV"] = "production"

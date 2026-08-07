@@ -33,6 +33,7 @@ from game_logic import (
     get_game_summary,
     build_state_snapshot,
     MISSION_SIZES,
+    secure_random,
 )
 
 APP_ENV = os.environ.get("APP_ENV", "development").lower()
@@ -367,6 +368,43 @@ def emit_validation_error(error: Exception) -> None:
     emit("error", {"message": str(error)})
 
 
+def lobby_payload(game: GameState) -> dict:
+    return {
+        "players": game.public_players(),
+        "settings": {
+            "discussion_time": game.discussion_time,
+            "proposal_time": game.proposal_time,
+            "beta_test_mode": game.beta_test_mode,
+        },
+    }
+
+
+def add_beta_bots(game: GameState, target_count: int = 6) -> None:
+    bot_number = 1
+    existing_names = {player.name.lower() for player in game.players.values()}
+    while game.player_count() < target_count:
+        while f"bot {bot_number}" in existing_names:
+            bot_number += 1
+        name = f"Bot {bot_number}"
+        player = add_player(game, name, f"bot-{uuid.uuid4()}")
+        player.is_bot = True
+        player.sid = None
+        existing_names.add(name.lower())
+        bot_number += 1
+
+
+def remove_beta_bots(game: GameState) -> None:
+    for player_id, player in list(game.players.items()):
+        if player.is_bot:
+            game.players.pop(player_id, None)
+            if player_id in game.player_order:
+                game.player_order.remove(player_id)
+
+
+def bot_players(game: GameState):
+    return [player for player in game.players.values() if player.is_bot]
+
+
 def validate_caller(
     sid: str, require_phase=None, require_leader=False, require_assassin=False
 ):
@@ -505,6 +543,9 @@ def transition_to_team_proposal(game: GameState):
             },
         },
     )
+    if leader and leader.is_bot:
+        team_ids = secure_random.sample(game.player_order, game.mission_size())
+        submit_team_proposal(game, leader, team_ids)
 
 
 def transition_to_night_phase(game: GameState):
@@ -524,6 +565,154 @@ def transition_to_night_phase(game: GameState):
                     "night_info": night_info,
                 },
             )
+        elif player.is_bot:
+            game.night_acks.add(pid)
+    if game.night_acks:
+        emit_to_game(
+            game.code,
+            "night_phase_progress",
+            {"confirmed": len(game.night_acks), "total": game.player_count()},
+        )
+
+
+def submit_team_proposal(
+    game: GameState, leader, team_ids: list[str]
+) -> None:
+    validate_team_proposal(game, team_ids)
+    game.proposed_team = team_ids
+    game.timer_phase_key = None
+    game.phase = GamePhase.TEAM_VOTE
+    team_names = [game.players[pid].name for pid in team_ids]
+    payload = {
+        "team": team_names,
+        "team_ids": team_ids,
+        "leader_name": leader.name,
+    }
+    emit_to_game(game.code, "team_proposed", payload)
+    emit_to_game(game.code, "vote_start", payload)
+    for bot in bot_players(game):
+        record_vote(game, bot.player_id, secure_random.choice(("approve", "reject")))
+    emit_vote_waiting(game)
+
+
+def emit_vote_waiting(game: GameState) -> None:
+    emit_to_game(
+        game.code,
+        "vote_waiting",
+        {
+            "voted": [game.players[pid].name for pid in game.votes],
+            "remaining": [
+                player.name
+                for player in game.players.values()
+                if player.player_id not in game.votes
+            ],
+        },
+    )
+
+
+def finish_mission(game: GameState, result: dict) -> None:
+    game.phase = GamePhase.MISSION_REVEAL
+    emit_to_game(
+        game.code,
+        "mission_reveal",
+        {
+            "cards_shuffled": result["cards_shuffled"],
+            "fail_count": result["fail_count"],
+            "success_count": result["success_count"],
+            "passed": result["passed"],
+            "mission_num": game.current_mission + 1,
+            "requires_double_fail": game.requires_double_fail(),
+        },
+    )
+    pause(4)
+    outcome = process_mission_result(game, result["passed"])
+    emit_to_game(
+        game.code,
+        "mission_tracker_update",
+        {
+            "mission_results": game.mission_results,
+            "good_wins": game.good_wins(),
+            "evil_wins": game.evil_wins_count(),
+        },
+    )
+    game.pending_mission_outcome = outcome
+    emit_to_game(
+        game.code,
+        "mission_complete",
+        {
+            "outcome": outcome,
+            "passed": result["passed"],
+            "good_wins": game.good_wins(),
+            "evil_wins": game.evil_wins_count(),
+        },
+    )
+
+
+def play_bot_mission_cards(game: GameState) -> None:
+    result = None
+    for player_id in game.proposed_team:
+        player = game.players[player_id]
+        if not player.is_bot:
+            continue
+        card = "success"
+        if player.team.value == "evil":
+            card = secure_random.choice(("success", "fail"))
+        result = record_mission_card(game, player_id, card)
+    emit_to_game(
+        game.code,
+        "mission_waiting",
+        {"played": len(game.mission_cards), "total": len(game.proposed_team)},
+    )
+    if result:
+        finish_mission(game, result)
+
+
+def finish_vote(game: GameState, result: dict) -> None:
+    game.phase = GamePhase.VOTE_REVEAL
+    emit_to_game(game.code, "vote_reveal", result)
+    pause(3)
+    outcome = process_vote_result(game, result["approved"])
+    if outcome == "mission":
+        emit_to_game(
+            game.code,
+            "mission_start",
+            {
+                "team": [game.players[pid].name for pid in game.proposed_team],
+                "team_ids": game.proposed_team,
+                "mission_num": game.current_mission + 1,
+            },
+        )
+        play_bot_mission_cards(game)
+    elif outcome == "evil_wins_by_rejection":
+        emit_to_game(game.code, "evil_wins_by_rejection", {})
+        pause(2)
+        emit_to_game(game.code, "game_over", get_game_summary(game))
+    else:
+        emit_to_game(
+            game.code,
+            "rejection_warning",
+            {
+                "consecutive": game.consecutive_rejections,
+                "leader_name": (
+                    game.current_leader().name if game.current_leader() else "Unknown"
+                ),
+            },
+        )
+        pause(2)
+        transition_to_team_proposal(game)
+
+
+def run_bot_assassination(game: GameState) -> None:
+    assassin = get_assassin(game)
+    if not assassin or not assassin.is_bot:
+        return
+    targets = get_assassin_targets(game)
+    if not targets:
+        return
+    result = process_assassination(game, secure_random.choice(targets).player_id)
+    emit_to_game(game.code, "assassination_result", result)
+    pause(3)
+    emit_to_game(game.code, "game_over", get_game_summary(game))
 
 
 # ---------------------------------------------------------------------------
@@ -615,6 +804,7 @@ def on_register_host_screen(data):
                 if game.current_leader()
                 else "",
                 "discussion_time": game.discussion_time,
+                "beta_test_mode": game.beta_test_mode,
                 "pending_mission_outcome": game.pending_mission_outcome,
                 "proposed_team": [
                     game.players[pid].name
@@ -725,6 +915,7 @@ def on_join_game(data):
                 "settings": {
                     "discussion_time": game.discussion_time,
                     "proposal_time": game.proposal_time,
+                    "beta_test_mode": game.beta_test_mode,
                 },
             },
         )
@@ -797,13 +988,7 @@ def on_reorder_players(data):
         emit_to_game(
             game.code,
             "lobby_update",
-            {
-                "players": game.public_players(),
-                "settings": {
-                    "discussion_time": game.discussion_time,
-                    "proposal_time": game.proposal_time,
-                },
-            },
+            lobby_payload(game),
         )
     except ValueError as error:
         emit_validation_error(error)
@@ -826,14 +1011,27 @@ def on_update_settings(data):
         emit_to_game(
             game.code,
             "lobby_update",
-            {
-                "players": game.public_players(),
-                "settings": {
-                    "discussion_time": game.discussion_time,
-                    "proposal_time": game.proposal_time,
-                },
-            },
+            lobby_payload(game),
         )
+    except ValueError as error:
+        emit_validation_error(error)
+
+
+@socketio.on("set_beta_test_mode")
+@rate_limited()
+def on_set_beta_test_mode(data):
+    try:
+        game = validate_host(request.sid, require_phase=GamePhase.LOBBY)
+        data = require_object(data)
+        enabled = data.get("enabled")
+        if not isinstance(enabled, bool):
+            raise ValueError("enabled must be true or false")
+        game.beta_test_mode = enabled
+        if enabled:
+            add_beta_bots(game)
+        else:
+            remove_beta_bots(game)
+        emit_to_game(game.code, "lobby_update", lobby_payload(game))
     except ValueError as error:
         emit_validation_error(error)
 
@@ -867,6 +1065,10 @@ def on_start_game():
     try:
         game = validate_host(request.sid, require_phase=GamePhase.LOBBY)
         n = game.player_count()
+        if game.beta_test_mode and not any(
+            not player.is_bot for player in game.players.values()
+        ):
+            raise ValueError("Join with at least one real player before testing.")
         if n < 6 or n > 10:
             raise ValueError(f"Need 6-10 players. Currently {n}.")
         assign_roles(game)
@@ -946,28 +1148,7 @@ def on_propose_team(data):
     except ValueError as e:
         emit("error", {"message": str(e)})
         return
-    game.proposed_team = team_ids
-    game.timer_phase_key = None  # Cancel proposal timer
-    game.phase = GamePhase.TEAM_VOTE
-    team_names = [game.players[pid].name for pid in team_ids]
-    emit_to_game(
-        game.code,
-        "team_proposed",
-        {
-            "team": team_names,
-            "team_ids": team_ids,
-            "leader_name": player.name,
-        },
-    )
-    emit_to_game(
-        game.code,
-        "vote_start",
-        {
-            "team": team_names,
-            "team_ids": team_ids,
-            "leader_name": player.name,
-        },
-    )
+    submit_team_proposal(game, player, team_ids)
 
 
 @socketio.on("skip_proposal_timer")
@@ -1001,50 +1182,9 @@ def on_cast_vote(data):
         emit("error", {"message": str(e)})
         return
     emit("vote_cast_ack", {}, room=sid)
-    voted_names = [game.players[pid].name for pid in game.votes]
-    remaining_names = [
-        p.name for p in game.players.values() if p.player_id not in game.votes
-    ]
-    emit_to_game(
-        game.code,
-        "vote_waiting",
-        {
-            "voted": voted_names,
-            "remaining": remaining_names,
-        },
-    )
+    emit_vote_waiting(game)
     if result:
-        game.phase = GamePhase.VOTE_REVEAL
-        emit_to_game(game.code, "vote_reveal", result)
-        pause(3)  # Dramatic pause for reveal animation
-        outcome = process_vote_result(game, result["approved"])
-        if outcome == "mission":
-            emit_to_game(
-                game.code,
-                "mission_start",
-                {
-                    "team": [game.players[pid].name for pid in game.proposed_team],
-                    "team_ids": game.proposed_team,
-                    "mission_num": game.current_mission + 1,
-                },
-            )
-        elif outcome == "evil_wins_by_rejection":
-            emit_to_game(game.code, "evil_wins_by_rejection", {})
-            pause(2)
-            emit_to_game(game.code, "game_over", get_game_summary(game))
-        else:  # next_proposal
-            emit_to_game(
-                game.code,
-                "rejection_warning",
-                {
-                    "consecutive": game.consecutive_rejections,
-                    "leader_name": game.current_leader().name
-                    if game.current_leader()
-                    else "Unknown",
-                },
-            )
-            pause(2)
-            transition_to_team_proposal(game)
+        finish_vote(game, result)
 
 
 # --- Mission ---
@@ -1071,42 +1211,7 @@ def on_play_mission_card(data):
     total = len(game.proposed_team)
     emit_to_game(game.code, "mission_waiting", {"played": played, "total": total})
     if result:
-        game.phase = GamePhase.MISSION_REVEAL
-        emit_to_game(
-            game.code,
-            "mission_reveal",
-            {
-                "cards_shuffled": result["cards_shuffled"],
-                "fail_count": result["fail_count"],
-                "success_count": result["success_count"],
-                "passed": result["passed"],
-                "mission_num": game.current_mission + 1,
-                "requires_double_fail": game.requires_double_fail(),
-            },
-        )
-        pause(4)  # Animation time
-        outcome = process_mission_result(game, result["passed"])
-        emit_to_game(
-            game.code,
-            "mission_tracker_update",
-            {
-                "mission_results": game.mission_results,
-                "good_wins": game.good_wins(),
-                "evil_wins": game.evil_wins_count(),
-            },
-        )
-        # Store outcome and wait for host to click "Next Round"
-        game.pending_mission_outcome = outcome
-        emit_to_game(
-            game.code,
-            "mission_complete",
-            {
-                "outcome": outcome,
-                "passed": result["passed"],
-                "good_wins": game.good_wins(),
-                "evil_wins": game.evil_wins_count(),
-            },
-        )
+        finish_mission(game, result)
 
 
 # --- Advance after mission (host clicks "Next Round") ---
@@ -1136,6 +1241,7 @@ def on_advance_after_mission():
                     ],
                 },
             )
+            run_bot_assassination(game)
         elif outcome == "evil_wins":
             game.phase = GamePhase.GAME_OVER
             emit_to_game(game.code, "game_over", get_game_summary(game))
@@ -1196,6 +1302,7 @@ def on_return_to_lobby():
                 "settings": {
                     "discussion_time": game.discussion_time,
                     "proposal_time": game.proposal_time,
+                    "beta_test_mode": game.beta_test_mode,
                 },
             },
         )
