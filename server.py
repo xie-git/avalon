@@ -1,3 +1,5 @@
+import base64
+import binascii
 import hmac
 import io
 import logging
@@ -452,14 +454,21 @@ def rate_limited(bucket: str = "default"):
 
 def validate_host(sid: str, *, require_phase=None):
     info = sid_to_info.get(sid)
-    if not info or not info.get("is_host_screen"):
+    if not info:
         raise ValueError("Host authorization required")
     game = games.get(info.get("game_code"))
     if not game:
         raise ValueError("Game not found")
-    if not game.host_token or not hmac.compare_digest(
-        info.get("host_token", ""), game.host_token
-    ):
+    is_display = bool(
+        info.get("is_host_screen")
+        and game.host_token
+        and hmac.compare_digest(info.get("host_token", ""), game.host_token)
+    )
+    is_creator = bool(
+        info.get("player_id")
+        and info.get("player_id") == game.host_player_id
+    )
+    if not is_display and not is_creator:
         raise ValueError("Host authorization required")
     if require_phase and game.phase != require_phase:
         raise ValueError(f"Wrong game phase: {game.phase}")
@@ -652,6 +661,12 @@ def start_round(game: GameState):
             "leader_id": leader.player_id if leader else None,
         },
     )
+    if leader and leader.is_bot:
+        game.timer_phase_key = None
+        game.timer_deadline = None
+        game.timer_kind = None
+        transition_to_team_proposal(game)
+        return
     socketio.start_background_task(
         run_discussion_timer, game.code, phase_key, game.discussion_time
     )
@@ -846,6 +861,9 @@ def finish_mission(game: GameState, result: dict) -> None:
             "evil_wins": game.evil_wins_count(),
         },
     )
+    leader = game.current_leader()
+    if leader and leader.is_bot:
+        advance_after_mission(game)
 
 
 def play_bot_mission_cards(game: GameState) -> None:
@@ -885,6 +903,9 @@ def finish_vote(game: GameState, result: dict) -> None:
         },
     )
     emit_to_game(game.code, "vote_reveal", result)
+    leader = game.current_leader()
+    if leader and leader.is_bot:
+        advance_after_vote(game)
 
 
 def advance_after_vote(game: GameState) -> None:
@@ -1163,6 +1184,50 @@ def on_create_game(data=None):
         emit_validation_error(error)
 
 
+@socketio.on("create_player_game")
+@rate_limited("create_game")
+def on_create_player_game(data):
+    """Create a room from a phone while occupying a normal player seat."""
+    try:
+        data = require_object(data)
+        name = require_string(data, "player_name", minimum=1, maximum=12)
+        cleanup_stale_games()
+        with state_lock:
+            sid = request.sid
+            if sid_to_info.get(sid):
+                raise ValueError("This browser is already in another game")
+            if len(games) >= MAX_GAMES:
+                raise ValueError("The server has reached its active-game limit")
+            code = generate_game_code(set(games.keys()))
+            game = GameState(code)
+            game.host_token = secrets.token_urlsafe(32)
+            player_id = str(uuid.uuid4())
+            player = add_player(game, name, player_id)
+            token = secrets.token_urlsafe(32)
+            player.session_token = token
+            player.sid = sid
+            game.host_player_id = player_id
+            games[code] = game
+            game_activity[code] = time.monotonic()
+            session_tokens[token] = (code, player_id)
+            join_room(code)
+            sid_to_info[sid] = {"game_code": code, "player_id": player_id}
+        emit(
+            "join_success",
+            {
+                "player_id": player_id,
+                "session_token": token,
+                "player_name": player.name,
+                "is_host": True,
+                "room_code": code,
+                "players": game.public_players(),
+                "settings": lobby_payload(game)["settings"],
+            },
+        )
+    except ValueError as error:
+        emit_validation_error(error)
+
+
 # --- Player joins ---
 
 
@@ -1198,7 +1263,7 @@ def on_join_game(data):
                         "player_id": existing_player.player_id,
                         "session_token": existing_player.session_token,
                         "player_name": existing_player.name,
-                        "is_host": False,
+                        "is_host": existing_player.player_id == game.host_player_id,
                         "room_code": code,
                         "players": game.public_players(),
                         "settings": lobby_payload(game)["settings"],
@@ -1225,7 +1290,7 @@ def on_join_game(data):
                 "player_id": player_id,
                 "session_token": token,
                 "player_name": player.name,
-                "is_host": False,
+                "is_host": player.player_id == game.host_player_id,
                 "room_code": code,
                 "players": game.public_players(),
                 "settings": {
@@ -1414,6 +1479,30 @@ def on_select_avatar(data):
         game, player = validate_caller(request.sid, require_phase=GamePhase.LOBBY)
         data = require_object(data)
         player.avatar_index = require_integer(data, "avatar_index", minimum=0, maximum=9)
+        player.avatar_image = None
+        emit_to_game(game.code, "lobby_update", lobby_payload(game))
+    except ValueError as error:
+        emit_validation_error(error)
+
+
+@socketio.on("select_selfie")
+@rate_limited()
+def on_select_selfie(data):
+    try:
+        game, player = validate_caller(request.sid, require_phase=GamePhase.LOBBY)
+        data = require_object(data)
+        image = require_string(data, "image", minimum=100, maximum=50_000)
+        if not image.startswith("data:image/jpeg;base64,"):
+            raise ValueError("Selfie must be a resized JPEG image")
+        try:
+            decoded = base64.b64decode(image.partition(",")[2], validate=True)
+        except (binascii.Error, ValueError) as error:
+            raise ValueError("Selfie data is invalid") from error
+        if not decoded.startswith(b"\xff\xd8"):
+            raise ValueError("Selfie data is not a JPEG image")
+        if len(decoded) > 36_000:
+            raise ValueError("Selfie is too large")
+        player.avatar_image = image
         emit_to_game(game.code, "lobby_update", lobby_payload(game))
     except ValueError as error:
         emit_validation_error(error)
@@ -1585,7 +1674,11 @@ def on_night_phase_ack():
 def on_skip_discussion(data):
     try:
         require_object(data)
-        game = validate_host(request.sid, require_phase=GamePhase.DISCUSSION)
+        game, _ = validate_caller(
+            request.sid,
+            require_phase=GamePhase.DISCUSSION,
+            require_leader=True,
+        )
         game.timer_phase_key = None
         game.timer_deadline = None
         game.timer_kind = None
@@ -1661,7 +1754,11 @@ def on_cast_vote(data):
 @rate_limited()
 def on_confirm_vote_reveal():
     try:
-        game = validate_host(request.sid, require_phase=GamePhase.VOTE_REVEAL)
+        game, _ = validate_caller(
+            request.sid,
+            require_phase=GamePhase.VOTE_REVEAL,
+            require_leader=True,
+        )
         advance_after_vote(game)
     except ValueError as error:
         emit_validation_error(error)
@@ -1692,57 +1789,57 @@ def on_play_mission_card(data):
         finish_mission(game, result)
 
 
-# --- Advance after mission (host clicks "Next Round") ---
+# --- Advance after mission (current leader continues) ---
+
+
+def advance_after_mission(game: GameState) -> None:
+    outcome = game.pending_mission_outcome
+    if not outcome:
+        raise ValueError("No completed mission is awaiting advancement")
+    game.pending_mission_outcome = None
+    if outcome == "assassin_phase":
+        game.phase = GamePhase.ASSASSIN_PHASE
+        assassin = get_assassin(game)
+        public_payload = {"assassin_name": assassin.name if assassin else "Unknown"}
+        emit_to_game(game.code, "assassin_phase_start", public_payload)
+        if assassin and assassin.sid:
+            emit_to_player(
+                assassin.sid,
+                "assassin_phase_start",
+                {
+                    **public_payload,
+                    "assassin_id": assassin.player_id,
+                    "targets": [
+                        {"name": player.name, "player_id": player.player_id}
+                        for player in get_assassin_targets(game)
+                    ],
+                },
+            )
+        run_bot_assassination(game)
+    elif outcome == "evil_wins":
+        game.phase = GamePhase.GAME_OVER
+        emit_to_game(game.code, "game_over", get_game_summary(game))
+        log_game_event(game, "game_over", get_game_summary(game))
+    else:
+        game.current_mission += 1
+        game.consecutive_rejections = 0
+        game.current_leader_index = (game.current_leader_index + 1) % len(game.player_order)
+        game.proposed_team = []
+        game.votes = {}
+        game.mission_cards = {}
+        start_round(game)
 
 
 @socketio.on("advance_after_mission")
 @rate_limited()
 def on_advance_after_mission():
     try:
-        game = validate_host(request.sid)
-        outcome = game.pending_mission_outcome
-        if not outcome:
-            raise ValueError("No completed mission is awaiting advancement")
-        game.pending_mission_outcome = None
-        if outcome == "assassin_phase":
-            game.phase = GamePhase.ASSASSIN_PHASE
-            assassin = get_assassin(game)
-            public_payload = {
-                "assassin_name": assassin.name if assassin else "Unknown",
-            }
-            emit_to_game(
-                game.code,
-                "assassin_phase_start",
-                public_payload,
-            )
-            if assassin and assassin.sid:
-                emit_to_player(
-                    assassin.sid,
-                    "assassin_phase_start",
-                    {
-                        **public_payload,
-                        "assassin_id": assassin.player_id,
-                        "targets": [
-                            {"name": p.name, "player_id": p.player_id}
-                            for p in get_assassin_targets(game)
-                        ],
-                    },
-                )
-            run_bot_assassination(game)
-        elif outcome == "evil_wins":
-            game.phase = GamePhase.GAME_OVER
-            emit_to_game(game.code, "game_over", get_game_summary(game))
-            log_game_event(game, "game_over", get_game_summary(game))
-        else:
-            game.current_mission += 1
-            game.consecutive_rejections = 0
-            game.current_leader_index = (game.current_leader_index + 1) % len(
-                game.player_order
-            )
-            game.proposed_team = []
-            game.votes = {}
-            game.mission_cards = {}
-            start_round(game)
+        game, _ = validate_caller(
+            request.sid,
+            require_phase=GamePhase.MISSION_REVEAL,
+            require_leader=True,
+        )
+        advance_after_mission(game)
     except ValueError as error:
         emit_validation_error(error)
 

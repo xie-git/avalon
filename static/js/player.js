@@ -9,12 +9,14 @@ const RECONNECT_TOKEN_KEY = 'avalon-player-session-token';
 const RECONNECT_PLAYER_KEY = 'avalon-player-id';
 const DEFAULT_TITLE = document.title;
 const presenceScreenLabels = {
-    'screen-lobby': 'The Fellowship',
+    'screen-lobby': 'Drag avatars to rank your suspicions',
     'screen-night': 'Night Phase',
     'screen-discussion': 'Mission Discussion',
     'screen-proposal': 'Quest Party',
     'screen-vote': 'Fellowship Vote',
+    'screen-vote-reveal-player': 'The Votes Are Revealed',
     'screen-mission': 'The Quest Begins',
+    'screen-mission-reveal-player': 'The Quest Returns',
     'screen-assassin': 'The Final Choice',
     'screen-game-over': 'Roles Revealed',
 };
@@ -44,6 +46,7 @@ let missionRequiredSize = 0;
 let nightInfo = null;
 let assassinTargetId = null;
 let discussionTimerMax = 300;
+let latestMissionReveal = null;
 
 // Mission board state
 let pbMissionSizes = [];
@@ -397,19 +400,6 @@ const ROLE_DESCRIPTIONS = {
 function renderLobbyPlayers(playerList) {
     presencePlayers = playerList || [];
     presenceTable.setPlayers(presencePlayers, window._playerOrder || []);
-    const ul = document.getElementById('lobby-player-list');
-    ul.innerHTML = '';
-    playerList.forEach(p => {
-        const li = document.createElement('div');
-        li.className = 'player-list-item' + (p.name === myName ? ' me' : '');
-        li.innerHTML = `
-            ${p.name === myName ? '<span style="color:var(--gold)">▶</span>' : ''}
-            ${escapeHtml(p.name)}
-            ${p.ready ? '<span class="ready-mark" title="Ready">✓</span>' : ''}
-            ${!p.connected ? '<span class="disconnected-dot"></span>' : ''}
-        `;
-        ul.appendChild(li);
-    });
     const me = presencePlayers.find(player => player.player_id === myPlayerId || player.name === myName);
     const readyButton = document.getElementById('btn-ready');
     if (readyButton) {
@@ -418,6 +408,7 @@ function renderLobbyPlayers(playerList) {
         readyButton.setAttribute('aria-pressed', String(ready));
         readyButton.textContent = ready ? '✓ Ready' : 'I’m Ready';
     }
+    if (isHost) updateHostStartButton(playerList.length);
     renderAvatarPicker();
 }
 
@@ -431,7 +422,7 @@ function renderAvatarPicker() {
     for (let index = 0; index < 10; index++) {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = `avatar-option${me && Number(me.avatar_index) === index ? ' selected' : ''}`;
+        button.className = `avatar-option${me && !me.avatar_image && Number(me.avatar_index) === index ? ' selected' : ''}`;
         button.setAttribute('aria-label', avatarNames[index] || `Medieval character ${index + 1}`);
         button.appendChild(presenceTable.createPortraitElement(index, colorIndex));
         button.addEventListener('click', () => {
@@ -441,6 +432,49 @@ function renderAvatarPicker() {
         });
         options.appendChild(button);
     }
+    const preview = document.getElementById('selfie-preview');
+    preview.replaceChildren();
+    if (me && me.avatar_image) {
+        const image = document.createElement('img');
+        image.src = me.avatar_image;
+        image.alt = 'Your selfie';
+        preview.appendChild(image);
+    } else {
+        preview.textContent = '📷';
+    }
+}
+
+function compressSelfie(file) {
+    return new Promise((resolve, reject) => {
+        if (!file || !file.type.startsWith('image/')) {
+            reject(new Error('Choose an image from your camera or photo library.'));
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            reject(new Error('That photo is too large. Choose one under 10 MB.'));
+            return;
+        }
+        const image = new Image();
+        image.onload = () => {
+            const size = 128;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const context = canvas.getContext('2d');
+            const side = Math.min(image.naturalWidth, image.naturalHeight);
+            const sx = (image.naturalWidth - side) / 2;
+            const sy = (image.naturalHeight - side) / 2;
+            context.drawImage(image, sx, sy, side, side, 0, 0, size, size);
+            const result = canvas.toDataURL('image/jpeg', 0.72);
+            if (result.length > 50_000) reject(new Error('Could not make that photo small enough.'));
+            else resolve(result);
+        };
+        image.onerror = () => reject(new Error('That image could not be opened.'));
+        const reader = new FileReader();
+        reader.onload = () => { image.src = reader.result; };
+        reader.onerror = () => reject(new Error('That image could not be read.'));
+        reader.readAsDataURL(file);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -513,11 +547,63 @@ function showDiscussion(data) {
     const leaderBanner = document.getElementById('leader-banner');
     const amLeader = myPlayerId === data.leader_id || myPlayerId === currentLeaderId;
     leaderBanner.classList.toggle('hidden', !amLeader);
+    const endDiscussion = document.getElementById('btn-end-discussion');
+    endDiscussion.disabled = false;
+    endDiscussion.classList.toggle('hidden', !amLeader);
     discussionTimerMax = data.duration_seconds || discussionTimerMax;
     document.getElementById('discussion-timer-player').textContent = fmtTime(discussionTimerMax);
     const screen = document.getElementById('screen-discussion');
-    presenceTable.show(screen, 'The Round Table', document.querySelector('#screen-discussion .discussion-info'));
+    presenceTable.show(screen, 'Mission Discussion', document.querySelector('#screen-discussion .discussion-info'));
     showScreen('screen-discussion');
+}
+
+function showVoteReveal(data) {
+    const votes = data.votes || {};
+    const entries = Object.entries(votes);
+    const cards = document.getElementById('player-vote-reveal-cards');
+    cards.replaceChildren();
+    entries.forEach(([name, vote]) => {
+        const card = document.createElement('div');
+        card.className = `player-reveal-card ${vote}`;
+        card.innerHTML = `<span><strong>${vote === 'approve' ? 'APPROVE' : 'REJECT'}</strong>${escapeHtml(name)}</span>`;
+        cards.appendChild(card);
+    });
+    const approvals = entries.filter(([, vote]) => vote === 'approve').length;
+    const approved = approvals > entries.length - approvals;
+    document.getElementById('player-vote-reveal-result').textContent = approved
+        ? 'The Quest Party Rides Forth!'
+        : 'The Court Dissents!';
+    const amLeader = myPlayerId === currentLeaderId;
+    const continueButton = document.getElementById('btn-player-confirm-vote');
+    continueButton.disabled = false;
+    continueButton.classList.toggle('hidden', !amLeader);
+    document.getElementById('player-vote-reveal-waiting').classList.toggle('hidden', amLeader);
+    showScreen('screen-vote-reveal-player');
+}
+
+function showMissionReveal(data, canContinue = false) {
+    latestMissionReveal = data;
+    const cards = document.getElementById('player-mission-reveal-cards');
+    cards.replaceChildren();
+    const revealedCards = data.cards_shuffled || [
+        ...Array(data.success_count || 0).fill('success'),
+        ...Array(data.fail_count || 0).fill('fail'),
+    ];
+    revealedCards.forEach(value => {
+        const card = document.createElement('div');
+        card.className = `player-reveal-card ${value}`;
+        card.innerHTML = `<span><strong>${value === 'success' ? '☀ SUCCESS' : '☠ FAIL'}</strong></span>`;
+        cards.appendChild(card);
+    });
+    document.getElementById('player-mission-reveal-result').textContent = data.passed
+        ? 'The Quest Succeeds!'
+        : 'The Quest Has Failed';
+    const leaderCanContinue = canContinue && myPlayerId === currentLeaderId;
+    const continueButton = document.getElementById('btn-player-next-round');
+    continueButton.disabled = false;
+    continueButton.classList.toggle('hidden', !leaderCanContinue);
+    document.getElementById('player-mission-reveal-waiting').classList.toggle('hidden', leaderCanContinue);
+    showScreen('screen-mission-reveal-player');
 }
 
 // ---------------------------------------------------------------------------
@@ -778,6 +864,7 @@ function applyStateSnapshot(snap) {
 
     document.getElementById('lobby-code-display').textContent = gameCode;
     document.getElementById('lobby-host-controls').classList.toggle('hidden', !isHost);
+    document.getElementById('settings-game-actions').classList.toggle('hidden', !isHost);
     document.getElementById('btn-settings').classList.remove('hidden');
 
     // Restore mission board state
@@ -853,15 +940,7 @@ function applyStateSnapshot(snap) {
             } else requestAttention('Vote now');
             break;
         case 'VOTE_REVEAL':
-            showVoteScreen({
-                team: snap.proposed_team || [],
-                team_ids: snap.proposed_team_ids || [],
-                leader_name: snap.current_leader,
-            });
-            document.getElementById('vote-buttons').classList.add('hidden');
-            document.getElementById('vote-cast-waiting').classList.remove('hidden');
-            document.querySelector('#vote-cast-waiting .waiting-text').textContent =
-                'The votes are being revealed on the host screen...';
+            showVoteReveal({ votes: snap.revealed_votes || {} });
             break;
         case 'MISSION':
             showMissionScreen({
@@ -875,16 +954,7 @@ function applyStateSnapshot(snap) {
             } else if ((snap.proposed_team_ids || []).includes(myPlayerId)) requestAttention('Play your quest card');
             break;
         case 'MISSION_REVEAL':
-            showMissionScreen({
-                team: snap.proposed_team || [],
-                team_ids: snap.proposed_team_ids || [],
-            });
-            document.getElementById('mission-on-team').classList.add('hidden');
-            document.getElementById('mission-not-on-team').textContent =
-                snap.latest_mission
-                    ? `Mission ${snap.latest_mission.mission_num} ${snap.latest_mission.passed ? 'succeeded' : 'failed'} — ${snap.latest_mission.success_count} Success / ${snap.latest_mission.fail_count} Fail.`
-                    : 'The quest has returned. Watch the host screen for the result.';
-            document.getElementById('mission-not-on-team').classList.remove('hidden');
+            showMissionReveal(snap.latest_mission || {}, Boolean(snap.pending_mission_outcome));
             break;
         case 'ASSASSIN_PHASE':
             showAssassinScreen(snap);
@@ -904,8 +974,11 @@ function applyStateSnapshot(snap) {
 
 socket.on('join_success', data => {
     const joinButton = document.getElementById('btn-join');
+    const createButton = document.getElementById('btn-create-player-game');
     joinButton.disabled = false;
-    joinButton.textContent = 'Join the Round Table';
+    joinButton.textContent = 'Join Game';
+    createButton.disabled = false;
+    createButton.textContent = 'Host a New Game';
     myPlayerId = data.player_id;
     myName = data.player_name;
     isHost = data.is_host;
@@ -916,6 +989,8 @@ socket.on('join_success', data => {
 
     document.getElementById('lobby-code-display').textContent = gameCode;
     document.getElementById('lobby-host-controls').classList.toggle('hidden', !isHost);
+    document.getElementById('btn-settings').classList.remove('hidden');
+    document.getElementById('settings-game-actions').classList.toggle('hidden', !isHost);
     renderLobbyPlayers(data.players || []);
     showScreen('screen-lobby');
 });
@@ -1037,9 +1112,10 @@ socket.on('discussion_start', data => {
     document.getElementById('discussion-leader-name').textContent = data.leader_name || window._currentLeaderName || 'Unknown';
     const leaderBanner = document.getElementById('leader-banner');
     leaderBanner.classList.toggle('hidden', myPlayerId !== currentLeaderId);
+    document.getElementById('btn-end-discussion').classList.toggle('hidden', myPlayerId !== currentLeaderId);
     presenceTable.show(
         document.getElementById('screen-discussion'),
-        'The Round Table',
+        'Mission Discussion',
         document.querySelector('#screen-discussion .discussion-info')
     );
     transition('screen-discussion');
@@ -1090,10 +1166,7 @@ socket.on('vote_cast_ack', () => {
 socket.on('vote_waiting', () => {});
 
 socket.on('vote_reveal', data => {
-    // Host shows the reveal; players wait
-    document.getElementById('vote-buttons').classList.add('hidden');
-    document.getElementById('vote-cast-waiting').classList.remove('hidden');
-    presenceTable.show(document.getElementById('screen-vote'), 'The Votes Are Revealed');
+    showVoteReveal(data);
 });
 
 socket.on('rejection_warning', data => {
@@ -1133,9 +1206,12 @@ socket.on('mission_card_ack', () => {
 
 socket.on('mission_waiting', () => {});
 
-socket.on('mission_reveal', () => {
-    // Brief wait screen
-    presenceTable.show(document.getElementById('screen-mission'), 'The Quest Returns');
+socket.on('mission_reveal', data => {
+    showMissionReveal(data, false);
+});
+
+socket.on('mission_complete', () => {
+    if (latestMissionReveal) showMissionReveal(latestMissionReveal, true);
 });
 
 socket.on('mission_tracker_update', data => {
@@ -1207,8 +1283,11 @@ socket.on('error', data => {
     if (errEl && document.getElementById('screen-join').classList.contains('active')) {
         errEl.textContent = data.message;
         const joinButton = document.getElementById('btn-join');
+        const createButton = document.getElementById('btn-create-player-game');
         joinButton.disabled = false;
-        joinButton.textContent = 'Join the Round Table';
+        joinButton.textContent = 'Join Game';
+        createButton.disabled = false;
+        createButton.textContent = 'Host a New Game';
     } else {
         console.warn('[server error]', data.message);
     }
@@ -1241,6 +1320,18 @@ document.getElementById('btn-join').addEventListener('click', () => {
     joinButton.disabled = true;
     joinButton.textContent = 'Joining…';
     socket.emit('join_game', { room_code: code, player_name: name });
+});
+
+document.getElementById('btn-create-player-game').addEventListener('click', event => {
+    const name = document.getElementById('input-name').value.trim();
+    document.getElementById('join-error').textContent = '';
+    if (!name) {
+        document.getElementById('join-error').textContent = 'Enter your name first.';
+        return;
+    }
+    event.currentTarget.disabled = true;
+    event.currentTarget.textContent = 'Creating…';
+    socket.emit('create_player_game', { player_name: name });
 });
 
 document.getElementById('input-room-code').addEventListener('input', e => {
@@ -1283,8 +1374,36 @@ document.getElementById('btn-ready').addEventListener('click', event => {
     socket.emit('set_ready', { ready: next });
 });
 
+document.getElementById('input-selfie').addEventListener('change', async event => {
+    const error = document.getElementById('selfie-error');
+    error.textContent = '';
+    try {
+        const image = await compressSelfie(event.target.files && event.target.files[0]);
+        socket.emit('select_selfie', { image });
+    } catch (failure) {
+        error.textContent = failure.message;
+    } finally {
+        event.target.value = '';
+    }
+});
+
 document.getElementById('btn-host-start').addEventListener('click', () => {
     socket.emit('start_game');
+});
+
+document.getElementById('btn-end-discussion').addEventListener('click', event => {
+    event.currentTarget.disabled = true;
+    socket.emit('skip_discussion', { confirmed: true });
+});
+
+document.getElementById('btn-player-confirm-vote').addEventListener('click', event => {
+    event.currentTarget.disabled = true;
+    socket.emit('confirm_vote_reveal');
+});
+
+document.getElementById('btn-player-next-round').addEventListener('click', event => {
+    event.currentTarget.disabled = true;
+    socket.emit('advance_after_mission');
 });
 
 document.getElementById('btn-confirm-role').addEventListener('click', () => {

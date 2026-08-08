@@ -1,4 +1,4 @@
-/* A small, dependency-free draggable player table shared by host and phones. */
+/* A small, dependency-free suspicion spectrum shared by host and phones. */
 (function () {
     'use strict';
 
@@ -120,24 +120,31 @@
             this.mode = options.mode === 'host' ? 'host' : 'player';
             this.roomCode = '';
             this.players = [];
-            this.positions = {};
+            this.ranking = [];
             this.revealedRoles = null;
             this.drag = null;
             this.mountedScreen = null;
 
             this.element = document.createElement('section');
             this.element.className = `presence-table presence-${this.mode} hidden`;
-            this.element.setAttribute('aria-label', 'Players at the round table');
+            this.element.setAttribute('aria-label', 'Private good to bad suspicion ranking');
             this.element.innerHTML = `
                 <div class="presence-heading">
-                    <span class="presence-title">The Fellowship</span>
+                    <span class="presence-title">Suspicion Spectrum</span>
                     <span class="presence-count" aria-live="polite"></span>
-                    <button type="button" class="presence-reset" title="Return avatars to the circle">Reset avatars</button>
+                    <span class="presence-private">Private to this device</span>
+                    <button type="button" class="presence-reset" title="Return avatars to their original order">Reset ranking</button>
                 </div>
                 <div class="presence-field">
+                    <div class="presence-spectrum-labels" aria-hidden="true">
+                        <span>Most likely good</span>
+                        <span>Unsure</span>
+                        <span>Most likely bad</span>
+                    </div>
+                    <div class="presence-spectrum-track" aria-hidden="true"></div>
                     <div class="presence-table-center" aria-hidden="true">
-                        <span class="presence-center-mark">⚔</span>
-                        <span class="presence-center-label">Round Table</span>
+                        <span class="presence-center-mark">?</span>
+                        <span class="presence-center-label">Drag to rank</span>
                         <div class="presence-center-content"></div>
                     </div>
                     <div class="presence-nodes"></div>
@@ -160,23 +167,21 @@
         }
 
         storageKey() {
-            return this.roomCode ? `avalon-avatar-layout:${this.mode}:${this.roomCode}` : '';
+            return this.roomCode ? `avalon-suspicion-ranking:${this.mode}:${this.roomCode}` : '';
         }
 
         setRoomCode(code) {
             const normalized = String(code || '').toUpperCase();
             if (normalized === this.roomCode) return;
             this.roomCode = normalized;
-            this.positions = {};
+            this.ranking = [];
             const key = this.storageKey();
             if (key) {
                 try {
-                    const saved = JSON.parse(localStorage.getItem(key) || '{}');
-                    if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
-                        this.positions = saved;
-                    }
+                    const saved = JSON.parse(localStorage.getItem(key) || '[]');
+                    if (Array.isArray(saved)) this.ranking = saved.map(String);
                 } catch (_) {
-                    this.positions = {};
+                    this.ranking = [];
                 }
             }
             this.layout();
@@ -192,7 +197,22 @@
                 }
             }
             this.players = ordered.concat([...byName.values()]);
+            this.normalizeRanking();
             this.render();
+        }
+
+        normalizeRanking() {
+            const keys = this.players.map(player => String(player.player_id || player.name));
+            const available = new Set(keys);
+            const seen = new Set();
+            this.ranking = this.ranking.filter(key => {
+                const keep = available.has(key) && !seen.has(key);
+                if (keep) seen.add(key);
+                return keep;
+            });
+            keys.forEach(key => {
+                if (!seen.has(key)) this.ranking.push(key);
+            });
         }
 
         setRoleReveal(roles) {
@@ -200,7 +220,14 @@
             this.render();
         }
 
-        createPortraitElement(avatarIndex = 0, colorIndex = 0) {
+        createPortraitElement(avatarIndex = 0, colorIndex = 0, avatarImage = null) {
+            if (avatarImage) {
+                const image = document.createElement('img');
+                image.src = avatarImage;
+                image.alt = '';
+                image.decoding = 'async';
+                return image;
+            }
             return createPortrait(PALETTES[Math.abs(Number(colorIndex) || 0) % PALETTES.length], avatarIndex);
         }
 
@@ -242,7 +269,15 @@
 
                 const portrait = document.createElement('span');
                 portrait.className = 'presence-portrait';
-                portrait.appendChild(createPortrait(palette, player.avatar_index));
+                if (player.avatar_image) {
+                    const image = document.createElement('img');
+                    image.src = player.avatar_image;
+                    image.alt = '';
+                    image.decoding = 'async';
+                    portrait.appendChild(image);
+                } else {
+                    portrait.appendChild(createPortrait(palette, player.avatar_index));
+                }
                 const status = document.createElement('span');
                 status.className = 'presence-status';
                 portrait.appendChild(status);
@@ -268,12 +303,13 @@
                 node.addEventListener('pointermove', event => this.moveDrag(event, node));
                 node.addEventListener('pointerup', event => this.endDrag(event, node));
                 node.addEventListener('pointercancel', event => this.endDrag(event, node));
+                node.addEventListener('keydown', event => this.moveWithKeyboard(event, node));
                 this.nodes.appendChild(node);
             });
             requestAnimationFrame(() => this.layout());
         }
 
-        show(screen, label = 'Round Table', anchor = null) {
+        show(screen, label = 'Drag to rank', anchor = null) {
             if (!screen || !this.players.length) {
                 this.hide();
                 return;
@@ -305,6 +341,20 @@
                             ? panel.querySelector('#proposal-timer-player')
                             : null;
             if (timer) this.mountCenterContent(timer);
+            this.centerLabel.textContent = label;
+            this.element.classList.remove('hidden');
+            requestAnimationFrame(() => this.layout());
+        }
+
+        showInline(container, label = 'Drag to rank') {
+            if (!container || !this.players.length) {
+                this.hide();
+                return;
+            }
+            this.releaseCenterContent();
+            if (this.mountedScreen) this.mountedScreen.classList.remove('presence-active');
+            this.mountedScreen = null;
+            container.appendChild(this.element);
             this.centerLabel.textContent = label;
             this.element.classList.remove('hidden');
             requestAnimationFrame(() => this.layout());
@@ -345,21 +395,17 @@
             if (!width || !height) return;
             const nodeElements = [...this.nodes.children];
             const count = nodeElements.length;
-            nodeElements.forEach((node, index) => {
-                const key = node.dataset.playerKey;
-                const saved = this.positions[key];
-                let x;
-                let y;
-                if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
-                    x = saved.x * width;
-                    y = saved.y * height;
-                } else {
-                    const angle = (Math.PI * 2 * index / Math.max(1, count)) - Math.PI / 2;
-                    const rx = Math.max(0, (width - node.offsetWidth) / 2 - 6);
-                    const ry = Math.max(0, (height - node.offsetHeight) / 2 - 6);
-                    x = width / 2 + rx * Math.cos(angle);
-                    y = height / 2 + ry * Math.sin(angle);
-                }
+            const nodesByKey = new Map(nodeElements.map(node => [node.dataset.playerKey, node]));
+            this.normalizeRanking();
+            this.ranking.forEach((key, rank) => {
+                const node = nodesByKey.get(key);
+                if (!node) return;
+                const halfW = node.offsetWidth / 2;
+                const edge = Math.max(halfW + 5, Math.min(52, width * 0.1));
+                const x = count <= 1 ? width / 2 : edge + (rank / (count - 1)) * (width - edge * 2);
+                const y = count > 5
+                    ? height * (rank % 2 === 0 ? 0.43 : 0.74)
+                    : height * 0.63;
                 this.place(node, x, y, width, height);
             });
         }
@@ -377,6 +423,7 @@
         startDrag(event, node) {
             if (event.button !== undefined && event.button !== 0) return;
             event.preventDefault();
+            node.focus({ preventScroll: true });
             node.setPointerCapture(event.pointerId);
             node.classList.add('dragging');
             this.drag = { pointerId: event.pointerId, key: node.dataset.playerKey };
@@ -387,8 +434,18 @@
             if (!this.drag || this.drag.pointerId !== event.pointerId || this.drag.key !== node.dataset.playerKey) return;
             event.preventDefault();
             const rect = this.field.getBoundingClientRect();
-            const point = this.place(node, event.clientX - rect.left, event.clientY - rect.top, rect.width, rect.height);
-            this.positions[node.dataset.playerKey] = { x: point.x / rect.width, y: point.y / rect.height };
+            const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+            const currentIndex = this.ranking.indexOf(node.dataset.playerKey);
+            const targetIndex = Math.round(ratio * Math.max(0, this.ranking.length - 1));
+            if (currentIndex !== -1 && targetIndex !== currentIndex) {
+                this.ranking.splice(currentIndex, 1);
+                this.ranking.splice(targetIndex, 0, node.dataset.playerKey);
+                this.layout();
+            }
+            const laneY = this.ranking.length > 5
+                ? rect.height * (targetIndex % 2 === 0 ? 0.43 : 0.74)
+                : rect.height * 0.63;
+            this.place(node, event.clientX - rect.left, laneY, rect.width, rect.height);
         }
 
         endDrag(event, node) {
@@ -398,18 +455,31 @@
             this.save();
         }
 
+        moveWithKeyboard(event, node) {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+            event.preventDefault();
+            const currentIndex = this.ranking.indexOf(node.dataset.playerKey);
+            const direction = event.key === 'ArrowLeft' ? -1 : 1;
+            const targetIndex = Math.min(this.ranking.length - 1, Math.max(0, currentIndex + direction));
+            if (currentIndex < 0 || targetIndex === currentIndex) return;
+            this.ranking.splice(currentIndex, 1);
+            this.ranking.splice(targetIndex, 0, node.dataset.playerKey);
+            this.layout();
+            this.save();
+        }
+
         save() {
             const key = this.storageKey();
             if (!key) return;
             try {
-                localStorage.setItem(key, JSON.stringify(this.positions));
+                localStorage.setItem(key, JSON.stringify(this.ranking));
             } catch (_) {
-                // The table still works if browser storage is unavailable.
+                // The spectrum still works if browser storage is unavailable.
             }
         }
 
         reset() {
-            this.positions = {};
+            this.ranking = this.players.map(player => String(player.player_id || player.name));
             const key = this.storageKey();
             if (key) {
                 try { localStorage.removeItem(key); } catch (_) { /* no-op */ }

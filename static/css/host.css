@@ -225,7 +225,7 @@ body {
 .host-settings-button:hover,
 .host-settings-button:focus-visible { border-color: var(--gold); outline: none; }
 
-/* Round table */
+/* Legacy turn-order styles; the visible lobby surface is now the spectrum. */
 .round-table-container {
     flex: 1;
     position: relative;
@@ -436,10 +436,13 @@ input[type="range"] {
 }
 .shield-size {
     position: absolute;
-    bottom: 4px;
+    inset: 0;
+    display: grid;
+    place-items: center;
     font-family: var(--font-heading);
-    font-size: 0.8rem;
-    color: var(--text-secondary);
+    font-size: clamp(1.25rem, 2.5vw, 1.75rem);
+    font-weight: 700;
+    color: var(--text-primary);
 }
 .shield-double-fail {
     position: absolute;
@@ -632,20 +635,19 @@ input[type="range"] {
 .presence-host .presence-field {
     min-height: 340px;
     border-color: rgba(201,168,76,0.14);
-    background:
-        radial-gradient(ellipse at center, rgba(95,72,25,0.1) 0 27%, transparent 28%),
-        radial-gradient(ellipse at center, rgba(201,168,76,0.04), transparent 70%);
 }
 .presence-host .presence-node { width: clamp(78px, 8vw, 112px); }
 .presence-host .presence-portrait { width: clamp(52px, 5.3vw, 76px); }
 .presence-host .presence-name { font-size: clamp(0.62rem, 1.05vw, 0.82rem); padding: 0.2rem 0.35rem; }
 .presence-host .presence-table-center {
     z-index: 1;
-    width: min(24%, 220px);
-    aspect-ratio: 1.25;
-    padding: clamp(0.4rem, 1vmin, 0.7rem);
     overflow: visible;
     pointer-events: auto;
+}
+.presence-host.presence-has-center-content .presence-table-center {
+    width: min(24%, 220px);
+    min-height: 110px;
+    padding: clamp(0.4rem, 1vmin, 0.7rem);
 }
 .presence-game-panel {
     flex: 0 0 auto;
@@ -1127,7 +1129,23 @@ body,
 .round-table-container {
     min-height: 0;
     max-height: min(60dvh, 600px);
-    aspect-ratio: 1;
+}
+
+.suspicion-spectrum-container {
+    flex: 0 0 clamp(240px, 38dvh, 320px);
+    width: min(100%, 900px);
+    min-height: 240px;
+    max-width: 900px;
+}
+
+.suspicion-spectrum-container .presence-table.presence-host {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.suspicion-spectrum-container .presence-field {
+    min-height: 0;
 }
 
 .room-code {
@@ -1219,7 +1237,7 @@ body,
 
     .round-table-container {
         width: min(100%, 430px);
-        min-height: 280px;
+        min-height: 240px;
         align-self: center;
     }
 
@@ -1278,7 +1296,7 @@ body,
         margin: 0 auto;
     }
     .presence-host .presence-field { min-height: 265px; }
-    .presence-host .presence-table-center { width: min(38%, 165px); height: auto; padding: 0.35rem; }
+    .presence-host.presence-has-center-content .presence-table-center { width: min(38%, 165px); height: auto; padding: 0.35rem; }
     .presence-game-panel {
         width: min(100%, 700px);
         max-height: none;

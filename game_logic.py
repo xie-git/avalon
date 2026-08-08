@@ -128,6 +128,7 @@ class PlayerInfo:
         self.is_bot = is_bot
         self.color_index = color_index
         self.avatar_index = avatar_index
+        self.avatar_image: str | None = None
         self.ready = is_bot
 
     def to_dict(self, include_role=False):
@@ -138,6 +139,7 @@ class PlayerInfo:
             "is_bot": self.is_bot,
             "color_index": self.color_index,
             "avatar_index": self.avatar_index,
+            "avatar_image": self.avatar_image,
             "ready": self.ready,
         }
         if include_role:
@@ -154,6 +156,7 @@ class GameState:
         self.player_order: list[str] = []  # ordered list of player_ids
         self.host_sid: str | None = None  # host display screen sid
         self.host_token: str | None = None  # unguessable host-screen capability
+        self.host_player_id: str | None = None  # creator when a phone hosts and plays
         self.lock = threading.RLock()  # serialize events for this game only
 
         # Settings
@@ -183,7 +186,7 @@ class GameState:
         self.winner: str | None = None
         self.win_reason: str | None = None
 
-        # Pending mission advance (set after mission_reveal; cleared when host clicks Next Round)
+        # Pending mission advance (cleared when the current leader continues)
         self.pending_mission_outcome: str | None = (
             None  # "next_mission" | "assassin_phase" | "evil_wins"
         )
@@ -577,6 +580,7 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
         "mission_results": game.mission_results,
         "mission_history": game.mission_history,
         "consecutive_rejections": game.consecutive_rejections,
+        "pending_mission_outcome": game.pending_mission_outcome,
         "game_started_at": game.started_at,
         "mission_sizes": MISSION_SIZES.get(game.player_count(), []),
         "team_counts": {
@@ -599,8 +603,7 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
     if player:
         snap["my_player_id"] = player_id
         snap["my_name"] = player.name
-        # Host authority belongs only to the separately authenticated display.
-        snap["is_host"] = False
+        snap["is_host"] = player_id == game.host_player_id
         if player.role:
             snap["my_role"] = player.role
             snap["my_team"] = player.team
@@ -640,6 +643,9 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
 
     if game.phase == GamePhase.GAME_OVER:
         snap["summary"] = get_game_summary(game)
+
+    if game.phase == GamePhase.VOTE_REVEAL and game.pending_vote_result:
+        snap["revealed_votes"] = game.pending_vote_result["votes"]
 
     if game.phase == GamePhase.MISSION_REVEAL and game.mission_history:
         snap["latest_mission"] = game.mission_history[-1]

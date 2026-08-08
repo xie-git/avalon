@@ -151,3 +151,21 @@ def test_player_can_select_avatar_in_lobby(socket_client, create_game):
     updates = packets_for(player, "lobby_update")
     assert updates[-1]["players"][0]["avatar_index"] == 9
     player.disconnect()
+
+
+def test_player_can_use_a_small_in_memory_selfie(socket_client, create_game):
+    import base64
+
+    created = create_game(socket_client)
+    player = server.socketio.test_client(server.app)
+    player.emit("join_game", {"room_code": created["room_code"], "player_name": "Arthur"})
+    joined = packets_for(player, "join_success")[0]
+    player.get_received()
+    image = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8" + b"x" * 80).decode()
+
+    player.emit("select_selfie", {"image": image})
+
+    game = server.games[created["room_code"]]
+    assert game.players[joined["player_id"]].avatar_image == image
+    assert packets_for(player, "lobby_update")[-1]["players"][0]["avatar_image"] == image
+    player.disconnect()

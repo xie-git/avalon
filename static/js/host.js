@@ -145,7 +145,8 @@ function showScreen(id) {
     const topMeta = document.getElementById('host-top-meta');
     topMeta.classList.toggle('hidden', !gameCode || id === 'screen-title' || id === 'screen-lobby');
     const presenceLabel = presenceScreenLabels[id];
-    if (presenceLabel && players.length) presenceTable.show(target, presenceLabel);
+    if (id === 'screen-lobby' && players.length) renderRoundTable(players);
+    else if (presenceLabel && players.length) presenceTable.show(target, presenceLabel);
     else presenceTable.hide();
 }
 
@@ -198,8 +199,7 @@ function updateMissionTracker() {
                 <svg class="shield-svg" viewBox="0 0 52 64" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path class="shield-path" d="M26 2 L50 12 L50 36 Q50 54 26 62 Q2 54 2 36 L2 12 Z"/>
                 </svg>
-                <span class="shield-num">${i + 1}</span>
-                <span class="shield-size">${size}p</span>
+                <span class="shield-size" aria-label="${size} players">${size}</span>
             </div>`;
     }
     tracker.querySelectorAll('.mission-history-clickable').forEach(shield => {
@@ -258,30 +258,12 @@ function syncPresencePlayers(playerList = players) {
 }
 
 // ---------------------------------------------------------------------------
-// Lobby: Round table rendering + draggable reorder list
+// Lobby: private suspicion spectrum + draggable game turn order
 // ---------------------------------------------------------------------------
 function renderRoundTable(playerList) {
-    const svg = document.getElementById('player-nodes');
-    svg.innerHTML = '';
-    const n = playerList.length;
-    if (!n) return;
-    const cx = 250, cy = 250, r = 195;
-    playerList.forEach((p, i) => {
-        const angle = (2 * Math.PI * i / n) - Math.PI / 2;
-        const x = cx + r * Math.cos(angle);
-        const y = cy + r * Math.sin(angle);
-        const isLeader = p.name === currentLeaderName;
-        const isDisconnected = !p.connected;
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('class', `player-node${isLeader ? ' leader' : ''}${isDisconnected ? ' disconnected' : ''}${p.ready ? ' ready' : ''}`);
-        g.innerHTML = `
-            <circle cx="${x}" cy="${y}" r="36"/>
-            ${isLeader ? `<text x="${x}" y="${y - 44}" class="crown-icon">♔</text>` : ''}
-            ${p.ready ? `<text x="${x + 29}" y="${y - 27}" class="ready-icon">✓</text>` : ''}
-            <text x="${x}" y="${y}">${escapeHtml(p.name)}</text>
-        `;
-        svg.appendChild(g);
-    });
+    const container = document.getElementById('lobby-spectrum');
+    if (container && playerList.length) presenceTable.showInline(container, 'Drag avatars to rank your suspicions');
+    else presenceTable.hide();
 }
 
 let _dragSrcIndex = -1;
@@ -405,7 +387,6 @@ function spawnStars() {
 function animateVoteReveal(votes) {
     const container = document.getElementById('vote-cards-container');
     container.innerHTML = '';
-    document.getElementById('btn-confirm-vote-reveal').classList.add('hidden');
     const entries = Object.entries(votes);
     entries.forEach(([name, vote], i) => {
         const card = document.createElement('div');
@@ -432,7 +413,6 @@ function animateVoteReveal(votes) {
         banner.className = `vote-result-banner ${isApproved ? 'approved' : 'rejected'}`;
         banner.textContent = isApproved ? 'The Quest Party Rides Forth!' : 'The Court Dissents!';
         banner.classList.remove('hidden');
-        document.getElementById('btn-confirm-vote-reveal').classList.remove('hidden');
     }, 500 + entries.length * 350 + 500);
 }
 
@@ -682,7 +662,6 @@ socket.on('host_registered', data => {
                 banner.textContent = latest.passed ? '⚔ The Quest Succeeds!' : '☠ The Quest Has Failed...';
                 banner.classList.remove('hidden');
             }
-            document.getElementById('btn-next-round').classList.remove('hidden');
         } else if (data.phase === 'ASSASSIN_PHASE') {
             document.getElementById('assassin-choosing-text').textContent =
                 `${data.assassin_name} deliberates...`;
@@ -753,7 +732,6 @@ socket.on('night_phase_complete', () => {
 });
 
 socket.on('round_start', data => {
-    document.getElementById('btn-next-round').classList.add('hidden');
     currentMission = data.mission_num - 1;
     currentLeaderName = data.leader_name;
     consecutiveRejections = data.reject_count;
@@ -838,7 +816,6 @@ socket.on('team_proposed', data => {
 
 socket.on('vote_start', data => {
     document.getElementById('vote-result-banner').classList.add('hidden');
-    document.getElementById('btn-confirm-vote-reveal').classList.add('hidden');
     proposedTeam = data.team || [];
     pendingVoters = players.map(p => p.name);
     document.getElementById('vote-team-names').textContent = proposedTeam.join(', ');
@@ -945,9 +922,7 @@ socket.on('mission_tracker_update', data => {
     }
 });
 
-socket.on('mission_complete', data => {
-    document.getElementById('btn-next-round').classList.remove('hidden');
-});
+socket.on('mission_complete', () => {});
 
 socket.on('assassin_phase_start', data => {
     document.getElementById('assassin-choosing-text').textContent =
@@ -1088,25 +1063,6 @@ document.getElementById('btn-beta-test-mode').addEventListener('click', () => {
 document.getElementById('beta-player-count').addEventListener('change', event => {
     betaTestPlayerCount = Number(event.target.value);
     socket.emit('set_beta_test_mode', { enabled: betaTestMode, target_count: betaTestPlayerCount });
-});
-
-document.getElementById('btn-skip-discussion').addEventListener('click', async () => {
-    const ok = await showConfirm('End Discussion?', 'All players will be notified and the leader will begin selecting their quest party.');
-    if (ok) socket.emit('skip_discussion', { confirmed: true });
-});
-
-
-document.getElementById('btn-next-round').addEventListener('click', () => {
-    document.getElementById('btn-next-round').classList.add('hidden');
-    socket.emit('advance_after_mission');
-});
-
-document.getElementById('btn-confirm-vote-reveal').addEventListener('click', event => {
-    const button = event.currentTarget;
-    button.disabled = true;
-    button.classList.add('hidden');
-    socket.emit('confirm_vote_reveal');
-    setTimeout(() => { button.disabled = false; }, 1000);
 });
 
 document.getElementById('btn-return-lobby').addEventListener('click', () => {

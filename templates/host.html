@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon — Host</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260808-qa5">
-<link rel="stylesheet" href="/static/css/host.css?v=20260808-qa7">
+<link rel="stylesheet" href="/static/css/common.css?v=20260808-qa6">
+<link rel="stylesheet" href="/static/css/host.css?v=20260808-qa8">
 <style>
 /* In-game confirmation modal */
 #confirm-modal {
@@ -171,18 +171,8 @@
                 </div>
                 <div class="host-can-play-note">The host joins as a player from the same address on their phone.</div>
             </div>
-            <div class="round-table-container">
-                <svg id="round-table-svg" viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
-                    <ellipse class="table-center-fill" cx="250" cy="250" rx="120" ry="120"/>
-                    <ellipse class="table-ring" cx="250" cy="250" rx="200" ry="200"/>
-                    <text x="250" y="250" text-anchor="middle" dominant-baseline="middle"
-                          font-family="'Cinzel Decorative', serif" font-size="18" fill="#7a6a30" opacity="0.5">
-                        Round Table
-                    </text>
-                    <g id="player-nodes"></g>
-                </svg>
-            </div>
-            <p class="reorder-label">DRAG TO REORDER SEATING</p>
+            <div class="round-table-container suspicion-spectrum-container" id="lobby-spectrum"></div>
+            <p class="reorder-label">GAME TURN ORDER · DRAG BELOW TO CHANGE LEADER ROTATION</p>
             <ol id="reorder-list" class="reorder-list"></ol>
         </div>
         <div class="lobby-sidebar">
@@ -244,7 +234,6 @@
             </svg>
             <div class="timer-text" id="timer-text">—</div>
         </div>
-        <button class="btn" id="btn-skip-discussion">Discussion Complete!</button>
     </div>
 
     <!-- ============ TEAM PROPOSAL ============ -->
@@ -270,7 +259,6 @@
     <div class="screen" id="screen-vote-reveal">
         <div class="vote-cards-grid" id="vote-cards-container"></div>
         <div class="vote-result-banner hidden" id="vote-result-banner"></div>
-        <button class="btn btn-primary hidden" id="btn-confirm-vote-reveal">Continue</button>
     </div>
 
     <!-- ============ MISSION ============ -->
@@ -287,7 +275,6 @@
         <h2 class="heading-font gold-text" style="font-size:1.2rem;letter-spacing:0.15em">THE QUEST RETURNS...</h2>
         <div class="mission-cards-display" id="mission-cards-display"></div>
         <div class="mission-result-banner hidden" id="mission-result-banner"></div>
-        <button class="btn btn-primary hidden" id="btn-next-round" style="margin-top:2rem">Next Round</button>
     </div>
 
     <!-- ============ ASSASSIN PHASE ============ -->
@@ -317,7 +304,7 @@
 <div id="host-chat-strip" class="host-chat-strip hidden" aria-live="polite"></div>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/presence.js?v=20260808-qa6"></script>
-<script src="/static/js/host.js?v=20260808-qa9"></script>
+<script src="/static/js/presence.js?v=20260808-qa9"></script>
+<script src="/static/js/host.js?v=20260808-qa12"></script>
 </body>
 </html>
