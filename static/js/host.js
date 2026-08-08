@@ -10,6 +10,8 @@ const presenceTable = new AvalonPresenceTable({
 const HOST_CODE_KEY = 'avalon-host-game-code';
 const HOST_TOKEN_KEY = 'avalon-host-token';
 const TV_CHAT_KEY = 'avalon-tv-chat-enabled';
+const LARGE_TEXT_KEY = 'avalon-large-text-mode';
+const EXTRA_LARGE_TEXT_KEY = 'avalon-extra-large-text-mode';
 const presenceScreenLabels = {
     'screen-night': 'Night Phase',
     'screen-round': 'Mission Discussion',
@@ -21,6 +23,25 @@ const presenceScreenLabels = {
     'screen-assassin': 'The Final Choice',
     'screen-game-over': 'Roles Revealed',
 };
+
+function applyLargeTextMode(enabled, extraLarge = false) {
+    const large = Boolean(enabled || extraLarge);
+    document.body.classList.toggle('large-text-mode', large);
+    document.body.classList.toggle('extra-large-text-mode', Boolean(extraLarge));
+    const toggle = document.getElementById('toggle-host-large-text');
+    const extraToggle = document.getElementById('toggle-host-extra-large-text');
+    if (toggle) toggle.checked = large;
+    if (extraToggle) extraToggle.checked = Boolean(extraLarge);
+    try {
+        localStorage.setItem(LARGE_TEXT_KEY, String(large));
+        localStorage.setItem(EXTRA_LARGE_TEXT_KEY, String(Boolean(extraLarge)));
+    } catch (_) { /* optional */ }
+}
+
+applyLargeTextMode(
+    localStorage.getItem(LARGE_TEXT_KEY) === 'true',
+    localStorage.getItem(EXTRA_LARGE_TEXT_KEY) === 'true',
+);
 
 function showConnectionStatus(message) {
     connectionStatus.textContent = message;
@@ -1084,6 +1105,12 @@ document.getElementById('btn-host-settings').addEventListener('click', () => {
 });
 document.getElementById('btn-host-settings-close').addEventListener('click', () => {
     document.getElementById('host-settings-modal').style.display = 'none';
+});
+document.getElementById('toggle-host-large-text').addEventListener('change', event => {
+    applyLargeTextMode(event.target.checked, false);
+});
+document.getElementById('toggle-host-extra-large-text').addEventListener('change', event => {
+    applyLargeTextMode(true, event.target.checked);
 });
 document.getElementById('btn-host-back-lobby').addEventListener('click', async () => {
     document.getElementById('host-settings-modal').style.display = 'none';

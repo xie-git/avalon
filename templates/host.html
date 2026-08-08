@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon — Host</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260808-qa7">
-<link rel="stylesheet" href="/static/css/host.css?v=20260808-qa9">
+<link rel="stylesheet" href="/static/css/common.css?v=20260808-qa8">
+<link rel="stylesheet" href="/static/css/host.css?v=20260808-qa10">
 <style>
 /* In-game confirmation modal */
 #confirm-modal {
@@ -111,6 +111,14 @@
         <h2 style="font-family:var(--font-title);font-size:1.3rem;color:var(--gold);margin-bottom:1.5rem">⚙ Game Settings</h2>
         <div class="confirm-actions" style="flex-direction:column;gap:0.75rem">
             <label class="tv-chat-setting"><input type="checkbox" id="toggle-tv-chat" checked> Show recent chat on TV</label>
+            <label class="accessibility-setting">
+                <input type="checkbox" id="toggle-host-large-text">
+                <span><strong>Large Text Mode</strong><small>Makes the host header and every item inside it easier to read.</small></span>
+            </label>
+            <label class="accessibility-setting accessibility-setting-max">
+                <input type="checkbox" id="toggle-host-extra-large-text">
+                <span><strong>Going Full Camelot!</strong><small>Maximum-size host header for the clearest possible view.</small></span>
+            </label>
             <div id="seat-recovery-list" class="seat-recovery-list"></div>
             <div id="seat-recovery-result" class="seat-recovery-result hidden"></div>
             <button class="btn btn-primary" id="btn-host-back-lobby" style="width:100%">↩ Back to Lobby</button>
@@ -307,7 +315,7 @@
 <div id="host-chat-strip" class="host-chat-strip hidden" aria-live="polite"></div>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/presence.js?v=20260808-qa12"></script>
-<script src="/static/js/host.js?v=20260808-qa14"></script>
+<script src="/static/js/presence.js?v=20260808-qa13"></script>
+<script src="/static/js/host.js?v=20260808-qa16"></script>
 </body>
 </html>

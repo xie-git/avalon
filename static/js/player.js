@@ -10,6 +10,8 @@ const presenceTable = new AvalonPresenceTable({
 });
 const RECONNECT_TOKEN_KEY = 'avalon-player-session-token';
 const RECONNECT_PLAYER_KEY = 'avalon-player-id';
+const LARGE_TEXT_KEY = 'avalon-large-text-mode';
+const EXTRA_LARGE_TEXT_KEY = 'avalon-extra-large-text-mode';
 const DEFAULT_TITLE = document.title;
 const presenceScreenLabels = {
     'screen-lobby': 'Drag anywhere · overlap avatars to cluster',
@@ -23,6 +25,25 @@ const presenceScreenLabels = {
     'screen-assassin': 'The Final Choice',
     'screen-game-over': 'Roles Revealed',
 };
+
+function applyLargeTextMode(enabled, extraLarge = false) {
+    const large = Boolean(enabled || extraLarge);
+    document.body.classList.toggle('large-text-mode', large);
+    document.body.classList.toggle('extra-large-text-mode', Boolean(extraLarge));
+    const toggle = document.getElementById('toggle-large-text');
+    const extraToggle = document.getElementById('toggle-extra-large-text');
+    if (toggle) toggle.checked = large;
+    if (extraToggle) extraToggle.checked = Boolean(extraLarge);
+    try {
+        localStorage.setItem(LARGE_TEXT_KEY, String(large));
+        localStorage.setItem(EXTRA_LARGE_TEXT_KEY, String(Boolean(extraLarge)));
+    } catch (_) { /* optional */ }
+}
+
+applyLargeTextMode(
+    localStorage.getItem(LARGE_TEXT_KEY) === 'true',
+    localStorage.getItem(EXTRA_LARGE_TEXT_KEY) === 'true',
+);
 
 function showConnectionStatus(message) {
     connectionStatus.textContent = message;
@@ -1502,6 +1523,12 @@ document.getElementById('btn-settings').addEventListener('click', () => {
 });
 document.getElementById('btn-close-settings').addEventListener('click', () => {
     document.getElementById('settings-overlay').classList.add('hidden');
+});
+document.getElementById('toggle-large-text').addEventListener('change', event => {
+    applyLargeTextMode(event.target.checked, false);
+});
+document.getElementById('toggle-extra-large-text').addEventListener('change', event => {
+    applyLargeTextMode(true, event.target.checked);
 });
 document.getElementById('btn-back-to-lobby').addEventListener('click', () => {
     document.getElementById('settings-overlay').classList.add('hidden');

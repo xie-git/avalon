@@ -285,7 +285,10 @@
             });
             const isPublic = this.view === 'public';
             this.element.classList.toggle('presence-public-view', isPublic);
-            this.element.querySelector('.presence-reset').classList.toggle('hidden', isPublic);
+            const reset = this.element.querySelector('.presence-reset');
+            reset.classList.toggle('presence-reset-placeholder', isPublic);
+            reset.disabled = isPublic;
+            reset.setAttribute('aria-hidden', String(isPublic));
             this.privacyNote.textContent = isPublic
                 ? 'Read-only average · self-ratings excluded'
                 : 'Only you can see this layout';

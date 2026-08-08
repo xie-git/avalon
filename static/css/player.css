@@ -917,6 +917,83 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
 .pb-proposal-stat.danger .pb-proposal-circles i.active { background: #e85b4d; border-color: #ff9a90; }
 #pb-game-time { display: inline-block; width: 7ch; text-align: right; }
 
+/* Optional per-device high-legibility header. The extra row keeps every
+   counter readable on a narrow phone instead of squeezing larger text. */
+body.large-text-mode { --player-board-height: 96px; }
+body.large-text-mode .player-board {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: 48px 40px;
+    gap: 0 0.75rem;
+    padding-inline: max(0.75rem, env(safe-area-inset-left));
+}
+body.large-text-mode .pb-shields { grid-column: 1 / -1; width: 100%; gap: 0.42rem; }
+body.large-text-mode .pb-shield { height: 43px; }
+body.large-text-mode .pb-num { font-size: 0.82rem; }
+body.large-text-mode .pb-size { font-size: 0.7rem; }
+body.large-text-mode .pb-icon { font-size: 0.88rem; }
+body.large-text-mode .pb-double { font-size: 0.6rem; }
+body.large-text-mode .pb-team-counts {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.7rem;
+}
+body.large-text-mode .pb-team-counts strong { font-size: 0.95rem; }
+body.large-text-mode .pb-stats {
+    min-width: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.7rem;
+}
+body.large-text-mode .pb-stat { min-width: 0; gap: 0.28rem; }
+body.large-text-mode .pb-stat span { font-size: 0.58rem; }
+body.large-text-mode .pb-stat strong { font-size: 0.86rem; }
+body.large-text-mode .pb-proposal-circles { gap: 4px; }
+body.large-text-mode .pb-proposal-circles i { width: 10px; height: 10px; }
+body.large-text-mode #pb-game-time { width: auto; }
+body.large-text-mode .player-utility-dock {
+    top: calc(var(--player-board-height) + 8px + env(safe-area-inset-top));
+}
+body.large-text-mode .player-utility-dock button {
+    min-width: 40px;
+    height: 36px;
+    padding-inline: 0.75rem;
+    font-size: 0.7rem;
+}
+body.large-text-mode.board-visible .screen {
+    padding-top: calc(var(--player-board-height) + 52px + env(safe-area-inset-top));
+}
+
+body.extra-large-text-mode { --player-board-height: 156px; }
+body.extra-large-text-mode .player-board {
+    grid-template-columns: 1fr;
+    grid-template-rows: 66px 36px 48px;
+    gap: 0;
+}
+body.extra-large-text-mode .pb-shields,
+body.extra-large-text-mode .pb-team-counts,
+body.extra-large-text-mode .pb-stats { grid-column: 1; }
+body.extra-large-text-mode .pb-shield { height: 58px; }
+body.extra-large-text-mode .pb-num { font-size: 1.05rem; }
+body.extra-large-text-mode .pb-size { font-size: 0.86rem; }
+body.extra-large-text-mode .pb-icon { font-size: 1.1rem; }
+body.extra-large-text-mode .pb-team-counts { justify-content: center; gap: 1.5rem; font-size: 0.88rem; }
+body.extra-large-text-mode .pb-team-counts strong { font-size: 1.2rem; }
+body.extra-large-text-mode .pb-stats { justify-content: space-around; gap: 0.5rem; }
+body.extra-large-text-mode .pb-stat { gap: 0.4rem; }
+body.extra-large-text-mode .pb-stat span { font-size: 0.72rem; }
+body.extra-large-text-mode .pb-stat strong { font-size: 1.05rem; }
+body.extra-large-text-mode .pb-proposal-circles i { width: 12px; height: 12px; }
+body.extra-large-text-mode .player-utility-dock {
+    top: calc(var(--player-board-height) + 8px + env(safe-area-inset-top));
+}
+body.extra-large-text-mode .player-utility-dock button { min-width: 46px; height: 42px; font-size: 0.78rem; }
+body.extra-large-text-mode.board-visible .screen {
+    padding-top: calc(var(--player-board-height) + 58px + env(safe-area-inset-top));
+}
+
 /* ============================================================
    CHAT
    ============================================================ */
