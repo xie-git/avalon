@@ -118,22 +118,32 @@
     class PresenceTable {
         constructor(options = {}) {
             this.mode = options.mode === 'host' ? 'host' : 'player';
+            this.onPublicChange = typeof options.onPublicChange === 'function'
+                ? options.onPublicChange
+                : () => {};
             this.roomCode = '';
             this.players = [];
-            this.ranking = [];
+            this.privatePositions = {};
+            this.publicPositions = {};
+            this.view = 'private';
             this.revealedRoles = null;
             this.drag = null;
             this.mountedScreen = null;
 
             this.element = document.createElement('section');
             this.element.className = `presence-table presence-${this.mode} hidden`;
-            this.element.setAttribute('aria-label', 'Private good to bad suspicion ranking');
+            this.element.setAttribute('aria-label', 'Good to bad suspicion spectrum');
             this.element.innerHTML = `
                 <div class="presence-heading">
                     <span class="presence-title">Suspicion Spectrum</span>
                     <span class="presence-count" aria-live="polite"></span>
-                    <span class="presence-private">Private to this device</span>
-                    <button type="button" class="presence-reset" title="Return avatars to their original order">Reset ranking</button>
+                    <span class="presence-context"></span>
+                    <button type="button" class="presence-reset" title="Reset avatar positions">Reset positions</button>
+                </div>
+                <div class="presence-view-toggle" role="group" aria-label="Choose suspicion spectrum">
+                    <button type="button" data-view="private" aria-pressed="true">Private</button>
+                    <button type="button" data-view="public" aria-pressed="false">Public</button>
+                    <span class="presence-privacy-note">Only you can see this layout</span>
                 </div>
                 <div class="presence-field">
                     <div class="presence-spectrum-labels" aria-hidden="true">
@@ -141,22 +151,17 @@
                         <span>Unsure</span>
                         <span>Most likely bad</span>
                     </div>
-                    <div class="presence-spectrum-track" aria-hidden="true"></div>
-                    <div class="presence-table-center" aria-hidden="true">
-                        <span class="presence-center-mark">?</span>
-                        <span class="presence-center-label">Drag to rank</span>
-                        <div class="presence-center-content"></div>
-                    </div>
                     <div class="presence-nodes"></div>
                 </div>`;
             this.field = this.element.querySelector('.presence-field');
             this.nodes = this.element.querySelector('.presence-nodes');
-            this.center = this.element.querySelector('.presence-table-center');
             this.count = this.element.querySelector('.presence-count');
-            this.centerLabel = this.element.querySelector('.presence-center-label');
-            this.centerContent = this.element.querySelector('.presence-center-content');
-            this.centerItemHome = null;
+            this.contextLabel = this.element.querySelector('.presence-context');
+            this.privacyNote = this.element.querySelector('.presence-privacy-note');
             this.element.querySelector('.presence-reset').addEventListener('click', () => this.reset());
+            this.element.querySelectorAll('[data-view]').forEach(button => {
+                button.addEventListener('click', () => this.setView(button.dataset.view));
+            });
 
             if ('ResizeObserver' in window) {
                 this.resizeObserver = new ResizeObserver(() => this.layout());
@@ -167,23 +172,33 @@
         }
 
         storageKey() {
-            return this.roomCode ? `avalon-suspicion-ranking:${this.mode}:${this.roomCode}` : '';
+            return this.roomCode ? `avalon-private-spectrum:${this.mode}:${this.roomCode}` : '';
+        }
+
+        viewStorageKey() {
+            return this.roomCode ? `avalon-spectrum-view:${this.mode}:${this.roomCode}` : '';
         }
 
         setRoomCode(code) {
             const normalized = String(code || '').toUpperCase();
             if (normalized === this.roomCode) return;
             this.roomCode = normalized;
-            this.ranking = [];
+            this.privatePositions = {};
+            this.publicPositions = {};
             const key = this.storageKey();
             if (key) {
                 try {
-                    const saved = JSON.parse(localStorage.getItem(key) || '[]');
-                    if (Array.isArray(saved)) this.ranking = saved.map(String);
+                    const saved = JSON.parse(localStorage.getItem(key) || '{}');
+                    if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+                        this.privatePositions = this.sanitizePositions(saved);
+                    }
+                    const savedView = localStorage.getItem(this.viewStorageKey());
+                    this.view = savedView === 'public' ? 'public' : 'private';
                 } catch (_) {
-                    this.ranking = [];
+                    this.privatePositions = {};
                 }
             }
+            this.updateViewControls();
             this.layout();
         }
 
@@ -197,22 +212,59 @@
                 }
             }
             this.players = ordered.concat([...byName.values()]);
-            this.normalizeRanking();
+            this.prunePositions();
             this.render();
         }
 
-        normalizeRanking() {
-            const keys = this.players.map(player => String(player.player_id || player.name));
-            const available = new Set(keys);
-            const seen = new Set();
-            this.ranking = this.ranking.filter(key => {
-                const keep = available.has(key) && !seen.has(key);
-                if (keep) seen.add(key);
-                return keep;
+        sanitizePositions(positions) {
+            const clean = {};
+            Object.entries(positions || {}).forEach(([key, point]) => {
+                if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+                clean[String(key)] = {
+                    x: Math.min(1, Math.max(0, point.x)),
+                    y: Math.min(1, Math.max(0, point.y)),
+                };
             });
-            keys.forEach(key => {
-                if (!seen.has(key)) this.ranking.push(key);
+            return clean;
+        }
+
+        prunePositions() {
+            const available = new Set(this.players.map(player => String(player.player_id || player.name)));
+            for (const positions of [this.privatePositions, this.publicPositions]) {
+                Object.keys(positions).forEach(key => {
+                    if (!available.has(key)) delete positions[key];
+                });
+            }
+        }
+
+        setPublicPositions(positions) {
+            this.publicPositions = this.sanitizePositions(positions);
+            this.prunePositions();
+            if (this.view === 'public') this.layout();
+        }
+
+        setView(view) {
+            this.view = view === 'public' ? 'public' : 'private';
+            try {
+                if (this.viewStorageKey()) localStorage.setItem(this.viewStorageKey(), this.view);
+            } catch (_) { /* storage is optional */ }
+            this.updateViewControls();
+            this.layout();
+        }
+
+        updateViewControls() {
+            this.element.querySelectorAll('[data-view]').forEach(button => {
+                button.setAttribute('aria-pressed', String(button.dataset.view === this.view));
             });
+            const isPublic = this.view === 'public';
+            this.element.classList.toggle('presence-public-view', isPublic);
+            this.privacyNote.textContent = isPublic
+                ? 'Shared live — anyone can move avatars'
+                : 'Only you can see this layout';
+        }
+
+        activePositions() {
+            return this.view === 'public' ? this.publicPositions : this.privatePositions;
         }
 
         setRoleReveal(roles) {
@@ -309,12 +361,11 @@
             requestAnimationFrame(() => this.layout());
         }
 
-        show(screen, label = 'Drag to rank', anchor = null) {
+        show(screen, label = 'Drag avatars anywhere') {
             if (!screen || !this.players.length) {
                 this.hide();
                 return;
             }
-            this.releaseCenterContent();
             if (this.mountedScreen && this.mountedScreen !== screen) {
                 this.mountedScreen.classList.remove('presence-active');
             }
@@ -331,61 +382,28 @@
             }
             if (panel.nextElementSibling !== this.element) panel.after(this.element);
 
-            const timer = this.mode === 'host' && screen.id === 'screen-round'
-                ? panel.querySelector('#discussion-timer-container')
-                : this.mode === 'host' && screen.id === 'screen-proposal'
-                    ? panel.querySelector('#proposal-timer-host')
-                    : this.mode === 'player' && screen.id === 'screen-discussion'
-                        ? panel.querySelector('#discussion-timer-player')
-                        : this.mode === 'player' && screen.id === 'screen-proposal'
-                            ? panel.querySelector('#proposal-timer-player')
-                            : null;
-            if (timer) this.mountCenterContent(timer);
-            this.centerLabel.textContent = label;
+            this.contextLabel.textContent = label;
             this.element.classList.remove('hidden');
             requestAnimationFrame(() => this.layout());
         }
 
-        showInline(container, label = 'Drag to rank') {
+        showInline(container, label = 'Drag avatars anywhere') {
             if (!container || !this.players.length) {
                 this.hide();
                 return;
             }
-            this.releaseCenterContent();
             if (this.mountedScreen) this.mountedScreen.classList.remove('presence-active');
             this.mountedScreen = null;
             container.appendChild(this.element);
-            this.centerLabel.textContent = label;
+            this.contextLabel.textContent = label;
             this.element.classList.remove('hidden');
             requestAnimationFrame(() => this.layout());
         }
 
         hide() {
-            this.releaseCenterContent();
             this.element.classList.add('hidden');
             if (this.mountedScreen) this.mountedScreen.classList.remove('presence-active');
             this.mountedScreen = null;
-        }
-
-        mountCenterContent(element) {
-            this.centerItemHome = {
-                element,
-                parent: element.parentElement,
-                nextSibling: element.nextSibling,
-            };
-            this.centerContent.appendChild(element);
-            this.element.classList.add('presence-has-center-content');
-            this.center.setAttribute('aria-hidden', 'false');
-        }
-
-        releaseCenterContent() {
-            if (this.centerItemHome) {
-                const { element, parent, nextSibling } = this.centerItemHome;
-                if (parent) parent.insertBefore(element, nextSibling && nextSibling.parentElement === parent ? nextSibling : null);
-                this.centerItemHome = null;
-            }
-            this.element.classList.remove('presence-has-center-content');
-            this.center.setAttribute('aria-hidden', 'true');
         }
 
         layout() {
@@ -395,18 +413,23 @@
             if (!width || !height) return;
             const nodeElements = [...this.nodes.children];
             const count = nodeElements.length;
-            const nodesByKey = new Map(nodeElements.map(node => [node.dataset.playerKey, node]));
-            this.normalizeRanking();
-            this.ranking.forEach((key, rank) => {
-                const node = nodesByKey.get(key);
-                if (!node) return;
-                const halfW = node.offsetWidth / 2;
-                const edge = Math.max(halfW + 5, Math.min(52, width * 0.1));
-                const x = count <= 1 ? width / 2 : edge + (rank / (count - 1)) * (width - edge * 2);
-                const y = count > 5
-                    ? height * (rank % 2 === 0 ? 0.43 : 0.74)
-                    : height * 0.63;
-                this.place(node, x, y, width, height);
+            const positions = this.activePositions();
+            nodeElements.forEach((node, index) => {
+                const saved = positions[node.dataset.playerKey];
+                let xRatio;
+                let yRatio;
+                if (saved) {
+                    ({ x: xRatio, y: yRatio } = saved);
+                } else if (count > 5) {
+                    const columns = Math.ceil(count / 2);
+                    const column = Math.floor(index / 2);
+                    xRatio = columns <= 1 ? 0.5 : 0.1 + (column / (columns - 1)) * 0.8;
+                    yRatio = index % 2 === 0 ? 0.38 : 0.76;
+                } else {
+                    xRatio = count <= 1 ? 0.5 : 0.1 + (index / (count - 1)) * 0.8;
+                    yRatio = 0.62;
+                }
+                this.place(node, xRatio * width, yRatio * height, width, height);
             });
         }
 
@@ -434,55 +457,67 @@
             if (!this.drag || this.drag.pointerId !== event.pointerId || this.drag.key !== node.dataset.playerKey) return;
             event.preventDefault();
             const rect = this.field.getBoundingClientRect();
-            const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-            const currentIndex = this.ranking.indexOf(node.dataset.playerKey);
-            const targetIndex = Math.round(ratio * Math.max(0, this.ranking.length - 1));
-            if (currentIndex !== -1 && targetIndex !== currentIndex) {
-                this.ranking.splice(currentIndex, 1);
-                this.ranking.splice(targetIndex, 0, node.dataset.playerKey);
-                this.layout();
-            }
-            const laneY = this.ranking.length > 5
-                ? rect.height * (targetIndex % 2 === 0 ? 0.43 : 0.74)
-                : rect.height * 0.63;
-            this.place(node, event.clientX - rect.left, laneY, rect.width, rect.height);
+            const point = this.place(
+                node,
+                event.clientX - rect.left,
+                event.clientY - rect.top,
+                rect.width,
+                rect.height,
+            );
+            this.activePositions()[node.dataset.playerKey] = {
+                x: point.x / rect.width,
+                y: point.y / rect.height,
+            };
         }
 
         endDrag(event, node) {
             if (!this.drag || this.drag.pointerId !== event.pointerId || this.drag.key !== node.dataset.playerKey) return;
             node.classList.remove('dragging');
             this.drag = null;
-            this.save();
+            if (this.view === 'public') {
+                this.onPublicChange({
+                    player_id: node.dataset.playerKey,
+                    position: this.publicPositions[node.dataset.playerKey],
+                });
+            } else this.save();
         }
 
         moveWithKeyboard(event, node) {
-            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+            if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
             event.preventDefault();
-            const currentIndex = this.ranking.indexOf(node.dataset.playerKey);
-            const direction = event.key === 'ArrowLeft' ? -1 : 1;
-            const targetIndex = Math.min(this.ranking.length - 1, Math.max(0, currentIndex + direction));
-            if (currentIndex < 0 || targetIndex === currentIndex) return;
-            this.ranking.splice(currentIndex, 1);
-            this.ranking.splice(targetIndex, 0, node.dataset.playerKey);
+            const positions = this.activePositions();
+            const current = positions[node.dataset.playerKey] || { x: 0.5, y: 0.58 };
+            const step = 0.035;
+            positions[node.dataset.playerKey] = {
+                x: Math.min(1, Math.max(0, current.x + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0))),
+                y: Math.min(1, Math.max(0, current.y + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0))),
+            };
             this.layout();
-            this.save();
+            if (this.view === 'public') {
+                this.onPublicChange({ player_id: node.dataset.playerKey, position: positions[node.dataset.playerKey] });
+            } else this.save();
         }
 
         save() {
             const key = this.storageKey();
             if (!key) return;
             try {
-                localStorage.setItem(key, JSON.stringify(this.ranking));
+                localStorage.setItem(key, JSON.stringify(this.privatePositions));
             } catch (_) {
                 // The spectrum still works if browser storage is unavailable.
             }
         }
 
         reset() {
-            this.ranking = this.players.map(player => String(player.player_id || player.name));
-            const key = this.storageKey();
-            if (key) {
-                try { localStorage.removeItem(key); } catch (_) { /* no-op */ }
+            if (this.view === 'public') {
+                this.publicPositions = {};
+                this.onPublicChange({ reset: true });
+            } else {
+                this.privatePositions = {};
+                const key = this.storageKey();
+                if (key) {
+                    try { localStorage.removeItem(key); } catch (_) { /* no-op */ }
+                }
             }
             this.layout();
         }

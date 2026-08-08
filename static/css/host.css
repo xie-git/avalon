@@ -592,6 +592,25 @@ input[type="range"] {
     color: var(--gold-light);
 }
 .timer-text.warning { color: #ff8080; }
+.discussion-clock {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid rgba(201,168,76,0.32);
+    border-radius: var(--radius-pill);
+    background: rgba(7,7,9,0.72);
+    color: var(--text-dim);
+    font: 0.58rem var(--font-heading);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.presence-game-panel .discussion-clock .timer-container,
+.presence-game-panel .discussion-clock .timer-svg {
+    width: 54px;
+    height: 54px;
+}
+.presence-game-panel .discussion-clock .timer-text { font-size: 1rem; }
 
 /* Phase information sits above a persistent, spacious TV round table. */
 #screen-night.presence-active,
@@ -639,16 +658,6 @@ input[type="range"] {
 .presence-host .presence-node { width: clamp(78px, 8vw, 112px); }
 .presence-host .presence-portrait { width: clamp(52px, 5.3vw, 76px); }
 .presence-host .presence-name { font-size: clamp(0.62rem, 1.05vw, 0.82rem); padding: 0.2rem 0.35rem; }
-.presence-host .presence-table-center {
-    z-index: 1;
-    overflow: visible;
-    pointer-events: auto;
-}
-.presence-host.presence-has-center-content .presence-table-center {
-    width: min(24%, 220px);
-    min-height: 110px;
-    padding: clamp(0.4rem, 1vmin, 0.7rem);
-}
 .presence-game-panel {
     flex: 0 0 auto;
     width: min(92vw, 940px);
@@ -744,15 +753,6 @@ input[type="range"] {
 #screen-assassin .presence-game-panel .assassin-subtitle { font-size: clamp(0.86rem, 1.6vw, 1.1rem); }
 #screen-game-over .presence-game-panel { gap: clamp(0.4rem, 1dvh, 0.75rem); }
 #screen-game-over .presence-game-panel .game-over-actions { margin-top: 0.2rem; }
-.presence-host .presence-center-content .timer-container,
-.presence-host .presence-center-content .timer-svg {
-    width: clamp(130px, 17dvh, 175px);
-    height: clamp(130px, 17dvh, 175px);
-}
-.presence-host .presence-center-content .timer-text {
-    font-size: clamp(1.8rem, 3vw, 2.5rem);
-    font-variant-numeric: tabular-nums;
-}
 
 @keyframes screen-edge-flash {
     0%, 100% { box-shadow: inset 0 0 0 0 transparent; }
@@ -1296,7 +1296,6 @@ body,
         margin: 0 auto;
     }
     .presence-host .presence-field { min-height: 265px; }
-    .presence-host.presence-has-center-content .presence-table-center { width: min(38%, 165px); height: auto; padding: 0.35rem; }
     .presence-game-panel {
         width: min(100%, 700px);
         max-height: none;

@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon — Host</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260808-qa6">
-<link rel="stylesheet" href="/static/css/host.css?v=20260808-qa8">
+<link rel="stylesheet" href="/static/css/common.css?v=20260808-qa7">
+<link rel="stylesheet" href="/static/css/host.css?v=20260808-qa9">
 <style>
 /* In-game confirmation modal */
 #confirm-modal {
@@ -227,12 +227,15 @@
         <div class="leader-announce">
             Leader: <strong id="round-leader-name">—</strong>
         </div>
-        <div class="timer-container" id="discussion-timer-container">
-            <svg class="timer-svg" viewBox="0 0 200 200">
-                <circle class="timer-bg" cx="100" cy="100" r="90"/>
-                <circle class="timer-progress" id="timer-ring" cx="100" cy="100" r="90"/>
-            </svg>
-            <div class="timer-text" id="timer-text">—</div>
+        <div class="discussion-clock">
+            <span>Time remaining</span>
+            <div class="timer-container" id="discussion-timer-container">
+                <svg class="timer-svg" viewBox="0 0 200 200">
+                    <circle class="timer-bg" cx="100" cy="100" r="90"/>
+                    <circle class="timer-progress" id="timer-ring" cx="100" cy="100" r="90"/>
+                </svg>
+                <div class="timer-text" id="timer-text">—</div>
+            </div>
         </div>
     </div>
 
@@ -304,7 +307,7 @@
 <div id="host-chat-strip" class="host-chat-strip hidden" aria-live="polite"></div>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/presence.js?v=20260808-qa9"></script>
-<script src="/static/js/host.js?v=20260808-qa12"></script>
+<script src="/static/js/presence.js?v=20260808-qa11"></script>
+<script src="/static/js/host.js?v=20260808-qa13"></script>
 </body>
 </html>

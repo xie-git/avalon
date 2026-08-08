@@ -105,10 +105,48 @@ body::after {
 }
 .presence-title { color: var(--gold-light); font-size: 0.68rem; }
 .presence-count { color: var(--text-dim); font-size: 0.55rem; }
-.presence-private {
+.presence-context {
     color: rgba(205, 211, 222, 0.5);
     font: 0.48rem var(--font-heading);
     letter-spacing: 0.06em;
+}
+.presence-view-toggle {
+    align-self: center;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.2rem;
+    border: 1px solid rgba(201,168,76,0.25);
+    border-radius: var(--radius-pill);
+    background: rgba(7,7,9,0.72);
+}
+.presence-view-toggle button {
+    min-height: 28px;
+    padding: 0.25rem 0.7rem;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-dim);
+    font: 0.55rem var(--font-heading);
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.presence-view-toggle button[aria-pressed="true"] {
+    background: linear-gradient(145deg, rgba(47,126,184,0.62), rgba(32,73,105,0.78));
+    color: #d9efff;
+    box-shadow: 0 0 10px rgba(64,155,220,0.2);
+}
+.presence-public-view .presence-view-toggle button[aria-pressed="true"] {
+    background: linear-gradient(145deg, rgba(177,128,38,0.62), rgba(91,62,18,0.78));
+    color: #fff0b5;
+    box-shadow: 0 0 10px rgba(201,168,76,0.2);
+}
+.presence-privacy-note {
+    padding: 0 0.55rem 0 0.35rem;
+    color: rgba(205,211,222,0.58);
+    font: 0.48rem var(--font-heading);
+    letter-spacing: 0.04em;
 }
 .presence-reset {
     margin-left: auto;
@@ -143,18 +181,6 @@ body::after {
         rgba(4, 5, 8, 0.9);
     box-shadow: inset 0 0 38px rgba(0,0,0,0.5), 0 0 24px rgba(53,116,179,0.07), 0 0 24px rgba(184,47,51,0.05);
 }
-.presence-field::before,
-.presence-field::after {
-    content: '';
-    position: absolute;
-    top: 2.25rem;
-    bottom: 0.7rem;
-    width: 1px;
-    background: rgba(255,255,255,0.08);
-    pointer-events: none;
-}
-.presence-field::before { left: 33.333%; }
-.presence-field::after { right: 33.333%; }
 .presence-spectrum-labels {
     position: absolute;
     z-index: 3;
@@ -172,67 +198,6 @@ body::after {
 .presence-spectrum-labels span:first-child { color: #91d1ff; text-align: left; }
 .presence-spectrum-labels span:nth-child(2) { color: rgba(231,226,210,0.58); text-align: center; }
 .presence-spectrum-labels span:last-child { color: #ff9b9b; text-align: right; }
-.presence-spectrum-track {
-    position: absolute;
-    z-index: 0;
-    left: 5%;
-    right: 5%;
-    top: 60%;
-    height: 5px;
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: var(--radius-pill);
-    background: linear-gradient(90deg, #3aa9f4, #587a92 38%, #837d75 50%, #9b5c5e 62%, #ed4a50);
-    box-shadow: 0 0 14px rgba(62,156,222,0.3), 0 0 14px rgba(225,64,69,0.25);
-}
-.presence-table-center {
-    position: absolute;
-    left: 50%;
-    top: 21%;
-    width: auto;
-    min-width: min(42%, 150px);
-    min-height: 28px;
-    padding: 0.2rem 0.55rem;
-    transform: translate(-50%, -50%);
-    border: 1px solid rgba(201,168,76,0.2);
-    border-radius: var(--radius-pill);
-    background: rgba(8,8,10,0.64);
-    box-shadow: 0 3px 12px rgba(0,0,0,0.35);
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    color: rgba(201,168,76,0.45);
-    pointer-events: none;
-}
-.presence-center-mark { margin-right: 0.3rem; font-size: 0.72rem; line-height: 1; }
-.presence-center-label {
-    max-width: 90%;
-    margin-top: 0;
-    font-family: var(--font-title);
-    font-size: clamp(0.48rem, 1.6dvh, 0.68rem);
-    letter-spacing: 0.08em;
-    text-align: center;
-    line-height: 1.15;
-}
-.presence-center-content {
-    display: none;
-    width: 100%;
-    height: 100%;
-    align-items: center;
-    justify-content: center;
-    pointer-events: auto;
-}
-.presence-has-center-content .presence-center-mark,
-.presence-has-center-content .presence-center-label { display: none; }
-.presence-has-center-content .presence-center-content { display: flex; }
-.presence-has-center-content .presence-table-center {
-    top: 52%;
-    width: min(42%, 150px);
-    min-height: 72px;
-    padding: 0.35rem;
-    border-radius: 50%;
-    background: rgba(8,8,10,0.82);
-}
 .presence-nodes { position: absolute; inset: 0; pointer-events: none; }
 .presence-node {
     position: absolute;
@@ -250,7 +215,7 @@ body::after {
 }
 .presence-node.dragging { cursor: grabbing; z-index: 10; filter: drop-shadow(0 7px 12px rgba(0,0,0,0.9)); }
 .presence-node.dragging::after {
-    content: '↔';
+    content: '✥';
     position: absolute;
     top: -0.85rem;
     color: white;
@@ -323,6 +288,15 @@ body::after {
 .presence-node.disconnected { opacity: 0.48; filter: grayscale(0.8) drop-shadow(0 3px 4px rgba(0,0,0,0.6)); }
 .presence-node.disconnected .presence-status { background: #777; box-shadow: none; }
 .presence-node:focus-visible .presence-portrait { outline: 2px solid var(--gold-light); outline-offset: 3px; }
+
+@media (max-width: 520px) {
+    .presence-heading { flex-wrap: wrap; justify-content: flex-start; gap: 0.3rem 0.45rem; }
+    .presence-context { order: 3; flex: 1 0 100%; }
+    .presence-reset { min-height: 24px; }
+    .presence-view-toggle { width: 100%; justify-content: center; }
+    .presence-privacy-note { flex: 1; padding-right: 0.35rem; line-height: 1.25; }
+}
+
 .mission-history-tooltip {
     position: fixed;
     z-index: 1200;
@@ -398,19 +372,6 @@ body::after {
 .chronicle-entry.rejected { border-left-color: var(--red-glow); }
 .chronicle-entry strong { color: var(--text-primary); font-family: var(--font-heading); }
 .chronicle-entry small { color: var(--text-dim); }
-.presence-center-content #proposal-timer-host,
-.presence-center-content #proposal-timer-player {
-    display: block;
-    color: var(--gold-light);
-    font-family: var(--font-title);
-    font-size: clamp(1.45rem, 4.5vmin, 2.65rem);
-    font-variant-numeric: tabular-nums;
-    line-height: 1.05;
-    text-align: center;
-}
-.presence-center-content #proposal-timer-host.warning,
-.presence-center-content #proposal-timer-player.warning { color: #ff8080; }
-
 .connection-status {
     position: fixed;
     top: max(0.5rem, env(safe-area-inset-top));

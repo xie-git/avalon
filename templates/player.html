@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260808-qa6">
-<link rel="stylesheet" href="/static/css/player.css?v=20260808-qa7">
+<link rel="stylesheet" href="/static/css/common.css?v=20260808-qa7">
+<link rel="stylesheet" href="/static/css/player.css?v=20260808-qa8">
 </head>
 <body>
 
@@ -86,6 +86,21 @@
             <div class="screen-subtitle">Room: <span id="lobby-code-display" style="color:var(--gold)">----</span></div>
         </div>
         <div id="lobby-host-controls" class="hidden" style="width:100%;text-align:center;margin-bottom:1rem">
+            <div class="phone-bot-controls">
+                <div class="phone-bot-copy">
+                    <strong>Fill with bots</strong>
+                    <span>Add temporary players for testing from this phone.</span>
+                </div>
+                <label for="phone-beta-player-count">Total</label>
+                <select id="phone-beta-player-count" aria-label="Total players with bots">
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                </select>
+                <button type="button" class="btn" id="btn-phone-beta-mode" aria-pressed="false">Add Bots</button>
+            </div>
             <button class="btn btn-primary" id="btn-host-start" style="width:100%">Begin the Quest</button>
             <div id="host-start-hint" class="dim-text" style="font-size:0.75rem;margin-top:0.4rem;font-family:var(--font-heading)">Need 6–10 players</div>
         </div>
@@ -151,7 +166,10 @@
             <div class="discussion-leader">Leader choosing the party: <strong id="discussion-leader-name">—</strong></div>
         </div>
         <div class="you-are-leader hidden" id="leader-banner">♔ You are the Leader</div>
-        <div class="timer-small" id="discussion-timer-player">—</div>
+        <div class="discussion-clock-player">
+            <span>Time remaining</span>
+            <div class="timer-small" id="discussion-timer-player">—</div>
+        </div>
         <p class="waiting-text" style="font-size:0.9rem">Deliberate. Argue. Trust wisely.</p>
         <button class="btn hidden" id="btn-end-discussion" style="width:100%">End Discussion &amp; Pick a Team</button>
     </div>
@@ -402,7 +420,7 @@
 </style>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/presence.js?v=20260808-qa9"></script>
-<script src="/static/js/player.js?v=20260808-qa10"></script>
+<script src="/static/js/presence.js?v=20260808-qa11"></script>
+<script src="/static/js/player.js?v=20260808-qa12"></script>
 </body>
 </html>

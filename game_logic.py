@@ -199,6 +199,10 @@ class GameState:
         # Host-issued, short-lived recovery codes for disconnected seats.
         self.seat_recovery_codes: dict[str, tuple[str, float]] = {}
 
+        # Shared, role-neutral avatar positions for the public suspicion board.
+        # Values are normalized coordinates so phones and large displays agree.
+        self.public_spectrum_positions: dict[str, dict[str, float]] = {}
+
     def player_count(self) -> int:
         return len(self.players)
 
@@ -590,6 +594,13 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
         "settings": {
             "discussion_time": game.discussion_time,
             "proposal_time": game.proposal_time,
+            "beta_test_mode": game.beta_test_mode,
+            "beta_test_player_count": game.beta_test_player_count,
+        },
+        "public_spectrum": {
+            player_id: position
+            for player_id, position in game.public_spectrum_positions.items()
+            if player_id in game.players
         },
         "timer_kind": game.timer_kind,
         "timer_remaining": (

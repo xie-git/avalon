@@ -4,12 +4,15 @@
 
 const socket = io();
 const connectionStatus = document.getElementById('connection-status');
-const presenceTable = new AvalonPresenceTable({ mode: 'player' });
+const presenceTable = new AvalonPresenceTable({
+    mode: 'player',
+    onPublicChange: update => socket.emit('update_public_spectrum', update),
+});
 const RECONNECT_TOKEN_KEY = 'avalon-player-session-token';
 const RECONNECT_PLAYER_KEY = 'avalon-player-id';
 const DEFAULT_TITLE = document.title;
 const presenceScreenLabels = {
-    'screen-lobby': 'Drag avatars to rank your suspicions',
+    'screen-lobby': 'Drag anywhere · overlap avatars to cluster',
     'screen-night': 'Night Phase',
     'screen-discussion': 'Mission Discussion',
     'screen-proposal': 'Quest Party',
@@ -47,6 +50,8 @@ let nightInfo = null;
 let assassinTargetId = null;
 let discussionTimerMax = 300;
 let latestMissionReveal = null;
+let phoneBetaTestMode = false;
+let phoneBetaPlayerCount = 6;
 
 // Mission board state
 let pbMissionSizes = [];
@@ -410,6 +415,19 @@ function renderLobbyPlayers(playerList) {
     }
     if (isHost) updateHostStartButton(playerList.length);
     renderAvatarPicker();
+}
+
+function renderPhoneBotControls(settings = {}) {
+    if ('beta_test_mode' in settings) phoneBetaTestMode = Boolean(settings.beta_test_mode);
+    if (Number(settings.beta_test_player_count)) {
+        phoneBetaPlayerCount = Number(settings.beta_test_player_count);
+    }
+    const select = document.getElementById('phone-beta-player-count');
+    const button = document.getElementById('btn-phone-beta-mode');
+    if (!select || !button) return;
+    select.value = String(phoneBetaPlayerCount);
+    button.setAttribute('aria-pressed', String(phoneBetaTestMode));
+    button.textContent = phoneBetaTestMode ? 'Remove Bots' : 'Add Bots';
 }
 
 function renderAvatarPicker() {
@@ -852,6 +870,8 @@ function applyStateSnapshot(snap) {
     currentLeaderId = snap.current_leader_id;
     presenceTable.setRoomCode(gameCode);
     renderLobbyPlayers(snap.players || []);
+    presenceTable.setPublicPositions(snap.public_spectrum || {});
+    renderPhoneBotControls(snap.settings || {});
 
     if (snap.my_role) {
         myRole = snap.my_role;
@@ -992,6 +1012,8 @@ socket.on('join_success', data => {
     document.getElementById('btn-settings').classList.remove('hidden');
     document.getElementById('settings-game-actions').classList.toggle('hidden', !isHost);
     renderLobbyPlayers(data.players || []);
+    presenceTable.setPublicPositions(data.public_spectrum || {});
+    renderPhoneBotControls(data.settings || {});
     showScreen('screen-lobby');
 });
 
@@ -1045,6 +1067,12 @@ socket.on('player_reconnected', data => {
 
 socket.on('lobby_update', data => {
     renderLobbyPlayers(data.players || []);
+    presenceTable.setPublicPositions(data.public_spectrum || {});
+    renderPhoneBotControls(data.settings || {});
+});
+
+socket.on('public_spectrum_updated', data => {
+    presenceTable.setPublicPositions(data.positions || {});
 });
 
 function updateHostStartButton(count) {
@@ -1389,6 +1417,23 @@ document.getElementById('input-selfie').addEventListener('change', async event =
 
 document.getElementById('btn-host-start').addEventListener('click', () => {
     socket.emit('start_game');
+});
+
+document.getElementById('btn-phone-beta-mode').addEventListener('click', () => {
+    socket.emit('set_beta_test_mode', {
+        enabled: !phoneBetaTestMode,
+        target_count: phoneBetaPlayerCount,
+    });
+});
+
+document.getElementById('phone-beta-player-count').addEventListener('change', event => {
+    phoneBetaPlayerCount = Number(event.target.value) || 6;
+    if (phoneBetaTestMode) {
+        socket.emit('set_beta_test_mode', {
+            enabled: true,
+            target_count: phoneBetaPlayerCount,
+        });
+    }
 });
 
 document.getElementById('btn-end-discussion').addEventListener('click', event => {

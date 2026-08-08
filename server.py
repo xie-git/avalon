@@ -479,9 +479,18 @@ def emit_validation_error(error: Exception) -> None:
     emit("error", {"message": str(error)})
 
 
+def public_spectrum_payload(game: GameState) -> dict[str, dict[str, float]]:
+    return {
+        player_id: position
+        for player_id, position in game.public_spectrum_positions.items()
+        if player_id in game.players
+    }
+
+
 def lobby_payload(game: GameState) -> dict:
     return {
         "players": game.public_players(),
+        "public_spectrum": public_spectrum_payload(game),
         "settings": {
             "discussion_time": game.discussion_time,
             "proposal_time": game.proposal_time,
@@ -555,6 +564,26 @@ def validate_caller(
         if not assassin or assassin.player_id != player_id:
             raise ValueError("You are not the Assassin")
     return game, player
+
+
+def validate_spectrum_editor(sid: str) -> GameState:
+    """Allow any seated player or the authenticated host display to edit."""
+    info = sid_to_info.get(sid)
+    if not info:
+        raise ValueError("Not connected to a game")
+    game = games.get(info.get("game_code"))
+    if not game:
+        raise ValueError("Game not found")
+    player_id = info.get("player_id")
+    if player_id and player_id in game.players:
+        return game
+    if (
+        info.get("is_host_screen")
+        and game.host_token
+        and hmac.compare_digest(info.get("host_token", ""), game.host_token)
+    ):
+        return game
+    raise ValueError("Game membership required")
 
 
 # ---------------------------------------------------------------------------
@@ -1066,6 +1095,7 @@ def on_register_host_screen(data):
                 "code": game_code,
                 "join_url": public_base_url(),
                 "players": game.public_players(),
+                "public_spectrum": public_spectrum_payload(game),
                 "phase": game.phase,
                 "mission_sizes": MISSION_SIZES.get(player_count, []),
                 "mission_results": game.mission_results,
@@ -1221,6 +1251,7 @@ def on_create_player_game(data):
                 "is_host": True,
                 "room_code": code,
                 "players": game.public_players(),
+                "public_spectrum": public_spectrum_payload(game),
                 "settings": lobby_payload(game)["settings"],
             },
         )
@@ -1266,6 +1297,7 @@ def on_join_game(data):
                         "is_host": existing_player.player_id == game.host_player_id,
                         "room_code": code,
                         "players": game.public_players(),
+                        "public_spectrum": public_spectrum_payload(game),
                         "settings": lobby_payload(game)["settings"],
                     },
                 )
@@ -1293,6 +1325,7 @@ def on_join_game(data):
                 "is_host": player.player_id == game.host_player_id,
                 "room_code": code,
                 "players": game.public_players(),
+                "public_spectrum": public_spectrum_payload(game),
                 "settings": {
                     "discussion_time": game.discussion_time,
                     "proposal_time": game.proposal_time,
@@ -1453,6 +1486,47 @@ def on_claim_player_seat(data):
 
 
 # --- Lobby management ---
+
+
+@socketio.on("update_public_spectrum")
+@rate_limited()
+def on_update_public_spectrum(data):
+    try:
+        game = validate_spectrum_editor(request.sid)
+        data = require_object(data)
+        if data.get("reset") is True:
+            game.public_spectrum_positions = {}
+        else:
+            player_id = require_string(data, "player_id", minimum=1, maximum=128)
+            if player_id not in game.players:
+                raise ValueError("Player is not in this game")
+            position = data.get("position")
+            if not isinstance(position, dict):
+                raise ValueError("position must be an object")
+            x = position.get("x")
+            y = position.get("y")
+            if (
+                isinstance(x, bool)
+                or isinstance(y, bool)
+                or not isinstance(x, (int, float))
+                or not isinstance(y, (int, float))
+                or not math.isfinite(x)
+                or not math.isfinite(y)
+                or not 0 <= x <= 1
+                or not 0 <= y <= 1
+            ):
+                raise ValueError("Spectrum coordinates must be between 0 and 1")
+            game.public_spectrum_positions[player_id] = {
+                "x": round(float(x), 4),
+                "y": round(float(y), 4),
+            }
+        emit_to_game(
+            game.code,
+            "public_spectrum_updated",
+            {"positions": public_spectrum_payload(game)},
+        )
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 @socketio.on("reorder_players")

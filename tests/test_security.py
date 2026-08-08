@@ -75,6 +75,25 @@ def test_phone_creator_hosts_while_occupying_a_player_seat(socket_client):
     assert game.player_count() == 1
 
 
+def test_phone_creator_can_fill_lobby_to_selected_count_with_bots(socket_client):
+    socket_client.emit("create_player_game", {"player_name": "Arthur"})
+    joined = packets_for(socket_client, "join_success")[0]
+
+    socket_client.emit(
+        "set_beta_test_mode", {"enabled": True, "target_count": 8}
+    )
+
+    game = server.games[joined["room_code"]]
+    assert game.beta_test_mode is True
+    assert game.beta_test_player_count == 8
+    assert game.player_count() == 8
+    assert sum(player.is_bot for player in game.players.values()) == 7
+
+    update = packets_for(socket_client, "lobby_update")[-1]
+    assert update["settings"]["beta_test_mode"] is True
+    assert update["settings"]["beta_test_player_count"] == 8
+
+
 def test_phone_only_game_reaches_first_mission_without_host_display(socket_client):
     socket_client.emit("create_player_game", {"player_name": "Arthur"})
     created = packets_for(socket_client, "join_success")[0]
@@ -113,6 +132,64 @@ def test_phone_only_game_reaches_first_mission_without_host_display(socket_clien
     assert game.phase == server.GamePhase.DISCUSSION
     for client in clients[1:]:
         client.disconnect()
+
+
+def test_public_spectrum_is_shared_and_restored_for_new_players(socket_client, create_game):
+    created = create_game(socket_client)
+    player = server.socketio.test_client(server.app)
+    player.emit(
+        "join_game", {"room_code": created["room_code"], "player_name": "Arthur"}
+    )
+    joined = packets_for(player, "join_success")[0]
+    socket_client.get_received()
+
+    position = {"x": 0.82, "y": 0.27}
+    player.emit(
+        "update_public_spectrum",
+        {"player_id": joined["player_id"], "position": position},
+    )
+    update = packets_for(socket_client, "public_spectrum_updated")[0]
+    assert update["positions"] == {joined["player_id"]: position}
+    assert server.games[created["room_code"]].public_spectrum_positions == {
+        joined["player_id"]: position
+    }
+
+    newcomer = server.socketio.test_client(server.app)
+    newcomer.emit(
+        "join_game", {"room_code": created["room_code"], "player_name": "Merlin"}
+    )
+    newcomer_join = packets_for(newcomer, "join_success")[0]
+    assert newcomer_join["public_spectrum"] == {joined["player_id"]: position}
+    newcomer.disconnect()
+    player.disconnect()
+
+
+def test_public_spectrum_rejects_invalid_or_unauthorized_updates(socket_client, create_game):
+    created = create_game(socket_client)
+    player = server.socketio.test_client(server.app)
+    player.emit(
+        "join_game", {"room_code": created["room_code"], "player_name": "Arthur"}
+    )
+    joined = packets_for(player, "join_success")[0]
+    socket_client.get_received()
+
+    player.emit(
+        "update_public_spectrum",
+        {"player_id": joined["player_id"], "position": {"x": 1.2, "y": 0.5}},
+    )
+    assert packets_for(player, "error")[-1]["message"] == (
+        "Spectrum coordinates must be between 0 and 1"
+    )
+
+    outsider = server.socketio.test_client(server.app)
+    outsider.emit(
+        "update_public_spectrum",
+        {"player_id": joined["player_id"], "position": {"x": 0.5, "y": 0.5}},
+    )
+    assert packets_for(outsider, "error")[-1]["message"] == "Not connected to a game"
+    assert server.games[created["room_code"]].public_spectrum_positions == {}
+    outsider.disconnect()
+    player.disconnect()
 
 
 def test_host_display_owner_can_also_join_as_a_player(socket_client, create_game):

@@ -4,7 +4,10 @@
 
 const socket = io();
 const connectionStatus = document.getElementById('connection-status');
-const presenceTable = new AvalonPresenceTable({ mode: 'host' });
+const presenceTable = new AvalonPresenceTable({
+    mode: 'host',
+    onPublicChange: update => socket.emit('update_public_spectrum', update),
+});
 const HOST_CODE_KEY = 'avalon-host-game-code';
 const HOST_TOKEN_KEY = 'avalon-host-token';
 const TV_CHAT_KEY = 'avalon-tv-chat-enabled';
@@ -262,7 +265,7 @@ function syncPresencePlayers(playerList = players) {
 // ---------------------------------------------------------------------------
 function renderRoundTable(playerList) {
     const container = document.getElementById('lobby-spectrum');
-    if (container && playerList.length) presenceTable.showInline(container, 'Drag avatars to rank your suspicions');
+    if (container && playerList.length) presenceTable.showInline(container, 'Drag anywhere · overlap avatars to cluster');
     else presenceTable.hide();
 }
 
@@ -583,6 +586,7 @@ socket.on('host_registered', data => {
     renderProposalSetting(data.proposal_time);
     timerMax = discussionDuration;
     syncPresencePlayers(players);
+    presenceTable.setPublicPositions(data.public_spectrum || {});
     renderTvChat();
     renderRecoveryList();
 
@@ -696,6 +700,7 @@ socket.on('player_reconnected', data => {
 socket.on('lobby_update', data => {
     players = data.players || [];
     renderLobbyPlayers(players);
+    presenceTable.setPublicPositions(data.public_spectrum || {});
     if (data.settings) {
         discussionDuration = data.settings.discussion_time;
         const dispEl = document.getElementById('discussion-time-display');
@@ -705,6 +710,10 @@ socket.on('lobby_update', data => {
         renderProposalSetting(data.settings.proposal_time);
         renderBetaTestMode(data.settings.beta_test_mode, data.settings.beta_test_player_count);
     }
+});
+
+socket.on('public_spectrum_updated', data => {
+    presenceTable.setPublicPositions(data.positions || {});
 });
 
 socket.on('game_starting', data => {

@@ -469,6 +469,54 @@ html, body {
     text-align: center;
 }
 .timer-small.warning { color: #ff8080; }
+.discussion-clock-player {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    padding: 0.45rem 0.85rem;
+    border: 1px solid rgba(201,168,76,0.32);
+    border-radius: var(--radius-pill);
+    background: rgba(7,7,9,0.72);
+    color: var(--text-dim);
+    font: 0.58rem var(--font-heading);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.discussion-clock-player .timer-small { font-size: 1.5rem; line-height: 1; }
+
+.phone-bot-controls {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: 0.45rem;
+    margin-bottom: 0.7rem;
+    padding: 0.65rem;
+    border: 1px solid rgba(201,168,76,0.35);
+    border-radius: var(--radius-md);
+    background: rgba(7,7,9,0.72);
+    text-align: left;
+}
+.phone-bot-copy { display: flex; flex-direction: column; gap: 0.15rem; }
+.phone-bot-copy strong { color: var(--gold-light); font: 0.68rem var(--font-heading); letter-spacing: 0.06em; text-transform: uppercase; }
+.phone-bot-copy span { color: var(--text-dim); font-size: 0.68rem; line-height: 1.25; }
+.phone-bot-controls label { color: var(--text-dim); font: 0.58rem var(--font-heading); text-transform: uppercase; }
+.phone-bot-controls select {
+    min-height: 36px;
+    border: 1px solid var(--border-gold);
+    border-radius: var(--radius-sm);
+    background: #111014;
+    color: var(--gold-light);
+    font: 0.72rem var(--font-heading);
+}
+.phone-bot-controls .btn { min-height: 36px; padding: 0.4rem 0.65rem; font-size: 0.62rem; white-space: nowrap; }
+.phone-bot-controls .btn[aria-pressed="true"] { border-color: var(--red-glow); color: #ffaaa5; }
+
+@media (max-width: 430px) {
+    .phone-bot-controls { grid-template-columns: minmax(0, 1fr) auto auto; }
+    .phone-bot-copy { grid-column: 1 / -1; }
+}
 
 .player-reveal-cards {
     width: 100%;
@@ -534,10 +582,6 @@ html, body {
     max-height: none;
 }
 .presence-player .presence-field { min-height: 175px; }
-.presence-player .presence-center-content .timer-small {
-    font-size: clamp(1.8rem, 10vw, 2.7rem);
-    font-variant-numeric: tabular-nums;
-}
 #screen-game-over.presence-active .game-over-roles { display: none; }
 
 /* ============================================================
