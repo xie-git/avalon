@@ -175,6 +175,11 @@ html, body {
     letter-spacing: 0.15em;
     text-transform: uppercase;
 }
+.form-hint {
+    color: var(--text-dim);
+    font: 0.78rem/1.35 var(--font-body);
+    text-align: center;
+}
 .form-group input {
     width: 100%;
     padding: 0.9rem 1rem;
@@ -410,6 +415,13 @@ html, body {
     width: 100%;
     text-align: center;
 }
+.discussion-leader {
+    margin-top: 0.55rem;
+    color: var(--text-secondary);
+    font: 0.78rem var(--font-heading);
+    letter-spacing: 0.04em;
+}
+.discussion-leader strong { color: var(--gold-light); }
 .mission-info-pill {
     display: inline-block;
     padding: 0.3rem 1rem;
@@ -765,6 +777,18 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
     gap: 0.05rem;
     flex-shrink: 0;
 }
+.pb-team-counts {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    gap: 0.08rem;
+    font: 0.46rem var(--font-heading);
+    letter-spacing: 0.05em;
+}
+.pb-team-counts span { white-space: nowrap; }
+.pb-team-counts strong { font-size: 0.66rem; }
+.pb-team-counts .good { color: #7ec8ff; }
+.pb-team-counts .evil { color: #ff8080; }
 .pb-stat {
     display: flex;
     align-items: baseline;
@@ -871,8 +895,14 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: 0.75rem;
-    padding: 0 0.2rem;
+    font-size: 1rem;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
 }
 .chat-history-list {
     padding: 0.3rem 0.5rem;

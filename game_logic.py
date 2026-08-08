@@ -174,6 +174,7 @@ class GameState:
         # Per-phase state
         self.proposed_team: list[str] = []  # player_ids
         self.votes: dict[str, str] = {}  # player_id -> "approve"/"reject"
+        self.pending_vote_result: dict | None = None
         self.mission_cards: dict[str, str] = {}  # player_id -> "success"/"fail"
         self.night_acks: set[str] = set()
 
@@ -239,6 +240,7 @@ class GameState:
         self.consecutive_rejections = 0
         self.proposed_team = []
         self.votes = {}
+        self.pending_vote_result = None
         self.mission_cards = {}
         self.night_acks = set()
         self.assassin_target = None
@@ -577,6 +579,10 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
         "consecutive_rejections": game.consecutive_rejections,
         "game_started_at": game.started_at,
         "mission_sizes": MISSION_SIZES.get(game.player_count(), []),
+        "team_counts": {
+            "good": sum(player.team == Team.GOOD for player in game.players.values()),
+            "evil": sum(player.team == Team.EVIL for player in game.players.values()),
+        },
         "settings": {
             "discussion_time": game.discussion_time,
             "proposal_time": game.proposal_time,

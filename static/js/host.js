@@ -405,6 +405,7 @@ function spawnStars() {
 function animateVoteReveal(votes) {
     const container = document.getElementById('vote-cards-container');
     container.innerHTML = '';
+    document.getElementById('btn-confirm-vote-reveal').classList.add('hidden');
     const entries = Object.entries(votes);
     entries.forEach(([name, vote], i) => {
         const card = document.createElement('div');
@@ -431,6 +432,7 @@ function animateVoteReveal(votes) {
         banner.className = `vote-result-banner ${isApproved ? 'approved' : 'rejected'}`;
         banner.textContent = isApproved ? 'The Quest Party Rides Forth!' : 'The Court Dissents!';
         banner.classList.remove('hidden');
+        document.getElementById('btn-confirm-vote-reveal').classList.remove('hidden');
     }, 500 + entries.length * 350 + 500);
 }
 
@@ -649,18 +651,24 @@ socket.on('host_registered', data => {
                 `${currentLeaderName} proposes:`;
             const voted = Object.keys(data.votes || {});
             renderVoteStatus(voted, players.map(p => p.name).filter(n => !voted.includes(n)));
+            if (data.phase === 'VOTE_REVEAL') animateVoteReveal(data.votes || {});
         } else if (data.phase === 'MISSION') {
             proposedTeam = data.proposed_team || [];
+            const proposedTeamIds = data.proposed_team_ids || [];
             const display = document.getElementById('mission-team-display');
             display.innerHTML = '';
-            proposedTeam.forEach(name => {
+            proposedTeam.forEach((name, index) => {
                 const card = document.createElement('div');
                 card.className = 'mission-member-card';
+                card.dataset.playerId = proposedTeamIds[index] || '';
                 card.textContent = name;
                 display.appendChild(card);
             });
-            document.getElementById('mission-played').textContent = data.mission_cards_played;
-            document.getElementById('mission-total').textContent = proposedTeam.length;
+            renderMissionStatus({
+                played: data.mission_cards_played,
+                total: proposedTeam.length,
+                played_player_ids: data.mission_cards_played_ids || [],
+            });
         } else if (data.phase === 'MISSION_REVEAL' && data.pending_mission_outcome) {
             const latest = data.latest_mission;
             if (latest) {
@@ -830,6 +838,7 @@ socket.on('team_proposed', data => {
 
 socket.on('vote_start', data => {
     document.getElementById('vote-result-banner').classList.add('hidden');
+    document.getElementById('btn-confirm-vote-reveal').classList.add('hidden');
     proposedTeam = data.team || [];
     pendingVoters = players.map(p => p.name);
     document.getElementById('vote-team-names').textContent = proposedTeam.join(', ');
@@ -880,10 +889,12 @@ socket.on('mission_start', data => {
     proposedTeam = data.team || [];
     const display = document.getElementById('mission-team-display');
     display.innerHTML = '';
-    proposedTeam.forEach(name => {
+    const teamIds = data.team_ids || [];
+    proposedTeam.forEach((name, index) => {
         const card = document.createElement('div');
         card.className = 'mission-member-card';
         card.dataset.name = name;
+        card.dataset.playerId = teamIds[index] || '';
         card.textContent = name;
         display.appendChild(card);
     });
@@ -893,12 +904,21 @@ socket.on('mission_start', data => {
 });
 
 socket.on('mission_waiting', data => {
+    renderMissionStatus(data);
+});
+
+function renderMissionStatus(data) {
     document.getElementById('mission-played').textContent = data.played;
     document.getElementById('mission-total').textContent = data.total;
-    // Mark one more card as played (can't tell which)
-    const cards = document.querySelectorAll('.mission-member-card:not(.played)');
-    if (cards.length > 0) cards[0].classList.add('played');
-});
+    const playedIds = new Set(data.played_player_ids || []);
+    const playedNames = new Set(data.played_players || []);
+    document.querySelectorAll('.mission-member-card').forEach(card => {
+        card.classList.toggle(
+            'played',
+            playedIds.has(card.dataset.playerId) || playedNames.has(card.dataset.name),
+        );
+    });
+}
 
 socket.on('mission_reveal', data => {
     document.getElementById('mission-result-banner').classList.add('hidden');
@@ -1079,6 +1099,14 @@ document.getElementById('btn-skip-discussion').addEventListener('click', async (
 document.getElementById('btn-next-round').addEventListener('click', () => {
     document.getElementById('btn-next-round').classList.add('hidden');
     socket.emit('advance_after_mission');
+});
+
+document.getElementById('btn-confirm-vote-reveal').addEventListener('click', event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.classList.add('hidden');
+    socket.emit('confirm_vote_reveal');
+    setTimeout(() => { button.disabled = false; }, 1000);
 });
 
 document.getElementById('btn-return-lobby').addEventListener('click', () => {

@@ -897,6 +897,7 @@ input[type="range"] {
 }
 .vote-result-banner.approved { color: var(--gold-light); border: 2px solid var(--gold); text-shadow: 0 0 30px rgba(201,168,76,0.5); }
 .vote-result-banner.rejected { color: #ff8080; border: 2px solid var(--red-glow); text-shadow: 0 0 30px rgba(192,57,43,0.5); }
+#btn-confirm-vote-reveal { min-width: 12rem; }
 
 /* ---- Mission ---- */
 #screen-mission {

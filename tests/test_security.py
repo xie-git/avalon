@@ -470,6 +470,8 @@ def test_one_human_and_random_bots_can_finish_a_complete_game(
             )
         elif game.phase == server.GamePhase.TEAM_VOTE:
             player.emit("cast_vote", {"vote": "approve"})
+        elif game.phase == server.GamePhase.VOTE_REVEAL:
+            socket_client.emit("confirm_vote_reveal")
         elif game.phase == server.GamePhase.MISSION:
             assert human_id in game.proposed_team
             player.emit("play_mission_card", {"card": "success"})
@@ -620,13 +622,55 @@ def test_complete_mission_waits_for_host_before_advancing(socket_client, create_
     team = game.player_order[: game.mission_size()]
     clients[leader_index].emit("propose_team", {"team": team})
     assert game.votes == {}
-    for client in clients:
+
+    # Team-vote progress is also authoritative when players submit out of
+    # display order.
+    socket_client.get_received()
+    first_voter_id = game.player_order[-1]
+    first_voter = clients[game.player_order.index(first_voter_id)]
+    first_voter.emit("cast_vote", {"vote": "approve"})
+    vote_progress = packets_for(socket_client, "vote_waiting")[-1]
+    assert vote_progress == {
+        "voted": [game.players[first_voter_id].name],
+        "remaining": [
+            game.players[pid].name
+            for pid in game.player_order
+            if pid != first_voter_id
+        ],
+    }
+
+    for client in clients[:-1]:
         client.emit("cast_vote", {"vote": "approve"})
+    assert game.phase == server.GamePhase.VOTE_REVEAL
+    assert game.pending_vote_result is not None
+
+    clients[0].emit("confirm_vote_reveal")
+    assert game.phase == server.GamePhase.VOTE_REVEAL
+    assert packets_for(clients[0], "error")[-1]["message"] == "Host authorization required"
+
+    socket_client.emit("confirm_vote_reveal")
     assert game.phase == server.GamePhase.MISSION
+    assert game.pending_vote_result is None
     assert game.proposal_history[0]["approved"] is True
     assert "votes" not in game.proposal_history[0]
 
-    for player_id in team:
+    # Progress identifies the player who actually submitted, even when the
+    # second displayed team member plays first.
+    socket_client.get_received()
+    first_player_id = team[-1]
+    first_client = clients[game.player_order.index(first_player_id)]
+    first_client.emit("play_mission_card", {"card": "success"})
+    progress = packets_for(socket_client, "mission_waiting")[-1]
+    assert progress == {
+        "played": 1,
+        "total": len(team),
+        "played_player_ids": [first_player_id],
+        "remaining_player_ids": team[:-1],
+        "played_players": [game.players[first_player_id].name],
+        "remaining_players": [game.players[pid].name for pid in team[:-1]],
+    }
+
+    for player_id in team[:-1]:
         client = clients[game.player_order.index(player_id)]
         client.emit("play_mission_card", {"card": "success"})
     assert game.phase == server.GamePhase.MISSION_REVEAL
@@ -659,6 +703,8 @@ def test_fifth_rejected_team_ends_game_without_another_proposal(
         clients[leader_index].emit("propose_team", {"team": team})
         for client in clients:
             client.emit("cast_vote", {"vote": "reject"})
+        assert game.phase == server.GamePhase.VOTE_REVEAL
+        socket_client.emit("confirm_vote_reveal")
         assert game.consecutive_rejections == attempt
 
     assert game.phase == server.GamePhase.GAME_OVER
@@ -756,6 +802,8 @@ def test_every_supported_party_size_reaches_first_mission(
     assert game.votes == {}
     for client in clients:
         client.emit("cast_vote", {"vote": "approve"})
+    assert game.phase == server.GamePhase.VOTE_REVEAL
+    socket_client.emit("confirm_vote_reveal")
     assert game.phase == server.GamePhase.MISSION
     assert len(game.proposed_team) == server.MISSION_SIZES[player_count][0]
 

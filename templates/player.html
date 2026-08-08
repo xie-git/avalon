@@ -6,7 +6,7 @@
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/css/common.css?v=20260808-qa5">
-<link rel="stylesheet" href="/static/css/player.css?v=20260808-qa6">
+<link rel="stylesheet" href="/static/css/player.css?v=20260808-qa7">
 </head>
 <body>
 
@@ -17,6 +17,10 @@
 <!-- Mission board (fixed top, shown during game) -->
 <div id="player-board" class="player-board hidden">
     <div class="pb-shields" id="pb-shields"></div>
+    <div class="pb-team-counts" aria-label="Team composition">
+        <span class="good">GOOD <strong id="pb-good-count">—</strong></span>
+        <span class="evil">EVIL <strong id="pb-evil-count">—</strong></span>
+    </div>
     <div class="pb-stats">
         <div class="pb-stat pb-proposal-stat" aria-label="Team proposal 1 of 5">
             <span>PROPOSAL</span>
@@ -58,8 +62,9 @@
                        autocapitalize="characters" placeholder="ABCD" inputmode="text">
             </div>
             <div class="form-group">
-                <label for="input-name">Thy Name</label>
-                <input type="text" id="input-name" maxlength="12" autocomplete="off" placeholder="Lancelot">
+                <label for="input-name">Your Real Name</label>
+                <input type="text" id="input-name" maxlength="12" autocomplete="name" placeholder="Your real name" aria-describedby="real-name-hint">
+                <small class="form-hint" id="real-name-hint">Use the name people call you in real life—Avalon gets confusing otherwise.</small>
             </div>
             <div class="error-message" id="join-error"></div>
             <button class="btn btn-primary" id="btn-join">Join the Round Table</button>
@@ -136,6 +141,7 @@
         </div>
         <div class="discussion-info">
             <div class="mission-info-pill" id="discussion-mission-info"></div>
+            <div class="discussion-leader">Leader choosing the party: <strong id="discussion-leader-name">—</strong></div>
         </div>
         <div class="you-are-leader hidden" id="leader-banner">♔ You are the Leader</div>
         <div class="timer-small" id="discussion-timer-player">—</div>
@@ -367,6 +373,6 @@
 
 <script src="/static/js/socket.io.min.js"></script>
 <script src="/static/js/presence.js?v=20260808-qa6"></script>
-<script src="/static/js/player.js?v=20260808-qa6"></script>
+<script src="/static/js/player.js?v=20260808-qa7"></script>
 </body>
 </html>

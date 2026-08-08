@@ -624,6 +624,10 @@ def start_round(game: GameState):
             "mission_sizes": mission_sizes,
             "requires_double_fail": game.requires_double_fail(),
             "game_started_at": game.started_at,
+            "team_counts": {
+                "good": sum(player.team.value == "good" for player in game.players.values()),
+                "evil": sum(player.team.value == "evil" for player in game.players.values()),
+            },
             # Player ordering info — needed by the leader's proposal screen
             "player_order": [game.players[pid].name for pid in game.player_order],
             "player_name_to_id": {
@@ -643,6 +647,9 @@ def start_round(game: GameState):
         {
             "duration_seconds": game.discussion_time,
             "mission_num": game.current_mission + 1,
+            "mission_size": game.mission_size(),
+            "leader_name": leader.name if leader else "Unknown",
+            "leader_id": leader.player_id if leader else None,
         },
     )
     socketio.start_background_task(
@@ -751,6 +758,37 @@ def emit_vote_waiting(game: GameState) -> None:
     )
 
 
+def emit_mission_waiting(game: GameState) -> None:
+    """Broadcast the authoritative mission-card participation state.
+
+    Card choices stay secret; only who has submitted is exposed.  Sending the
+    complete set on every update lets clients recover from a reconnect or a
+    missed/duplicate progress event instead of guessing which member played.
+    """
+    played_ids = [
+        player_id
+        for player_id in game.proposed_team
+        if player_id in game.mission_cards
+    ]
+    remaining_ids = [
+        player_id
+        for player_id in game.proposed_team
+        if player_id not in game.mission_cards
+    ]
+    emit_to_game(
+        game.code,
+        "mission_waiting",
+        {
+            "played": len(played_ids),
+            "total": len(game.proposed_team),
+            "played_player_ids": played_ids,
+            "remaining_player_ids": remaining_ids,
+            "played_players": [game.players[pid].name for pid in played_ids],
+            "remaining_players": [game.players[pid].name for pid in remaining_ids],
+        },
+    )
+
+
 def finish_mission(game: GameState, result: dict) -> None:
     game.phase = GamePhase.MISSION_REVEAL
     emit_to_game(
@@ -820,11 +858,7 @@ def play_bot_mission_cards(game: GameState) -> None:
         if player.team.value == "evil":
             card = secure_random.choice(("success", "fail"))
         result = record_mission_card(game, player_id, card)
-    emit_to_game(
-        game.code,
-        "mission_waiting",
-        {"played": len(game.mission_cards), "total": len(game.proposed_team)},
-    )
+    emit_mission_waiting(game)
     if result:
         finish_mission(game, result)
 
@@ -841,6 +875,7 @@ def finish_vote(game: GameState, result: dict) -> None:
         "approved": result["approved"],
     }
     game.proposal_history.append(public_vote)
+    game.pending_vote_result = result
     log_game_event(
         game,
         "team_vote",
@@ -850,7 +885,13 @@ def finish_vote(game: GameState, result: dict) -> None:
         },
     )
     emit_to_game(game.code, "vote_reveal", result)
-    pause(3)
+
+
+def advance_after_vote(game: GameState) -> None:
+    result = game.pending_vote_result
+    if not result:
+        raise ValueError("No revealed vote is awaiting confirmation")
+    game.pending_vote_result = None
     outcome = process_vote_result(game, result["approved"])
     if outcome == "mission":
         emit_to_game(
@@ -1028,10 +1069,14 @@ def on_register_host_screen(data):
                 "night_confirmed": len(game.night_acks),
                 "night_total": game.player_count(),
                 "pending_mission_outcome": game.pending_mission_outcome,
+                "vote_reveal_pending": game.pending_vote_result is not None,
                 "proposed_team": [
                     game.players[pid].name
                     for pid in game.proposed_team
                     if pid in game.players
+                ],
+                "proposed_team_ids": [
+                    pid for pid in game.proposed_team if pid in game.players
                 ],
                 # Before reveal the shared display may show participation, but
                 # never the choices themselves.
@@ -1043,6 +1088,9 @@ def on_register_host_screen(data):
                     if pid in game.players
                 },
                 "mission_cards_played": len(game.mission_cards),
+                "mission_cards_played_ids": [
+                    pid for pid in game.proposed_team if pid in game.mission_cards
+                ],
                 "latest_mission": (
                     game.mission_history[-1] if game.mission_history else None
                 ),
@@ -1609,6 +1657,16 @@ def on_cast_vote(data):
         finish_vote(game, result)
 
 
+@socketio.on("confirm_vote_reveal")
+@rate_limited()
+def on_confirm_vote_reveal():
+    try:
+        game = validate_host(request.sid, require_phase=GamePhase.VOTE_REVEAL)
+        advance_after_vote(game)
+    except ValueError as error:
+        emit_validation_error(error)
+
+
 # --- Mission ---
 
 
@@ -1629,9 +1687,7 @@ def on_play_mission_card(data):
         emit("error", {"message": str(e)})
         return
     emit("mission_card_ack", {}, room=sid)
-    played = len(game.mission_cards)
-    total = len(game.proposed_team)
-    emit_to_game(game.code, "mission_waiting", {"played": played, "total": total})
+    emit_mission_waiting(game)
     if result:
         finish_mission(game, result)
 

@@ -226,6 +226,12 @@ function renderPlayerBoard() {
     updateGameClock();
 }
 
+function updateTeamCounts(counts) {
+    if (!counts) return;
+    document.getElementById('pb-good-count').textContent = counts.good ?? '—';
+    document.getElementById('pb-evil-count').textContent = counts.evil ?? '—';
+}
+
 function updatePlayerProposalTrack() {
     const count = document.getElementById('pb-proposal');
     const row = count && count.closest('.pb-proposal-stat');
@@ -247,6 +253,7 @@ function showChat() {
     document.body.classList.add('chat-visible');
 }
 function hideChat() {
+    toggleChatHistory(false);
     document.getElementById('chat-container').classList.add('hidden');
     document.body.classList.remove('chat-visible');
 }
@@ -501,6 +508,8 @@ function showNightInfo(info) {
 function showDiscussion(data) {
     const missionInfo = document.getElementById('discussion-mission-info');
     missionInfo.textContent = `Mission ${data.mission_num || '?'} — ${data.mission_size || '?'} members needed`;
+    const leaderName = data.leader_name || window._currentLeaderName || 'Unknown';
+    document.getElementById('discussion-leader-name').textContent = leaderName;
     const leaderBanner = document.getElementById('leader-banner');
     const amLeader = myPlayerId === data.leader_id || myPlayerId === currentLeaderId;
     leaderBanner.classList.toggle('hidden', !amLeader);
@@ -780,6 +789,7 @@ function applyStateSnapshot(snap) {
         pbTotalPlayers   = (snap.player_order || []).length;
         pbConsecutiveRejections = snap.consecutive_rejections || 0;
     }
+    updateTeamCounts(snap.team_counts);
 
     const inGame = snap.phase !== 'LOBBY';
     if (inGame) {
@@ -812,6 +822,7 @@ function applyStateSnapshot(snap) {
                 mission_num: snap.current_mission + 1,
                 mission_size: snap.mission_size,
                 leader_id: snap.current_leader_id,
+                leader_name: snap.current_leader,
                 duration_seconds: snap.timer_remaining ?? snap.settings.discussion_time,
             });
             break;
@@ -1009,6 +1020,7 @@ socket.on('round_start', data => {
     pbCurrentMission  = (data.mission_num || 1) - 1;
     pbTotalPlayers    = (data.player_order || []).length || pbTotalPlayers;
     pbConsecutiveRejections = data.reject_count || 0;
+    updateTeamCounts(data.team_counts);
     presenceTable.setPlayers(presencePlayers, window._playerOrder || []);
     showPlayerBoard();
     renderPlayerBoard();
@@ -1016,10 +1028,13 @@ socket.on('round_start', data => {
 });
 
 socket.on('discussion_start', data => {
+    window._currentLeaderName = data.leader_name || window._currentLeaderName;
+    currentLeaderId = data.leader_id || currentLeaderId;
     discussionTimerMax = data.duration_seconds;
     document.getElementById('discussion-timer-player').textContent = fmtTime(discussionTimerMax);
     const missionInfo = document.getElementById('discussion-mission-info');
     missionInfo.textContent = `Mission ${data.mission_num || ''} — ${missionRequiredSize} member${missionRequiredSize !== 1 ? 's' : ''} needed`;
+    document.getElementById('discussion-leader-name').textContent = data.leader_name || window._currentLeaderName || 'Unknown';
     const leaderBanner = document.getElementById('leader-banner');
     leaderBanner.classList.toggle('hidden', myPlayerId !== currentLeaderId);
     presenceTable.show(
@@ -1412,6 +1427,11 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
 });
 document.getElementById('btn-history-toggle').addEventListener('click', () => toggleChatHistory(!chatHistoryOpen));
 document.getElementById('btn-history-close').addEventListener('click', () => toggleChatHistory(false));
+document.addEventListener('pointerdown', event => {
+    if (chatHistoryOpen && !document.getElementById('chat-container').contains(event.target)) {
+        toggleChatHistory(false);
+    }
+});
 
 const invitedRoom = new URLSearchParams(window.location.search).get('room');
 if (invitedRoom && /^[A-Za-z]{4}$/.test(invitedRoom)) {
