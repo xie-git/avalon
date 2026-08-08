@@ -6,7 +6,7 @@
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/css/common.css?v=20260808-qa5">
-<link rel="stylesheet" href="/static/css/player.css?v=20260808-qa5">
+<link rel="stylesheet" href="/static/css/player.css?v=20260808-qa6">
 </head>
 <body>
 
@@ -18,7 +18,11 @@
 <div id="player-board" class="player-board hidden">
     <div class="pb-shields" id="pb-shields"></div>
     <div class="pb-stats">
-        <div class="pb-stat pb-proposal-stat"><span>PROPOSAL</span><strong id="pb-proposal">1/5</strong></div>
+        <div class="pb-stat pb-proposal-stat" aria-label="Team proposal 1 of 5">
+            <span>PROPOSAL</span>
+            <div class="pb-proposal-circles" aria-hidden="true"><i class="active"></i><i></i><i></i><i></i><i></i></div>
+            <strong id="pb-proposal" class="sr-only">1/5</strong>
+        </div>
         <div class="pb-stat"><span>FAILED</span><strong id="pb-fails">0/3</strong></div>
         <div class="pb-stat"><span>TIME</span><strong id="pb-game-time">00:00</strong></div>
     </div>
@@ -81,7 +85,7 @@
         </div>
         <div class="player-list" id="lobby-player-list"></div>
         <div class="avatar-picker" id="avatar-picker">
-            <div class="avatar-picker-label">Choose your knight</div>
+            <div class="avatar-picker-label">Choose your character</div>
             <div class="avatar-options" id="avatar-options"></div>
         </div>
         <button type="button" class="btn lobby-ready-btn" id="btn-ready" aria-pressed="false">I’m Ready</button>
@@ -362,7 +366,7 @@
 </style>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/presence.js?v=20260808-qa5"></script>
-<script src="/static/js/player.js?v=20260808-qa5"></script>
+<script src="/static/js/presence.js?v=20260808-qa6"></script>
+<script src="/static/js/player.js?v=20260808-qa6"></script>
 </body>
 </html>

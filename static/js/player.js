@@ -234,6 +234,9 @@ function updatePlayerProposalTrack() {
     count.textContent = `${attempt}/5`;
     row.classList.toggle('danger', attempt >= 5);
     row.setAttribute('aria-label', `Team proposal ${attempt} of 5`);
+    row.querySelectorAll('.pb-proposal-circles i').forEach((circle, index) => {
+        circle.classList.toggle('active', index < attempt);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -417,11 +420,12 @@ function renderAvatarPicker() {
     options.replaceChildren();
     const me = presencePlayers.find(player => player.player_id === myPlayerId || player.name === myName);
     const colorIndex = me ? me.color_index : 0;
-    for (let index = 0; index < 8; index++) {
+    const avatarNames = window.AVALON_AVATAR_NAMES || [];
+    for (let index = 0; index < 10; index++) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = `avatar-option${me && Number(me.avatar_index) === index ? ' selected' : ''}`;
-        button.setAttribute('aria-label', `Knight ${index + 1}`);
+        button.setAttribute('aria-label', avatarNames[index] || `Medieval character ${index + 1}`);
         button.appendChild(presenceTable.createPortraitElement(index, colorIndex));
         button.addEventListener('click', () => {
             document.querySelectorAll('.avatar-option').forEach(item => item.classList.remove('selected'));

@@ -1365,7 +1365,7 @@ def on_select_avatar(data):
     try:
         game, player = validate_caller(request.sid, require_phase=GamePhase.LOBBY)
         data = require_object(data)
-        player.avatar_index = require_integer(data, "avatar_index", minimum=0, maximum=7)
+        player.avatar_index = require_integer(data, "avatar_index", minimum=0, maximum=9)
         emit_to_game(game.code, "lobby_update", lobby_payload(game))
     except ValueError as error:
         emit_validation_error(error)

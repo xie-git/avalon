@@ -788,6 +788,17 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
 }
 .pb-proposal-stat strong { color: var(--gold-light); }
 .pb-proposal-stat.danger strong { color: #ff8d83; }
+.pb-proposal-circles { display: flex; align-items: center; gap: 3px; }
+.pb-proposal-circles i {
+    width: 7px;
+    height: 7px;
+    border: 1px solid rgba(201,168,76,0.62);
+    border-radius: 50%;
+    background: transparent;
+}
+.pb-proposal-circles i.active { background: var(--gold); border-color: var(--gold-light); }
+.pb-proposal-stat.danger .pb-proposal-circles i { border-color: rgba(232,91,77,0.75); }
+.pb-proposal-stat.danger .pb-proposal-circles i.active { background: #e85b4d; border-color: #ff9a90; }
 #pb-game-time { display: inline-block; width: 7ch; text-align: right; }
 
 /* ============================================================

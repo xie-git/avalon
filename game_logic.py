@@ -287,7 +287,7 @@ def add_player(game: GameState, name: str, player_id: str) -> PlayerInfo:
         player_id=player_id,
         name=name,
         color_index=color_index,
-        avatar_index=color_index % 8,
+        avatar_index=color_index % 10,
     )
     game.players[player_id] = player
     game.player_order.append(player_id)

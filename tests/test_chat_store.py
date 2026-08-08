@@ -144,10 +144,10 @@ def test_player_can_select_avatar_in_lobby(socket_client, create_game):
     joined = packets_for(player, "join_success")[0]
     player.get_received()
 
-    player.emit("select_avatar", {"avatar_index": 6})
+    player.emit("select_avatar", {"avatar_index": 9})
 
     game = server.games[created["room_code"]]
-    assert game.players[joined["player_id"]].avatar_index == 6
+    assert game.players[joined["player_id"]].avatar_index == 9
     updates = packets_for(player, "lobby_update")
-    assert updates[-1]["players"][0]["avatar_index"] == 6
+    assert updates[-1]["players"][0]["avatar_index"] == 9
     player.disconnect()

@@ -20,37 +20,97 @@
         return hash >>> 0;
     }
 
-    const AVATAR_MARKS = ['◆', '✦', '▲', '●', '✚', '♜', '☾', '⚜'];
+    const AVATAR_NAMES = [
+        'Knight', 'King', 'Queen', 'Wizard', 'Archer',
+        'Monk', 'Jester', 'Blacksmith', 'Bard', 'Ranger',
+    ];
+    window.AVALON_AVATAR_NAMES = AVATAR_NAMES;
 
     function createPortrait(palette, avatarIndex = 0) {
-        const variant = Math.abs(Number(avatarIndex) || 0) % AVATAR_MARKS.length;
-        const mark = AVATAR_MARKS[variant];
-        const crests = [
-            `<path d="M32 9V3m0 0c5 0 9 2 11 5-5-1-8 0-11 3" fill="${palette[1]}" stroke="${palette[1]}" stroke-width="2" stroke-linecap="round"/>`,
-            `<path d="M25 11 20 5m19 6 5-6" fill="none" stroke="${palette[1]}" stroke-width="3" stroke-linecap="round"/>`,
-            `<path d="m24 10 2-7 6 5 6-5 2 7" fill="${palette[1]}" stroke="#e1e4e4" stroke-width="1"/>`,
-            `<path d="M24 10c0-6 4-9 8-9s8 3 8 9c-5-3-11-3-16 0Z" fill="${palette[1]}"/>`,
-            `<path d="M32 10 26 1h12Z" fill="${palette[1]}" stroke="#e1e4e4" stroke-width="1"/>`,
-            `<path d="M23 10c3-7 15-7 18 0" fill="none" stroke="${palette[1]}" stroke-width="4"/>`,
-            `<path d="M27 10c-1-6 2-9 5-9s6 3 5 9" fill="${palette[1]}"/>`,
-            `<path d="M24 9 28 2l4 6 4-6 4 7" fill="none" stroke="${palette[1]}" stroke-width="2.5" stroke-linejoin="round"/>`,
+        const variant = Math.abs(Number(avatarIndex) || 0) % AVATAR_NAMES.length;
+        const skin = '#d8aa82';
+        const skinLight = '#efc49d';
+        const ink = '#25272a';
+        const steel = '#aeb7bb';
+        const silver = '#dce2e3';
+        const gold = '#e0c26e';
+        const characters = [
+            `<!-- Knight -->
+             <path d="M13 64c2-15 9-23 19-23s17 8 19 23" fill="${steel}" stroke="${silver}" stroke-width="1.5"/>
+             <path d="M19 27v-5c0-10 5-16 13-16s13 6 13 16v5" fill="${steel}" stroke="${silver}" stroke-width="1.5"/>
+             <path d="M16 26h32v14c-4 6-9 9-16 9s-12-3-16-9Z" fill="#50575a" stroke="${silver}" stroke-width="1.5"/>
+             <path d="M18 29h28v7H18Z" fill="#171a1c"/><path d="M23 29v7m6-7v7m6-7v7m6-7v7" stroke="${palette[1]}" stroke-width="1.5"/>
+             <path d="M32 7V2c6 0 10 2 12 6-5-1-9 0-12 3" fill="${palette[1]}" stroke="${palette[1]}" stroke-width="1.5"/>`,
+            `<!-- King -->
+             <path d="M10 64c3-15 11-22 22-22s19 7 22 22" fill="${palette[0]}" stroke="${gold}" stroke-width="1.5"/>
+             <circle cx="32" cy="29" r="14" fill="${skin}"/><path d="M19 27c1-11 6-16 13-16s12 5 13 16c-6-5-20-5-26 0" fill="#6b442f"/>
+             <path d="M23 35c2 12 16 12 18 0-2 13-5 17-9 17s-7-4-9-17" fill="#efe1c6"/>
+             <path d="m18 15 3-11 7 7 4-9 4 9 7-7 3 11Z" fill="${gold}" stroke="#fff0aa" stroke-width="1.2"/>
+             <circle cx="22" cy="8" r="1.5" fill="${palette[1]}"/><circle cx="32" cy="5" r="1.5" fill="${palette[1]}"/><circle cx="42" cy="8" r="1.5" fill="${palette[1]}"/>`,
+            `<!-- Queen -->
+             <path d="M9 64c4-16 12-23 23-23s19 7 23 23" fill="${palette[0]}" stroke="${gold}" stroke-width="1.5"/>
+             <path d="M17 30c0-13 6-20 15-20s15 7 15 20v20c-5-5-10-7-15-7s-10 2-15 7Z" fill="#5b3428"/>
+             <ellipse cx="32" cy="29" rx="12" ry="15" fill="${skinLight}"/>
+             <path d="m20 15 3-10 6 7 3-10 3 10 6-7 3 10Z" fill="${gold}" stroke="#fff0aa" stroke-width="1.2"/>
+             <path d="M25 35c4 3 10 3 14 0" fill="none" stroke="#a85e5e" stroke-width="1.3" stroke-linecap="round"/>
+             <path d="m25 51 7 8 7-8" fill="none" stroke="${gold}" stroke-width="2"/>`,
+            `<!-- Wizard -->
+             <path d="M8 64c4-17 12-24 24-24s20 7 24 24" fill="${palette[0]}" stroke="${palette[1]}" stroke-width="1.5"/>
+             <circle cx="32" cy="31" r="13" fill="${skin}"/><path d="M21 33c1 18 21 18 22 0-3 16-7 22-11 22s-8-6-11-22" fill="#d6d1c6"/>
+             <path d="M14 22h36L36 2c-2-3-6-3-8 0Z" fill="${palette[0]}" stroke="${palette[1]}" stroke-width="1.5"/>
+             <path d="M18 18h28" stroke="${gold}" stroke-width="2"/><circle cx="35" cy="10" r="2" fill="${gold}"/>
+             <path d="M24 29c2-2 4-2 6 0m4 0c2-2 4-2 6 0" fill="none" stroke="${ink}" stroke-width="1.4"/>`,
+            `<!-- Archer -->
+             <path d="M10 64c3-16 10-23 22-23s19 7 22 23" fill="${palette[0]}" stroke="${palette[1]}" stroke-width="1.5"/>
+             <path d="M19 31c0-13 5-21 13-21s13 8 13 21l-6 13H25Z" fill="${palette[0]}" stroke="${palette[1]}" stroke-width="1.5"/>
+             <ellipse cx="32" cy="31" rx="9" ry="12" fill="${skin}"/>
+             <path d="M19 29c4-8 9-12 13-12s9 4 13 12c-8-4-18-4-26 0" fill="${palette[0]}"/>
+             <path d="M17 53 7 9m4 4 5-7m-5 7-7-3" stroke="#c89d58" stroke-width="2" stroke-linecap="round"/>
+             <path d="M43 12c6 10 6 23 0 33" fill="none" stroke="#c89d58" stroke-width="1.8"/>`,
+            `<!-- Monk -->
+             <path d="M8 64c4-17 12-24 24-24s20 7 24 24" fill="#6a4a30" stroke="${palette[1]}" stroke-width="1.5"/>
+             <circle cx="32" cy="29" r="15" fill="${skin}"/><path d="M19 25c1-10 6-15 13-15s12 5 13 15c-5-4-9-5-13-5s-8 1-13 5" fill="#75503b"/>
+             <ellipse cx="32" cy="15" rx="7" ry="5" fill="${skinLight}"/>
+             <path d="M21 38c7 6 15 6 22 0" fill="none" stroke="#6d4937" stroke-width="3"/>
+             <path d="M17 49c9 5 21 5 30 0M32 45v19" stroke="#b58b58" stroke-width="1.5"/>
+             <circle cx="32" cy="54" r="2" fill="none" stroke="${gold}" stroke-width="1.2"/>`,
+            `<!-- Jester -->
+             <path d="M9 64c3-16 11-23 23-23s20 7 23 23" fill="${palette[0]}" stroke="${gold}" stroke-width="1.5"/>
+             <circle cx="32" cy="31" r="13" fill="${skinLight}"/>
+             <path d="M17 18c1-9 7-14 15-14 0 7-2 11-5 14M47 18c-1-9-7-14-15-14 0 7 2 11 5 14" fill="${palette[0]}" stroke="${palette[1]}" stroke-width="1.5"/>
+             <circle cx="17" cy="18" r="3" fill="${gold}"/><circle cx="47" cy="18" r="3" fill="${gold}"/>
+             <path d="M25 35c4 5 10 5 14 0" fill="none" stroke="#a85e5e" stroke-width="1.5"/>
+             <path d="m20 48 6 6 6-6 6 6 6-6" fill="none" stroke="${gold}" stroke-width="2"/>`,
+            `<!-- Blacksmith -->
+             <path d="M8 64c4-16 12-23 24-23s20 7 24 23" fill="#3f4142" stroke="${steel}" stroke-width="1.5"/>
+             <circle cx="32" cy="29" r="14" fill="${skin}"/><path d="M18 25c2-11 7-16 14-16s12 5 14 16" fill="#343638"/>
+             <path d="M20 36c3 12 21 12 24 0-4 14-8 18-12 18s-8-4-12-18" fill="#3a2922"/>
+             <path d="M18 50h28l-3 14H21Z" fill="#7a4e31" stroke="#c3905e" stroke-width="1.3"/>
+             <path d="M48 8v31m-7-31h14v8H41Z" fill="${steel}" stroke="${silver}" stroke-width="1.4"/>
+             <path d="M22 29h7m6 0h7" stroke="${ink}" stroke-width="1.5"/>`,
+            `<!-- Bard -->
+             <path d="M9 64c3-16 11-23 23-23s20 7 23 23" fill="${palette[0]}" stroke="${palette[1]}" stroke-width="1.5"/>
+             <circle cx="32" cy="30" r="13" fill="${skinLight}"/><path d="M18 26c1-11 6-16 14-16s13 5 14 16c-7-5-21-5-28 0" fill="#5c3526"/>
+             <path d="M17 17c8-8 20-10 31-4-7 1-14 4-20 9Z" fill="${palette[0]}" stroke="${palette[1]}" stroke-width="1.4"/>
+             <path d="M41 14c5-8 9-10 14-10-2 6-6 10-14 13" fill="${gold}"/>
+             <ellipse cx="47" cy="52" rx="8" ry="11" fill="#a66d37" stroke="#e4b66e" stroke-width="1.5"/><circle cx="47" cy="52" r="3" fill="#3c2417"/>
+             <path d="M40 46 25 26" stroke="#e4b66e" stroke-width="2"/>`,
+            `<!-- Ranger -->
+             <path d="M8 64c3-17 11-24 24-24s21 7 24 24" fill="${palette[0]}" stroke="${palette[1]}" stroke-width="1.5"/>
+             <path d="M16 33c0-15 6-24 16-24s16 9 16 24L42 47H22Z" fill="${palette[0]}" stroke="${palette[1]}" stroke-width="1.5"/>
+             <ellipse cx="32" cy="31" rx="10" ry="13" fill="${skin}"/>
+             <path d="M18 28c4-13 9-18 14-18s10 5 14 18c-8-5-20-5-28 0" fill="${palette[0]}"/>
+             <path d="M21 32h22l-3 8c-6 4-10 4-16 0Z" fill="#252b28"/>
+             <path d="M25 30h5m4 0h5" stroke="${skinLight}" stroke-width="1.6"/>
+             <path d="M14 55 6 16m3 1 6-6M50 55l8-39m-3 1-6-6" stroke="#8e6b3d" stroke-width="1.7"/>`,
         ];
         const svg = document.createElementNS(NS, 'svg');
         svg.setAttribute('viewBox', '0 0 64 64');
         svg.setAttribute('aria-hidden', 'true');
         svg.innerHTML = `
             <circle cx="32" cy="32" r="31" fill="${palette[0]}"/>
-            <path d="M6 64c2-16 11-24 26-24s24 8 26 24" fill="#25272a"/>
-            <path d="M15 64c2-12 8-19 17-19s15 7 17 19" fill="${palette[0]}" stroke="${palette[1]}" stroke-width="1.5"/>
-            <path d="M20 44h24l-3 20H23Z" fill="#777d80"/>
-            <path d="M27 46h10v18H27Z" fill="${palette[0]}"/>
-            <path d="M18 29v-5c0-10 6-17 14-17s14 7 14 17v5Z" fill="#b9bec0" stroke="#e1e4e4" stroke-width="1.5"/>
-            <path d="M16 27h32v13c-4 5-9 8-16 8s-12-3-16-8Z" fill="#4b5053" stroke="#c9cdce" stroke-width="1.5"/>
-            <path d="M18 30h28v6H18Z" fill="#181b1d"/>
-            <path d="M23 30v6m6-6v6m6-6v6m6-6v6" stroke="${palette[1]}" stroke-width="1.6"/>
-            ${crests[variant]}
-            <path d="M25 56l7 5 7-5" fill="none" stroke="${palette[1]}" stroke-width="2"/>
-            <text x="32" y="59" text-anchor="middle" font-size="9" font-weight="bold" fill="${palette[1]}">${mark}</text>
+            ${characters[variant]}
+            <circle cx="32" cy="32" r="30" fill="none" stroke="${palette[1]}" stroke-width="1.25" opacity="0.8"/>
         `;
         return svg;
     }
