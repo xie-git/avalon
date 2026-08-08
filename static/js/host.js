@@ -6,7 +6,6 @@ const socket = io();
 const connectionStatus = document.getElementById('connection-status');
 const presenceTable = new AvalonPresenceTable({
     mode: 'host',
-    onPublicChange: update => socket.emit('update_public_spectrum', update),
 });
 const HOST_CODE_KEY = 'avalon-host-game-code';
 const HOST_TOKEN_KEY = 'avalon-host-token';

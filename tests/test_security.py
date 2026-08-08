@@ -94,6 +94,34 @@ def test_phone_creator_can_fill_lobby_to_selected_count_with_bots(socket_client)
     assert update["settings"]["beta_test_player_count"] == 8
 
 
+def test_phone_bot_leader_starts_timer_then_proposes_without_tv(socket_client):
+    socket_client.emit("create_player_game", {"player_name": "Arthur"})
+    joined = packets_for(socket_client, "join_success")[0]
+    socket_client.emit(
+        "set_beta_test_mode", {"enabled": True, "target_count": 6}
+    )
+    socket_client.emit("start_game")
+    game = server.games[joined["room_code"]]
+    game.current_leader_index = next(
+        index
+        for index, player_id in enumerate(game.player_order)
+        if game.players[player_id].is_bot
+    )
+    socket_client.get_received()
+
+    socket_client.emit("night_phase_ack")
+
+    packets = socket_client.get_received()
+    names = [packet["name"] for packet in packets]
+    assert "discussion_start" in names
+    assert "proposal_start" in names
+    assert "vote_start" in names
+    assert names.index("discussion_start") < names.index("proposal_start")
+    assert game.phase == server.GamePhase.TEAM_VOTE
+    assert game.proposed_team
+    assert game.timer_deadline is None
+
+
 def test_phone_only_game_reaches_first_mission_without_host_display(socket_client):
     socket_client.emit("create_player_game", {"player_name": "Arthur"})
     created = packets_for(socket_client, "join_success")[0]
@@ -134,37 +162,65 @@ def test_phone_only_game_reaches_first_mission_without_host_display(socket_clien
         client.disconnect()
 
 
-def test_public_spectrum_is_shared_and_restored_for_new_players(socket_client, create_game):
+def test_group_spectrum_averages_other_players_and_ignores_self_rating(
+    socket_client, create_game
+):
     created = create_game(socket_client)
-    player = server.socketio.test_client(server.app)
-    player.emit(
+    arthur = server.socketio.test_client(server.app)
+    arthur.emit(
         "join_game", {"room_code": created["room_code"], "player_name": "Arthur"}
     )
-    joined = packets_for(player, "join_success")[0]
+    arthur_join = packets_for(arthur, "join_success")[0]
+    merlin = server.socketio.test_client(server.app)
+    merlin.emit(
+        "join_game", {"room_code": created["room_code"], "player_name": "Merlin"}
+    )
+    merlin_join = packets_for(merlin, "join_success")[0]
+    percival = server.socketio.test_client(server.app)
+    percival.emit(
+        "join_game", {"room_code": created["room_code"], "player_name": "Percival"}
+    )
+    percival_join = packets_for(percival, "join_success")[0]
     socket_client.get_received()
 
-    position = {"x": 0.82, "y": 0.27}
-    player.emit(
-        "update_public_spectrum",
-        {"player_id": joined["player_id"], "position": position},
+    arthur.emit(
+        "update_spectrum_ratings",
+        {"positions": {
+            arthur_join["player_id"]: {"x": 1.0, "y": 1.0},
+            percival_join["player_id"]: {"x": 0.8, "y": 0.2},
+        }},
     )
-    update = packets_for(socket_client, "public_spectrum_updated")[0]
-    assert update["positions"] == {joined["player_id"]: position}
-    assert server.games[created["room_code"]].public_spectrum_positions == {
-        joined["player_id"]: position
-    }
+    merlin.emit(
+        "update_spectrum_ratings",
+        {"positions": {
+            percival_join["player_id"]: {"x": 0.4, "y": 0.6},
+        }},
+    )
+    percival.emit(
+        "update_spectrum_ratings",
+        {"positions": {
+            arthur_join["player_id"]: {"x": 0.2, "y": 0.7},
+            percival_join["player_id"]: {"x": 0.0, "y": 0.0},
+        }},
+    )
+
+    positions = packets_for(socket_client, "public_spectrum_updated")[-1]["positions"]
+    assert positions[percival_join["player_id"]] == {"x": 0.6, "y": 0.4}
+    assert positions[arthur_join["player_id"]] == {"x": 0.2, "y": 0.7}
 
     newcomer = server.socketio.test_client(server.app)
     newcomer.emit(
-        "join_game", {"room_code": created["room_code"], "player_name": "Merlin"}
+        "join_game", {"room_code": created["room_code"], "player_name": "Gawain"}
     )
     newcomer_join = packets_for(newcomer, "join_success")[0]
-    assert newcomer_join["public_spectrum"] == {joined["player_id"]: position}
+    assert newcomer_join["public_spectrum"] == positions
     newcomer.disconnect()
-    player.disconnect()
+    percival.disconnect()
+    merlin.disconnect()
+    arthur.disconnect()
 
 
-def test_public_spectrum_rejects_invalid_or_unauthorized_updates(socket_client, create_game):
+def test_group_spectrum_rejects_invalid_or_unauthorized_updates(socket_client, create_game):
     created = create_game(socket_client)
     player = server.socketio.test_client(server.app)
     player.emit(
@@ -174,8 +230,8 @@ def test_public_spectrum_rejects_invalid_or_unauthorized_updates(socket_client, 
     socket_client.get_received()
 
     player.emit(
-        "update_public_spectrum",
-        {"player_id": joined["player_id"], "position": {"x": 1.2, "y": 0.5}},
+        "update_spectrum_ratings",
+        {"positions": {joined["player_id"]: {"x": 1.2, "y": 0.5}}},
     )
     assert packets_for(player, "error")[-1]["message"] == (
         "Spectrum coordinates must be between 0 and 1"
@@ -183,11 +239,11 @@ def test_public_spectrum_rejects_invalid_or_unauthorized_updates(socket_client, 
 
     outsider = server.socketio.test_client(server.app)
     outsider.emit(
-        "update_public_spectrum",
-        {"player_id": joined["player_id"], "position": {"x": 0.5, "y": 0.5}},
+        "update_spectrum_ratings",
+        {"positions": {joined["player_id"]: {"x": 0.5, "y": 0.5}}},
     )
     assert packets_for(outsider, "error")[-1]["message"] == "Not connected to a game"
-    assert server.games[created["room_code"]].public_spectrum_positions == {}
+    assert server.games[created["room_code"]].spectrum_ratings == {}
     outsider.disconnect()
     player.disconnect()
 

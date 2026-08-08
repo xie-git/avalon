@@ -118,8 +118,8 @@
     class PresenceTable {
         constructor(options = {}) {
             this.mode = options.mode === 'host' ? 'host' : 'player';
-            this.onPublicChange = typeof options.onPublicChange === 'function'
-                ? options.onPublicChange
+            this.onPrivateChange = typeof options.onPrivateChange === 'function'
+                ? options.onPrivateChange
                 : () => {};
             this.roomCode = '';
             this.players = [];
@@ -142,7 +142,7 @@
                 </div>
                 <div class="presence-view-toggle" role="group" aria-label="Choose suspicion spectrum">
                     <button type="button" data-view="private" aria-pressed="true">Private</button>
-                    <button type="button" data-view="public" aria-pressed="false">Public</button>
+                    <button type="button" data-view="public" aria-pressed="false">Group Average</button>
                     <span class="presence-privacy-note">Only you can see this layout</span>
                 </div>
                 <div class="presence-field">
@@ -213,7 +213,34 @@
             }
             this.players = ordered.concat([...byName.values()]);
             this.prunePositions();
+            this.ensurePrivatePositions();
             this.render();
+            this.save();
+            this.notifyPrivateChange();
+        }
+
+        defaultPosition(index, count) {
+            if (count > 5) {
+                const columns = Math.ceil(count / 2);
+                const column = Math.floor(index / 2);
+                return {
+                    x: columns <= 1 ? 0.5 : 0.1 + (column / (columns - 1)) * 0.8,
+                    y: index % 2 === 0 ? 0.38 : 0.76,
+                };
+            }
+            return {
+                x: count <= 1 ? 0.5 : 0.1 + (index / (count - 1)) * 0.8,
+                y: 0.62,
+            };
+        }
+
+        ensurePrivatePositions() {
+            this.players.forEach((player, index) => {
+                const key = String(player.player_id || player.name);
+                if (!this.privatePositions[key]) {
+                    this.privatePositions[key] = this.defaultPosition(index, this.players.length);
+                }
+            });
         }
 
         sanitizePositions(positions) {
@@ -258,8 +285,9 @@
             });
             const isPublic = this.view === 'public';
             this.element.classList.toggle('presence-public-view', isPublic);
+            this.element.querySelector('.presence-reset').classList.toggle('hidden', isPublic);
             this.privacyNote.textContent = isPublic
-                ? 'Shared live — anyone can move avatars'
+                ? 'Read-only average · self-ratings excluded'
                 : 'Only you can see this layout';
         }
 
@@ -420,14 +448,8 @@
                 let yRatio;
                 if (saved) {
                     ({ x: xRatio, y: yRatio } = saved);
-                } else if (count > 5) {
-                    const columns = Math.ceil(count / 2);
-                    const column = Math.floor(index / 2);
-                    xRatio = columns <= 1 ? 0.5 : 0.1 + (column / (columns - 1)) * 0.8;
-                    yRatio = index % 2 === 0 ? 0.38 : 0.76;
                 } else {
-                    xRatio = count <= 1 ? 0.5 : 0.1 + (index / (count - 1)) * 0.8;
-                    yRatio = 0.62;
+                    ({ x: xRatio, y: yRatio } = this.defaultPosition(index, count));
                 }
                 this.place(node, xRatio * width, yRatio * height, width, height);
             });
@@ -444,6 +466,7 @@
         }
 
         startDrag(event, node) {
+            if (this.view === 'public') return;
             if (event.button !== undefined && event.button !== 0) return;
             event.preventDefault();
             node.focus({ preventScroll: true });
@@ -474,15 +497,12 @@
             if (!this.drag || this.drag.pointerId !== event.pointerId || this.drag.key !== node.dataset.playerKey) return;
             node.classList.remove('dragging');
             this.drag = null;
-            if (this.view === 'public') {
-                this.onPublicChange({
-                    player_id: node.dataset.playerKey,
-                    position: this.publicPositions[node.dataset.playerKey],
-                });
-            } else this.save();
+            this.save();
+            this.notifyPrivateChange();
         }
 
         moveWithKeyboard(event, node) {
+            if (this.view === 'public') return;
             if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
             event.preventDefault();
             const positions = this.activePositions();
@@ -493,9 +513,13 @@
                 y: Math.min(1, Math.max(0, current.y + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0))),
             };
             this.layout();
-            if (this.view === 'public') {
-                this.onPublicChange({ player_id: node.dataset.playerKey, position: positions[node.dataset.playerKey] });
-            } else this.save();
+            this.save();
+            this.notifyPrivateChange();
+        }
+
+        notifyPrivateChange() {
+            if (!this.roomCode) return;
+            this.onPrivateChange({ positions: this.sanitizePositions(this.privatePositions) });
         }
 
         save() {
@@ -509,16 +533,15 @@
         }
 
         reset() {
-            if (this.view === 'public') {
-                this.publicPositions = {};
-                this.onPublicChange({ reset: true });
-            } else {
-                this.privatePositions = {};
-                const key = this.storageKey();
-                if (key) {
-                    try { localStorage.removeItem(key); } catch (_) { /* no-op */ }
-                }
+            if (this.view === 'public') return;
+            this.privatePositions = {};
+            this.ensurePrivatePositions();
+            const key = this.storageKey();
+            if (key) {
+                try { localStorage.removeItem(key); } catch (_) { /* no-op */ }
             }
+            this.save();
+            this.notifyPrivateChange();
             this.layout();
         }
 

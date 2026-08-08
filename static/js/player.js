@@ -6,7 +6,7 @@ const socket = io();
 const connectionStatus = document.getElementById('connection-status');
 const presenceTable = new AvalonPresenceTable({
     mode: 'player',
-    onPublicChange: update => socket.emit('update_public_spectrum', update),
+    onPrivateChange: update => socket.emit('update_spectrum_ratings', update),
 });
 const RECONNECT_TOKEN_KEY = 'avalon-player-session-token';
 const RECONNECT_PLAYER_KEY = 'avalon-player-id';
@@ -1146,7 +1146,10 @@ socket.on('discussion_start', data => {
         'Mission Discussion',
         document.querySelector('#screen-discussion .discussion-info')
     );
-    transition('screen-discussion');
+    // Bot leaders can advance through proposal and into voting immediately.
+    // A delayed transition here would otherwise fire afterward and cover the
+    // actionable vote screen with a stale, frozen discussion screen.
+    showScreen('screen-discussion');
 });
 
 socket.on('discussion_tick', data => {

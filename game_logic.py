@@ -199,9 +199,10 @@ class GameState:
         # Host-issued, short-lived recovery codes for disconnected seats.
         self.seat_recovery_codes: dict[str, tuple[str, float]] = {}
 
-        # Shared, role-neutral avatar positions for the public suspicion board.
-        # Values are normalized coordinates so phones and large displays agree.
-        self.public_spectrum_positions: dict[str, dict[str, float]] = {}
+        # Each seated player's private suspicion layout, submitted as normalized
+        # coordinates. The shared board is computed from these ratings and never
+        # includes a player's placement of their own avatar.
+        self.spectrum_ratings: dict[str, dict[str, dict[str, float]]] = {}
 
     def player_count(self) -> int:
         return len(self.players)
@@ -569,6 +570,29 @@ def get_game_summary(game: GameState) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def spectrum_average_positions(game: GameState) -> dict[str, dict[str, float]]:
+    """Average every target's ratings, excluding the target's self-rating."""
+    totals: dict[str, list[float]] = {}
+    for rater_id, positions in game.spectrum_ratings.items():
+        if rater_id not in game.players or game.players[rater_id].is_bot:
+            continue
+        for target_id, position in positions.items():
+            if target_id not in game.players or target_id == rater_id:
+                continue
+            total = totals.setdefault(target_id, [0.0, 0.0, 0.0])
+            total[0] += position["x"]
+            total[1] += position["y"]
+            total[2] += 1
+    return {
+        target_id: {
+            "x": round(total[0] / total[2], 6),
+            "y": round(total[1] / total[2], 6),
+        }
+        for target_id, total in totals.items()
+        if total[2]
+    }
+
+
 def build_state_snapshot(game: GameState, player_id: str) -> dict:
     """Full state snapshot for a reconnecting player."""
     player = game.players.get(player_id)
@@ -597,11 +621,7 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
             "beta_test_mode": game.beta_test_mode,
             "beta_test_player_count": game.beta_test_player_count,
         },
-        "public_spectrum": {
-            player_id: position
-            for player_id, position in game.public_spectrum_positions.items()
-            if player_id in game.players
-        },
+        "public_spectrum": spectrum_average_positions(game),
         "timer_kind": game.timer_kind,
         "timer_remaining": (
             max(0, int(game.timer_deadline - time.time() + 0.999))

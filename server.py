@@ -39,6 +39,7 @@ from game_logic import (
     process_assassination,
     get_game_summary,
     build_state_snapshot,
+    spectrum_average_positions,
     MISSION_SIZES,
     secure_random,
 )
@@ -480,11 +481,7 @@ def emit_validation_error(error: Exception) -> None:
 
 
 def public_spectrum_payload(game: GameState) -> dict[str, dict[str, float]]:
-    return {
-        player_id: position
-        for player_id, position in game.public_spectrum_positions.items()
-        if player_id in game.players
-    }
+    return spectrum_average_positions(game)
 
 
 def lobby_payload(game: GameState) -> dict:
@@ -566,26 +563,6 @@ def validate_caller(
     return game, player
 
 
-def validate_spectrum_editor(sid: str) -> GameState:
-    """Allow any seated player or the authenticated host display to edit."""
-    info = sid_to_info.get(sid)
-    if not info:
-        raise ValueError("Not connected to a game")
-    game = games.get(info.get("game_code"))
-    if not game:
-        raise ValueError("Game not found")
-    player_id = info.get("player_id")
-    if player_id and player_id in game.players:
-        return game
-    if (
-        info.get("is_host_screen")
-        and game.host_token
-        and hmac.compare_digest(info.get("host_token", ""), game.host_token)
-    ):
-        return game
-    raise ValueError("Game membership required")
-
-
 # ---------------------------------------------------------------------------
 # Background task: Discussion timer
 # ---------------------------------------------------------------------------
@@ -607,6 +584,22 @@ def run_discussion_timer(game_code: str, phase_key: str, duration: int):
             if remaining <= 0:
                 transition_to_team_proposal(game)
                 return
+
+
+def run_bot_discussion(game_code: str, phase_key: str, duration: int):
+    """Let the timer visibly begin, then have a bot leader choose promptly."""
+    pause(min(3, max(1, duration)))
+    game = games.get(game_code)
+    if not game:
+        return
+    with game.lock:
+        if game.timer_phase_key != phase_key or game.phase != GamePhase.DISCUSSION:
+            return
+        game.timer_phase_key = None
+        game.timer_deadline = None
+        game.timer_kind = None
+        emit_to_game(game.code, "discussion_end", {})
+        transition_to_team_proposal(game)
 
 
 def run_proposal_timer(game_code: str, phase_key: str, duration: int):
@@ -690,15 +683,16 @@ def start_round(game: GameState):
             "leader_id": leader.player_id if leader else None,
         },
     )
-    if leader and leader.is_bot:
-        game.timer_phase_key = None
-        game.timer_deadline = None
-        game.timer_kind = None
-        transition_to_team_proposal(game)
-        return
     socketio.start_background_task(
         run_discussion_timer, game.code, phase_key, game.discussion_time
     )
+    if leader and leader.is_bot:
+        if app.config.get("TESTING"):
+            run_bot_discussion(game.code, phase_key, game.discussion_time)
+        else:
+            socketio.start_background_task(
+                run_bot_discussion, game.code, phase_key, game.discussion_time
+            )
 
 
 def transition_to_team_proposal(game: GameState):
@@ -1488,21 +1482,21 @@ def on_claim_player_seat(data):
 # --- Lobby management ---
 
 
-@socketio.on("update_public_spectrum")
+@socketio.on("update_spectrum_ratings")
 @rate_limited()
-def on_update_public_spectrum(data):
+def on_update_spectrum_ratings(data):
     try:
-        game = validate_spectrum_editor(request.sid)
+        game, rater = validate_caller(request.sid)
         data = require_object(data)
-        if data.get("reset") is True:
-            game.public_spectrum_positions = {}
-        else:
-            player_id = require_string(data, "player_id", minimum=1, maximum=128)
-            if player_id not in game.players:
+        positions = data.get("positions")
+        if not isinstance(positions, dict) or len(positions) > 10:
+            raise ValueError("positions must be an object with at most 10 players")
+        clean_positions = {}
+        for player_id, position in positions.items():
+            if not isinstance(player_id, str) or player_id not in game.players:
                 raise ValueError("Player is not in this game")
-            position = data.get("position")
             if not isinstance(position, dict):
-                raise ValueError("position must be an object")
+                raise ValueError("Each position must be an object")
             x = position.get("x")
             y = position.get("y")
             if (
@@ -1516,10 +1510,11 @@ def on_update_public_spectrum(data):
                 or not 0 <= y <= 1
             ):
                 raise ValueError("Spectrum coordinates must be between 0 and 1")
-            game.public_spectrum_positions[player_id] = {
+            clean_positions[player_id] = {
                 "x": round(float(x), 4),
                 "y": round(float(y), 4),
             }
+        game.spectrum_ratings[rater.player_id] = clean_positions
         emit_to_game(
             game.code,
             "public_spectrum_updated",
