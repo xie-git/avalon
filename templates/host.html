@@ -4,8 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon — Host</title>
-<link rel="stylesheet" href="/static/css/common.css?v=20260807">
-<link rel="stylesheet" href="/static/css/host.css?v=20260807-beta3">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/css/common.css?v=20260808-qa5">
+<link rel="stylesheet" href="/static/css/host.css?v=20260808-qa5">
 <style>
 /* In-game confirmation modal */
 #confirm-modal {
@@ -91,6 +92,7 @@
 </head>
 <body>
 
+<div id="connection-status" class="connection-status hidden" role="status" aria-live="polite"></div>
 <!-- In-game confirmation modal (replaces browser confirm()) -->
 <div id="confirm-modal">
     <div class="confirm-box">
@@ -108,13 +110,20 @@
     <div class="confirm-box">
         <h2 style="font-family:var(--font-title);font-size:1.3rem;color:var(--gold);margin-bottom:1.5rem">⚙ Game Settings</h2>
         <div class="confirm-actions" style="flex-direction:column;gap:0.75rem">
+            <label class="tv-chat-setting"><input type="checkbox" id="toggle-tv-chat" checked> Show recent chat on TV</label>
+            <div id="seat-recovery-list" class="seat-recovery-list"></div>
+            <div id="seat-recovery-result" class="seat-recovery-result hidden"></div>
             <button class="btn btn-primary" id="btn-host-back-lobby" style="width:100%">↩ Back to Lobby</button>
             <button class="btn" id="btn-host-end-game" style="width:100%;border-color:var(--red-glow);color:#ff8080">✕ End Game (New Game)</button>
             <button class="btn" id="btn-host-settings-close" style="width:100%;margin-top:0.5rem">Cancel</button>
         </div>
     </div>
 </div>
-<button id="btn-host-settings" style="display:none;position:fixed;top:0.75rem;right:0.75rem;z-index:402;background:rgba(20,15,5,0.85);border:1px solid var(--border-gold);border-radius:var(--radius-pill);padding:0.4rem 0.75rem;font-family:var(--font-heading);font-size:0.7rem;letter-spacing:0.1em;color:var(--gold-light);cursor:pointer">⚙</button>
+<div id="host-top-meta" class="host-top-meta hidden">
+    <div class="leader-display" id="leader-display">Leader: <span>—</span></div>
+    <div id="host-room-code-badge" class="host-room-code-badge">Room <strong>----</strong></div>
+    <button id="btn-host-settings" class="host-settings-button" title="Game settings" aria-label="Game settings">⚙</button>
+</div>
 
 <div id="page-transition"></div>
 <div id="flash-overlay"></div>
@@ -122,8 +131,14 @@
 <!-- Game header (mission tracker) — shown during gameplay -->
 <div id="game-header">
     <div class="mission-tracker" id="mission-tracker"></div>
-    <div class="leader-display" id="leader-display"></div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.4rem">
+        <div class="proposal-track" id="host-proposal-track" aria-label="Team proposal 1 of 5">
+            <span class="proposal-track-label">TEAM PROPOSAL</span>
+            <div class="proposal-track-tokens" aria-hidden="true">
+                <i class="active"></i><i></i><i></i><i></i><i></i>
+            </div>
+            <strong id="host-proposal-count">1 / 5</strong>
+        </div>
         <div class="game-stats"><div><span>FAILED</span><strong id="host-fails">0/3</strong></div><div><span>TIME</span><strong id="host-game-time">00:00</strong></div></div>
     </div>
 </div>
@@ -147,6 +162,14 @@
                 <div class="room-code-label">Room Code</div>
                 <div class="room-code" id="room-code-display">----</div>
                 <div class="room-join-url" id="join-url-display"></div>
+                <div class="join-tools">
+                    <img id="join-qr" class="join-qr hidden" alt="QR code to join this room">
+                    <div class="join-tool-actions">
+                        <button type="button" class="btn" id="btn-copy-join">Copy Invite</button>
+                        <button type="button" class="btn" id="btn-share-join">Share</button>
+                    </div>
+                </div>
+                <div class="host-can-play-note">The host joins as a player from the same address on their phone.</div>
             </div>
             <div class="round-table-container">
                 <svg id="round-table-svg" viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
@@ -175,6 +198,10 @@
                     <label>Discussion Time <span class="value-display" id="discussion-time-display">60 sec</span></label>
                     <input type="range" id="discussion-slider" min="10" max="600" step="5" value="60">
                 </div>
+                <div class="setting-row proposal-setting-row">
+                    <label><input type="checkbox" id="proposal-timer-enabled" checked> Advisory proposal timer</label>
+                    <span class="value-display" id="proposal-time-display">60 sec</span>
+                </div>
                 <div class="beta-test-setting">
                     <div class="beta-test-copy">
                         <strong>Beta Test Mode</strong>
@@ -189,6 +216,7 @@
             <div class="start-btn-wrapper">
                 <button class="btn btn-primary" id="btn-start-game" disabled>Begin the Quest</button>
                 <div class="dim-text" id="start-game-hint" style="font-size:0.75rem;margin-top:0.5rem;font-family:var(--font-heading);text-align:center">Need 6–10 players</div>
+                <button type="button" class="btn lobby-close-room" id="btn-close-room">Close Room</button>
             </div>
         </div>
     </div>
@@ -224,6 +252,7 @@
         <h2 class="proposal-title" id="proposal-leader-name">—</h2>
         <p class="proposal-subtitle">is assembling the quest party...</p>
         <p class="dim-text" id="proposal-mission-size" style="font-family:var(--font-heading);font-size:0.85rem;letter-spacing:0.1em"></p>
+        <div class="proposal-timer-host">Leader’s time: <strong id="proposal-timer-host">—</strong></div>
         <div class="proposed-players" id="proposed-players-display"></div>
     </div>
 
@@ -273,6 +302,10 @@
         <div class="game-over-banner" id="game-over-banner"></div>
         <p class="win-reason" id="win-reason-text"></p>
         <div class="roles-reveal-grid" id="roles-reveal-grid"></div>
+        <div class="game-chronicle host-chronicle">
+            <h3>Chronicle of Avalon</h3>
+            <div id="chronicle-host"></div>
+        </div>
         <div class="game-over-actions">
             <button class="btn btn-primary" id="btn-return-lobby">Return to Lobby</button>
         </div>
@@ -280,7 +313,10 @@
 
 </div>
 
+<div id="host-chat-strip" class="host-chat-strip hidden" aria-live="polite"></div>
+
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/host.js?v=20260807-beta3"></script>
+<script src="/static/js/presence.js?v=20260808-qa5"></script>
+<script src="/static/js/host.js?v=20260808-qa5"></script>
 </body>
 </html>

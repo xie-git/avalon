@@ -30,7 +30,7 @@ def test_security_headers_and_development_routes_are_closed():
     assert b"Create Game" in host_response.data
 
 
-def test_party_pages_do_not_reference_image_or_audio_assets():
+def test_party_pages_do_not_reference_portrait_or_audio_assets():
     client = server.app.test_client()
     served_files = (
         client.get("/").data,
@@ -41,8 +41,20 @@ def test_party_pages_do_not_reference_image_or_audio_assets():
         client.get("/static/css/player.css").data,
     )
     combined = b"\n".join(served_files).lower()
-    for marker in (b"<img", b"new audio", b"/static/img", b"/static/sounds"):
+    for marker in (b"new audio", b"/static/img", b"/static/sounds"):
         assert marker not in combined
+
+
+def test_join_qr_is_same_origin_and_only_exists_for_live_rooms(socket_client, create_game):
+    created = create_game(socket_client)
+    client = server.app.test_client()
+
+    response = client.get(f"/join-qr.svg?room={created['room_code']}")
+    assert response.status_code == 200
+    assert response.mimetype == "image/svg+xml"
+    assert b"<svg" in response.data
+    assert response.headers["Cache-Control"] == "no-store"
+    assert client.get("/join-qr.svg?room=ZZZZ").status_code == 404
 
 
 def test_game_creation_is_one_click_and_returns_separate_capability(socket_client):
@@ -53,6 +65,22 @@ def test_game_creation_is_one_click_and_returns_separate_capability(socket_clien
     assert result["host_token"] != result["room_code"]
 
 
+def test_host_display_owner_can_also_join_as_a_player(socket_client, create_game):
+    created = create_game(socket_client)
+    player_view = server.socketio.test_client(server.app)
+    player_view.emit(
+        "join_game",
+        {"room_code": created["room_code"], "player_name": "Host Player"},
+    )
+
+    joined = packets_for(player_view, "join_success")[0]
+    game = server.games[created["room_code"]]
+    assert joined["player_name"] == "Host Player"
+    assert game.host_sid in server.sid_to_info
+    assert game.player_count() == 1
+    player_view.disconnect()
+
+
 def test_repeated_create_from_same_host_is_idempotent(socket_client):
     socket_client.emit("create_game")
     first = packets_for(socket_client, "game_created")[0]
@@ -60,6 +88,39 @@ def test_repeated_create_from_same_host_is_idempotent(socket_client):
     second = packets_for(socket_client, "game_created")[0]
     assert second["room_code"] == first["room_code"]
     assert len(server.games) == 1
+
+
+def test_repeated_join_from_same_socket_is_idempotent(socket_client, create_game):
+    created = create_game(socket_client)
+    player = server.socketio.test_client(server.app)
+    payload = {"room_code": created["room_code"], "player_name": "Arthur"}
+    player.emit("join_game", payload)
+    first = packets_for(player, "join_success")[0]
+    player.emit("join_game", payload)
+    second = packets_for(player, "join_success")[0]
+
+    assert second["player_id"] == first["player_id"]
+    assert second["session_token"] == first["session_token"]
+    assert server.games[created["room_code"]].player_count() == 1
+    player.disconnect()
+
+
+def test_socket_cannot_switch_to_another_game(socket_client, create_game):
+    first = create_game(socket_client)
+    other_host = server.socketio.test_client(server.app)
+    second = create_game(other_host)
+
+    socket_client.emit(
+        "join_game", {"room_code": second["room_code"], "player_name": "Arthur"}
+    )
+    assert packets_for(socket_client, "error")[-1]["message"] == (
+        "This connection is already in another game"
+    )
+    original_host_sid = server.games[first["room_code"]].host_sid
+    assert original_host_sid in server.sid_to_info
+    assert server.sid_to_info[original_host_sid]["game_code"] == first["room_code"]
+    assert server.games[second["room_code"]].player_count() == 0
+    other_host.disconnect()
 
 
 def test_host_reconnect_rejects_room_code_without_capability(
@@ -89,6 +150,58 @@ def test_host_reconnect_rejects_room_code_without_capability(
     legitimate.disconnect()
 
 
+def test_invalid_player_reconnect_has_a_recoverable_client_event():
+    client = server.socketio.test_client(server.app)
+    client.emit("reconnect_game", {"session_token": "x" * 32})
+
+    assert packets_for(client, "reconnect_failed") == [
+        {"message": "Session not found. Please rejoin."}
+    ]
+    client.disconnect()
+
+
+def test_host_reconnect_snapshot_includes_night_confirmation_progress(
+    socket_client, create_game
+):
+    created, clients, _ = join_players(socket_client, create_game)
+    socket_client.emit("start_game")
+    clients[0].emit("night_phase_ack")
+
+    replacement = server.socketio.test_client(server.app)
+    replacement.emit(
+        "register_host_screen",
+        {
+            "game_code": created["room_code"],
+            "host_token": created["host_token"],
+        },
+    )
+    snapshot = packets_for(replacement, "host_registered")[0]
+    assert snapshot["phase"] == server.GamePhase.NIGHT_PHASE
+    assert snapshot["night_confirmed"] == 1
+    assert snapshot["night_total"] == 6
+    assert snapshot["assassin_name"] is None
+
+    replacement.disconnect()
+    for client in clients:
+        client.disconnect()
+
+
+def test_new_host_tab_revokes_old_host_socket(socket_client, create_game):
+    created = create_game(socket_client)
+    replacement = server.socketio.test_client(server.app)
+    replacement.emit(
+        "register_host_screen",
+        {
+            "game_code": created["room_code"],
+            "host_token": created["host_token"],
+        },
+    )
+
+    assert not socket_client.is_connected()
+    assert packets_for(replacement, "host_registered")[0]["code"] == created["room_code"]
+    replacement.disconnect()
+
+
 def test_player_never_receives_host_authority(socket_client, create_game):
     created = create_game(socket_client)
     player = server.socketio.test_client(server.app)
@@ -103,10 +216,60 @@ def test_player_never_receives_host_authority(socket_client, create_game):
     player.disconnect()
 
 
+def test_ready_state_is_public_and_host_can_recover_a_disconnected_seat(
+    socket_client, create_game
+):
+    created = create_game(socket_client)
+    player = server.socketio.test_client(server.app)
+    player.emit("join_game", {"room_code": created["room_code"], "player_name": "Arthur"})
+    joined = packets_for(player, "join_success")[0]
+    player.get_received()
+
+    player.emit("set_ready", {"ready": True})
+    ready_update = packets_for(socket_client, "lobby_update")[-1]
+    assert ready_update["players"][0]["ready"] is True
+    player.disconnect()
+    socket_client.get_received()
+
+    socket_client.emit("request_seat_recovery", {"player_id": joined["player_id"]})
+    recovery = packets_for(socket_client, "seat_recovery_code")[0]
+    assert recovery["player_name"] == "Arthur"
+    assert len(recovery["code"]) == 6
+
+    replacement = server.socketio.test_client(server.app)
+    replacement.emit(
+        "claim_player_seat",
+        {"room_code": created["room_code"], "recovery_code": recovery["code"]},
+    )
+    recovered = packets_for(replacement, "seat_recovered")[0]
+    assert recovered["snapshot"]["my_player_id"] == joined["player_id"]
+    assert recovered["session_token"] != joined["session_token"]
+    assert server.games[created["room_code"]].players[joined["player_id"]].connected
+
+    stale = server.socketio.test_client(server.app)
+    stale.emit("reconnect_game", {"session_token": joined["session_token"]})
+    assert packets_for(stale, "reconnect_failed")
+    stale.disconnect()
+    replacement.disconnect()
+
+
 def test_malformed_payload_is_controlled(socket_client):
     socket_client.emit("join_game", ["not", "an", "object"])
     errors = packets_for(socket_client, "error")
     assert errors == [{"message": "Invalid request"}]
+
+
+def test_one_ip_cannot_consume_the_global_connection_pool(monkeypatch):
+    monkeypatch.setattr(server, "MAX_CONNECTIONS_PER_IP", 2)
+    first = server.socketio.test_client(server.app)
+    second = server.socketio.test_client(server.app)
+    rejected = server.socketio.test_client(server.app)
+
+    assert first.is_connected()
+    assert second.is_connected()
+    assert not rejected.is_connected()
+    first.disconnect()
+    second.disconnect()
 
 
 def test_join_attempts_are_rate_limited(socket_client):
@@ -171,6 +334,57 @@ def test_host_can_reorder_players_with_browser_payload(socket_client, create_gam
     assert [player["name"] for player in updates[-1]["players"]] == ["Merlin", "Arthur"]
     for player in players:
         player.disconnect()
+
+
+def test_host_cannot_reorder_players_with_a_duplicate_name(
+    socket_client, create_game
+):
+    created = create_game(socket_client)
+    players = []
+    for name in ("Arthur", "Merlin"):
+        player = server.socketio.test_client(server.app)
+        player.emit(
+            "join_game", {"room_code": created["room_code"], "player_name": name}
+        )
+        player.get_received()
+        players.append(player)
+    socket_client.get_received()
+
+    socket_client.emit(
+        "reorder_players", {"order": ["Arthur", "Merlin", "Arthur"]}
+    )
+
+    assert packets_for(socket_client, "error")[-1]["message"] == "Player list mismatch"
+    assert [
+        server.games[created["room_code"]].players[player_id].name
+        for player_id in server.games[created["room_code"]].player_order
+    ] == ["Arthur", "Merlin"]
+    for player in players:
+        player.disconnect()
+
+
+def test_assassin_targets_are_private_in_reconnect_snapshots(
+    socket_client, create_game
+):
+    created, clients, joined = join_players(socket_client, create_game)
+    game = server.games[created["room_code"]]
+    server.assign_roles(game)
+    game.phase = server.GamePhase.ASSASSIN_PHASE
+    assassin = server.get_assassin(game)
+
+    for join in joined:
+        snapshot = server.build_state_snapshot(game, join["player_id"])
+        if join["player_id"] == assassin.player_id:
+            assert snapshot["assassin_id"] == assassin.player_id
+            assert {target["name"] for target in snapshot["targets"]} == {
+                player.name for player in server.get_assassin_targets(game)
+            }
+        else:
+            assert "assassin_id" not in snapshot
+            assert "targets" not in snapshot
+
+    for client in clients:
+        client.disconnect()
 
 
 def test_beta_mode_is_host_only_and_fills_then_removes_bots(
@@ -355,6 +569,20 @@ def test_stale_games_are_reclaimed_when_a_new_game_is_created(
     assert new_game["room_code"] in server.games
 
 
+def test_disconnected_lobby_seat_is_pruned_before_start(socket_client, create_game):
+    created, clients, _ = join_players(socket_client, create_game)
+    game = server.games[created["room_code"]]
+    clients[0].disconnect()
+
+    socket_client.emit("start_game")
+
+    assert game.phase == server.GamePhase.LOBBY
+    assert game.player_count() == 5
+    assert "Need 6-10 players" in packets_for(socket_client, "error")[-1]["message"]
+    for client in clients[1:]:
+        client.disconnect()
+
+
 def join_players(host, create_game, count=6):
     created = create_game(host)
     clients = []
@@ -385,6 +613,8 @@ def test_complete_mission_waits_for_host_before_advancing(socket_client, create_
     assert game.phase == server.GamePhase.DISCUSSION
 
     socket_client.emit("skip_discussion", {"confirmed": True})
+    assert game.timer_kind == "proposal"
+    assert game.timer_deadline is not None
     leader_id = game.current_leader().player_id
     leader_index = game.player_order.index(leader_id)
     team = game.player_order[: game.mission_size()]
@@ -393,6 +623,8 @@ def test_complete_mission_waits_for_host_before_advancing(socket_client, create_
     for client in clients:
         client.emit("cast_vote", {"vote": "approve"})
     assert game.phase == server.GamePhase.MISSION
+    assert game.proposal_history[0]["approved"] is True
+    assert "votes" not in game.proposal_history[0]
 
     for player_id in team:
         client = clients[game.player_order.index(player_id)]
@@ -404,6 +636,39 @@ def test_complete_mission_waits_for_host_before_advancing(socket_client, create_
     socket_client.emit("advance_after_mission")
     assert game.phase == server.GamePhase.DISCUSSION
     assert game.current_mission == 1
+    for client in clients:
+        client.disconnect()
+
+
+def test_fifth_rejected_team_ends_game_without_another_proposal(
+    socket_client, create_game
+):
+    created, clients, _ = join_players(socket_client, create_game)
+    game = server.games[created["room_code"]]
+
+    socket_client.emit("start_game")
+    for client in clients:
+        client.get_received()
+        client.emit("night_phase_ack")
+    socket_client.emit("skip_discussion", {"confirmed": True})
+
+    for attempt in range(1, 6):
+        assert game.phase == server.GamePhase.TEAM_PROPOSAL
+        leader_index = game.player_order.index(game.current_leader().player_id)
+        team = game.player_order[: game.mission_size()]
+        clients[leader_index].emit("propose_team", {"team": team})
+        for client in clients:
+            client.emit("cast_vote", {"vote": "reject"})
+        assert game.consecutive_rejections == attempt
+
+    assert game.phase == server.GamePhase.GAME_OVER
+    assert game.winner == "evil"
+    assert game.win_reason == "rejections"
+    final_packets = clients[0].get_received()
+    assert len([p for p in final_packets if p["name"] == "game_over"]) == 1
+    assert final_packets[-1]["name"] == "game_over"
+    assert final_packets[-1]["args"][0]["win_reason"] == "rejections"
+
     for client in clients:
         client.disconnect()
 

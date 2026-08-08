@@ -78,6 +78,287 @@ body::after {
 
 /* ---- Utility classes ---- */
 .hidden { display: none !important; }
+
+/* ============================================================
+   PLAYER PRESENCE TABLE
+   A shared, role-neutral visual that keeps waiting phases alive.
+   ============================================================ */
+.presence-table {
+    width: min(100%, 430px);
+    min-height: 210px;
+    flex: 1 1 250px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    position: relative;
+    user-select: none;
+}
+.presence-heading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    min-height: 27px;
+    font-family: var(--font-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+}
+.presence-title { color: var(--gold-light); font-size: 0.68rem; }
+.presence-count { color: var(--text-dim); font-size: 0.55rem; }
+.presence-reset {
+    margin-left: auto;
+    min-height: 27px;
+    padding: 0.25rem 0.55rem;
+    border: 1px solid rgba(201,168,76,0.42);
+    border-radius: var(--radius-pill);
+    background: rgba(10,8,4,0.72);
+    color: var(--text-secondary);
+    font-family: var(--font-heading);
+    font-size: 0.52rem;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+.presence-reset:hover,
+.presence-reset:focus-visible { color: var(--gold-light); border-color: var(--gold); outline: none; }
+.presence-field {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 180px;
+    overflow: hidden;
+    border: 1px solid rgba(201,168,76,0.2);
+    border-radius: 44% / 48%;
+    background:
+        radial-gradient(ellipse at center, rgba(95,72,25,0.12) 0 28%, transparent 29%),
+        radial-gradient(ellipse at center, rgba(201,168,76,0.06), rgba(4,4,5,0.18) 65%, transparent 72%);
+    box-shadow: inset 0 0 32px rgba(0,0,0,0.45), 0 0 22px rgba(201,168,76,0.04);
+}
+.presence-table-center {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: min(42%, 150px);
+    aspect-ratio: 1.45;
+    transform: translate(-50%, -50%);
+    border: 2px solid rgba(201,168,76,0.26);
+    border-radius: 50%;
+    background: radial-gradient(ellipse, rgba(70,49,17,0.54), rgba(20,15,7,0.82));
+    box-shadow: inset 0 0 22px rgba(0,0,0,0.55), 0 0 18px rgba(201,168,76,0.08);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: rgba(201,168,76,0.45);
+    pointer-events: none;
+}
+.presence-center-mark { font-size: clamp(0.85rem, 3dvh, 1.25rem); line-height: 1; }
+.presence-center-label {
+    max-width: 90%;
+    margin-top: 0.15rem;
+    font-family: var(--font-title);
+    font-size: clamp(0.48rem, 1.6dvh, 0.68rem);
+    letter-spacing: 0.08em;
+    text-align: center;
+    line-height: 1.15;
+}
+.presence-center-content {
+    display: none;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+}
+.presence-has-center-content .presence-center-mark,
+.presence-has-center-content .presence-center-label { display: none; }
+.presence-has-center-content .presence-center-content { display: flex; }
+.presence-nodes { position: absolute; inset: 0; pointer-events: none; }
+.presence-node {
+    position: absolute;
+    width: clamp(58px, 18vw, 76px);
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.12rem;
+    cursor: grab;
+    pointer-events: auto;
+    touch-action: none;
+    z-index: 2;
+    filter: drop-shadow(0 3px 5px rgba(0,0,0,0.72));
+}
+.presence-node.dragging { cursor: grabbing; z-index: 10; filter: drop-shadow(0 7px 12px rgba(0,0,0,0.9)); }
+.presence-portrait {
+    position: relative;
+    display: block;
+    width: clamp(38px, 11vw, 52px);
+    aspect-ratio: 1;
+    border: 2px solid var(--player-color, var(--border-gold));
+    border-radius: 50%;
+    overflow: visible;
+    background: #17140d;
+    box-shadow: 0 0 0 2px rgba(6,5,3,0.8), 0 0 12px var(--player-color-dark, rgba(201,168,76,0.18));
+    transition: transform 0.15s, filter 0.15s;
+}
+.presence-node.dragging .presence-portrait { transform: scale(1.09); filter: brightness(1.12); }
+.presence-portrait svg { display: block; width: 100%; height: 100%; border-radius: 50%; }
+.presence-status {
+    position: absolute;
+    right: -1px;
+    bottom: 1px;
+    width: 9px;
+    height: 9px;
+    border: 2px solid #090806;
+    border-radius: 50%;
+    background: #54d184;
+    box-shadow: 0 0 6px rgba(84,209,132,0.7);
+}
+.presence-name {
+    display: block;
+    width: 100%;
+    padding: 0.16rem 0.2rem;
+    overflow: hidden;
+    border: 1px solid var(--player-color, rgba(201,168,76,0.46));
+    border-radius: var(--radius-pill);
+    background: var(--player-color-dark, rgba(8,7,4,0.91));
+    color: var(--player-color, var(--text-primary));
+    font-family: var(--font-heading);
+    font-size: clamp(0.48rem, 2.2vw, 0.62rem);
+    line-height: 1.15;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+}
+.presence-role {
+    display: block;
+    max-width: 120%;
+    padding: 0.13rem 0.28rem;
+    overflow: hidden;
+    border: 1px solid currentColor;
+    border-radius: var(--radius-pill);
+    background: rgba(5,5,7,0.94);
+    font-family: var(--font-heading);
+    font-size: clamp(0.42rem, 1.5vw, 0.56rem);
+    line-height: 1.1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.presence-node.role-revealed.team-good { color: #71c5ff; filter: drop-shadow(0 0 9px rgba(63,164,255,0.65)); }
+.presence-node.role-revealed.team-evil { color: #ff7777; filter: drop-shadow(0 0 9px rgba(232,63,63,0.68)); }
+.presence-node.role-revealed.team-good .presence-portrait,
+.presence-node.role-revealed.team-good .presence-name { border-color: #71c5ff; color: #b8e3ff; }
+.presence-node.role-revealed.team-evil .presence-portrait,
+.presence-node.role-revealed.team-evil .presence-name { border-color: #ff6565; color: #ffc0c0; }
+.presence-node.disconnected { opacity: 0.48; filter: grayscale(0.8) drop-shadow(0 3px 4px rgba(0,0,0,0.6)); }
+.presence-node.disconnected .presence-status { background: #777; box-shadow: none; }
+.presence-node:focus-visible .presence-portrait { outline: 2px solid var(--gold-light); outline-offset: 3px; }
+.mission-history-tooltip {
+    position: fixed;
+    z-index: 1200;
+    width: min(330px, calc(100vw - 16px));
+    display: flex;
+    flex-direction: column;
+    gap: 0.38rem;
+    padding: 0.8rem 0.95rem;
+    border: 1px solid var(--gold);
+    border-radius: var(--radius-md);
+    background: rgba(10,8,5,0.98);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.72);
+    color: var(--text-secondary);
+    font-family: var(--font-heading);
+    font-size: 0.7rem;
+    line-height: 1.4;
+}
+.mission-history-tooltip strong { color: var(--gold-light); font-size: 0.82rem; }
+.mission-history-clickable { cursor: pointer; }
+.mission-history-clickable:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .presence-node,
+    .presence-portrait { transition: none; }
+}
+
+/* Social presence additions */
+.presence-ready {
+    position: absolute;
+    right: -0.2rem;
+    top: -0.15rem;
+    display: grid;
+    place-items: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 50%;
+    background: #234b32;
+    border: 1px solid #8fd5a6;
+    color: #c8f4d5;
+    font: 700 0.7rem/1 sans-serif;
+    box-shadow: 0 0 10px rgba(104, 207, 137, 0.45);
+}
+.presence-node.ready .presence-portrait { box-shadow: 0 0 0 2px rgba(104, 207, 137, 0.32), 0 0 16px rgba(104, 207, 137, 0.2); }
+.ready-mark { margin-left: auto; color: #9de0af; font-family: var(--font-heading); font-size: 0.68rem; }
+
+.game-chronicle {
+    width: min(100%, 760px);
+    margin-inline: auto;
+}
+.game-chronicle h3 {
+    margin: 0 0 0.55rem;
+    color: var(--gold);
+    font: 700 0.78rem/1.2 var(--font-heading);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.chronicle-entry {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.55rem 0.7rem;
+    margin-bottom: 0.4rem;
+    border: 1px solid var(--border-gold);
+    border-left-width: 3px;
+    border-radius: var(--radius-sm);
+    background: rgba(0, 0, 0, 0.24);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+.chronicle-entry.pass { border-left-color: var(--blue-glow); }
+.chronicle-entry.fail,
+.chronicle-entry.rejected { border-left-color: var(--red-glow); }
+.chronicle-entry strong { color: var(--text-primary); font-family: var(--font-heading); }
+.chronicle-entry small { color: var(--text-dim); }
+.presence-center-content #proposal-timer-host,
+.presence-center-content #proposal-timer-player {
+    display: block;
+    color: var(--gold-light);
+    font-family: var(--font-title);
+    font-size: clamp(1.45rem, 4.5vmin, 2.65rem);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.05;
+    text-align: center;
+}
+.presence-center-content #proposal-timer-host.warning,
+.presence-center-content #proposal-timer-player.warning { color: #ff8080; }
+
+.connection-status {
+    position: fixed;
+    top: max(0.5rem, env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    max-width: calc(100vw - 2rem);
+    padding: 0.45rem 0.8rem;
+    border: 1px solid rgba(255, 128, 128, 0.6);
+    border-radius: var(--radius-pill);
+    background: rgba(45, 8, 8, 0.95);
+    color: #ffd0d0;
+    font-family: var(--font-heading);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    text-align: center;
+    box-shadow: 0 3px 18px rgba(0, 0, 0, 0.45);
+}
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 
 /* ---- Gold divider ---- */

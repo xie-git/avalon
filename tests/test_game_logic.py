@@ -38,6 +38,14 @@ def test_room_codes_are_four_characters_and_unique():
         codes.add(code)
 
 
+def test_player_heraldic_colors_are_unique_and_public():
+    game = make_game(10)
+    public_players = game.public_players()
+
+    assert [player["color_index"] for player in public_players] == list(range(10))
+    assert len({player["color_index"] for player in public_players}) == 10
+
+
 def test_role_assignment_has_expected_teams():
     game = make_game(6)
     assign_roles(game)

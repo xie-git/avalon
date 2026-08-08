@@ -4,11 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon</title>
-<link rel="stylesheet" href="/static/css/common.css?v=20260807">
-<link rel="stylesheet" href="/static/css/player.css?v=20260807-beta3">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/css/common.css?v=20260808-qa5">
+<link rel="stylesheet" href="/static/css/player.css?v=20260808-qa5">
 </head>
 <body>
 
+<div id="connection-status" class="connection-status hidden" role="status" aria-live="polite"></div>
 <div id="page-transition"></div>
 <div id="flash-overlay"></div>
 
@@ -16,6 +18,7 @@
 <div id="player-board" class="player-board hidden">
     <div class="pb-shields" id="pb-shields"></div>
     <div class="pb-stats">
+        <div class="pb-stat pb-proposal-stat"><span>PROPOSAL</span><strong id="pb-proposal">1/5</strong></div>
         <div class="pb-stat"><span>FAILED</span><strong id="pb-fails">0/3</strong></div>
         <div class="pb-stat"><span>TIME</span><strong id="pb-game-time">00:00</strong></div>
     </div>
@@ -56,6 +59,13 @@
             </div>
             <div class="error-message" id="join-error"></div>
             <button class="btn btn-primary" id="btn-join">Join the Round Table</button>
+            <button type="button" class="join-recovery-toggle" id="btn-show-recovery">Recover a disconnected seat</button>
+            <div class="join-recovery hidden" id="join-recovery">
+                <label for="input-recovery-code">Host recovery code</label>
+                <input type="text" id="input-recovery-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
+                <button type="button" class="btn" id="btn-recover-seat">Recover My Seat</button>
+                <div class="error-message" id="recovery-error"></div>
+            </div>
         </div>
     </div>
 
@@ -70,6 +80,11 @@
             <div id="host-start-hint" class="dim-text" style="font-size:0.75rem;margin-top:0.4rem;font-family:var(--font-heading)">Need 6–10 players</div>
         </div>
         <div class="player-list" id="lobby-player-list"></div>
+        <div class="avatar-picker" id="avatar-picker">
+            <div class="avatar-picker-label">Choose your knight</div>
+            <div class="avatar-options" id="avatar-options"></div>
+        </div>
+        <button type="button" class="btn lobby-ready-btn" id="btn-ready" aria-pressed="false">I’m Ready</button>
         <p class="waiting-text" style="margin-top:1rem">Waiting for the host to begin...</p>
     </div>
 
@@ -81,7 +96,7 @@
         <div class="role-card-wrapper">
             <div class="role-card" id="role-card">
                 <div class="role-card-face role-card-back-face">
-                    <div class="card-back-pattern">⚔</div>
+                    <div class="card-back-pattern">AVALON</div>
                 </div>
                 <div class="role-card-face role-card-front-face" id="role-card-front">
                     <div class="role-team-badge" id="role-team-badge"></div>
@@ -90,7 +105,7 @@
                 </div>
             </div>
         </div>
-        <button class="btn btn-primary" id="btn-confirm-role" style="width:100%;margin-top:1rem" disabled>
+        <button class="btn btn-primary role-confirm-button" id="btn-confirm-role" disabled>
             I understand my role
         </button>
     </div>
@@ -132,6 +147,7 @@
             Select <span id="proposal-required">?</span> members &nbsp;·&nbsp;
             <span id="proposal-selected-count" style="color:var(--gold-light)">0</span> chosen
         </div>
+        <div class="proposal-timer-player">Leader’s time: <strong id="proposal-timer-player">—</strong></div>
         <div class="player-select-list" id="player-select-list"></div>
         <button class="btn btn-primary" id="btn-lock-team" disabled style="width:100%;margin-top:0.5rem">
             Lock In Team
@@ -206,6 +222,10 @@
         <div class="game-over-roles">
             <h3>Full Role Reveal</h3>
             <div class="roles-list" id="roles-list-player"></div>
+        </div>
+        <div class="game-chronicle">
+            <h3>Chronicle of Avalon</h3>
+            <div id="chronicle-player"></div>
         </div>
     </div>
 
@@ -342,6 +362,7 @@
 </style>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/player.js?v=20260807-beta3"></script>
+<script src="/static/js/presence.js?v=20260808-qa5"></script>
+<script src="/static/js/player.js?v=20260808-qa5"></script>
 </body>
 </html>

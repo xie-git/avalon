@@ -9,6 +9,8 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
+.playwright-cli/
+output/
 *.egg-info/
 dist/
 build/

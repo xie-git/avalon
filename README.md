@@ -1,49 +1,56 @@
 # Avalon
 
-A Jackbox-style, real-time Avalon game for one host display and 6–10 player
-phones. The host opens `/host`, clicks **Create Game**, and receives a
-four-letter room code. Everyone else opens the main URL and joins with that
-same code—no account, app, VPN, or Tailscale installation is required for
-players.
+A small, real-time, Jackbox-style implementation of *The Resistance: Avalon*.
+One shared host screen drives the game while 6–10 players use their phones. No
+accounts, app installation, or Tailscale access are required for players.
 
-The server can run multiple independent games at once. It keeps game state in
-memory, so restarting the container ends active games. Inactive games are
-automatically reclaimed after 12 hours.
+## Features
 
-Image and sound source files remain in the repository for future use, but the
-current party build does not reference or ship them. The UI uses text, CSS, and
-inline game symbols only, keeping the phone download small and silent.
+- Complete 6–10 player Avalon flow: private roles, night information,
+  discussion, team proposals, voting, quests, assassination, and role reveal.
+- A TV-friendly host display with room/leader badges, mission tracker, timers,
+  phase-specific status panels, optional recent chat, and in-game settings.
+- A phone UI with private actionable controls, reconnect messaging, role
+  reminder, mission board, and short live chat.
+- A persistent draggable fellowship table on host and joined-player screens.
+  Players choose from eight knight variants; each player keeps a stable color
+  across their avatar, name, and chat messages.
+- Completed mission shields are clickable on host and phones. Their tooltip
+  shows the leader, quest party, Success count, and Fail count.
+- Refresh and temporary-disconnect recovery restores the same seat, role, and
+  current actionable phase, timers, and recent chat using a private browser
+  token that survives tab closure. The host can issue a five-minute recovery
+  code when a player must move to another phone.
+- Lobby ready indicators, phone action vibration,
+  screen wake lock where supported, and action-needed page titles.
+- A same-origin QR code plus copy/share controls for joining a room.
+- A post-game Chronicle summarizes leaders, parties, public vote totals, and
+  aggregate quest results without revealing who submitted individual cards.
+- Multiple independent rooms can run concurrently.
+- Optional beta-test mode fills a lobby with legal bot players.
+- Persistent, timestamped chat and replay-oriented game event logs in one
+  bounded SQLite database.
+- Responsive layouts for iPhones, other phones, laptops, and cast/TV screens.
+- No analytics, advertising, tracking, or public history endpoints.
 
-## What remains protected
+The host may also play: keep `/host` on the shared display and join normally
+from that person's phone. The host display does not consume a player seat.
 
-The simple interface does not expose the underlying controls:
+## Playing
 
-- The host browser receives a private random capability after creating a game.
-- Knowing or guessing the four-letter room code lets someone join as a player,
-  but does not grant host controls.
-- Player reconnect tokens and roles are private to each browser.
-- Production accepts WebSockets only from the configured public origin.
-- The application validates and rate-limits requests.
-- Development and debug routes are unavailable in production.
-- Docker exposes Avalon only on VM loopback for Tailscale Funnel to proxy.
+1. Open `https://YOUR-PUBLIC-HOST/host` on the shared display and create a game.
+2. Players open `https://YOUR-PUBLIC-HOST`, enter the four-letter room code and
+   a name, then optionally choose a knight.
+3. Players choose a knight and may mark themselves ready. Start once 6–10
+   players have joined. The host can reorder seating and adjust the discussion
+   timer or disable the advisory proposal timer.
+4. During play, tap a completed mission shield to inspect that mission. Tap
+   elsewhere to dismiss the tooltip.
 
-This is appropriate for a small party game. It is not intended to resist a
-large, sustained denial-of-service attack.
+Avatar positions are draggable and resettable. Layout choices are kept in that
+browser's local storage; they do not alter game state or reveal roles.
 
-## Host and player flow
-
-1. Open `https://YOUR-VM-NAME.YOUR-TAILNET.ts.net/host` on the shared display.
-2. Click **Create Game**.
-3. Players open `https://YOUR-VM-NAME.YOUR-TAILNET.ts.net` on their phones.
-4. They enter the displayed four-letter code and a name.
-5. The host starts after 6–10 players have joined.
-
-Each host receives a different code, so several games can run concurrently.
-
-## Ruleset and player counts
-
-Avalon supports every party size from 6 through 10. The alignment counts and
-quest teams follow the published rulebook:
+## Ruleset
 
 | Players | Good / Evil | Quest team sizes |
 | --- | --- | --- |
@@ -53,193 +60,126 @@ quest teams follow the published rulebook:
 | 9 | 6 / 3 | 3, 4, 4, 5, 5 |
 | 10 | 6 / 4 | 3, 4, 4, 5, 5 |
 
-Merlin, Percival, Assassin, and Morgana are used at every size. Games with
-7–9 players add a regular Minion of Mordred; 10-player games use Mordred and
-Oberon instead. All players, including the Leader, vote. Ties reject a team;
-five consecutive rejections give Evil the game. Only the fourth quest in a
-7–10 player game requires two Fail cards. Good players must submit Success,
-and after three successful quests the Assassin must name a Good player as
-Merlin. Optional targeting, Lady of the Lake, Plot, Excalibur, and Lancelot
-variants are intentionally not enabled. See the
-[published Avalon rulebook](https://www.rulespal.com/resistance-avalon/rulebook).
+Merlin, Percival, Assassin, and Morgana are always used. Games with 7–9
+players add a Minion of Mordred; 10-player games use Mordred and Oberon. All
+players vote, ties reject, and five consecutive rejected teams give Evil the
+game. Quest four requires two Fails with 7–10 players. Good players can only
+play Success. After three successful quests, the Assassin must identify Merlin.
 
-## New Ubuntu VM setup
+Lady of the Lake, Plot, Excalibur, Lancelot, and other optional variants are
+not implemented.
 
-These instructions assume Ubuntu 24.04 or 26.04 and that this repository is
-already cloned. Commands using `sudo` will ask for the VM user's password.
+## State, chat, and game history
 
-### 1. Update the VM
+Live rooms and reconnect tokens are intentionally memory-only. A container or
+server restart ends active games, so deploy between games. Inactive rooms are
+reclaimed after 12 hours by default.
 
-```bash
-sudo apt update
-sudo apt upgrade -y
-sudo apt install -y ca-certificates curl git
-```
+The `avalon_chat_data` Docker volume contains `/data/avalon-chats.sqlite3`.
+It persists across container recreation and stores:
 
-Reboot if Ubuntu reports that a reboot is required:
+- Chat: UTC timestamp, room, game start time, player name, and message.
+- Game events: roster and roles, settings, leaders, proposals, individual
+  votes, mission parties and individual cards, mission results, assassination,
+  and final result.
 
-```bash
-sudo reboot
-```
+No cookies, reconnect tokens, authorization values, environment variables, or
+IP addresses are written to this database. Game logs intentionally contain
+player names and hidden game information for later replay and balance analysis.
 
-### 2. Install Docker Engine and Compose
-
-Skip this section if both `sudo docker version` and
-`sudo docker compose version` already work.
+Chat and events share a hard 900 MiB SQLite limit, leaving headroom below
+1 GiB. Near the limit, old records are pruned to approximately 720 MiB.
 
 ```bash
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
+# List and read chat
+sudo docker compose exec avalon python chat_history.py --dates
+sudo docker compose exec avalon python chat_history.py --date 2026-08-07
+sudo docker compose exec avalon python chat_history.py --date 2026-08-07 --room ABCD
 
-sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF
-Types: deb
-URIs: https://download.docker.com/linux/ubuntu
-Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
-Components: stable
-Architectures: $(dpkg --print-architecture)
-Signed-By: /etc/apt/keyrings/docker.asc
-EOF
-
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo systemctl enable --now docker
-sudo docker run --rm hello-world
+# List recorded games, then replay one chronological event stream
+sudo docker compose exec avalon python game_history.py --games
+sudo docker compose exec avalon python game_history.py --room ABCD --started-at 1786123456.123
 ```
 
-These are the commands from Docker's official Ubuntu installation method. The
-Compose file continues using `sudo`, so membership in the root-equivalent
-`docker` group is not required. See the
-[official Docker instructions](https://docs.docker.com/engine/install/ubuntu/)
-if Ubuntu or Docker changes these steps.
+## Production deployment
 
-### 3. Pull Avalon
+The included Compose configuration is designed for a dedicated small VM behind
+Tailscale Funnel:
 
-From the existing clone:
+- Gunicorn with one process, required because live game state is in memory.
+- Container runs as an unprivileged user with a read-only root filesystem.
+- All Linux capabilities are dropped and `no-new-privileges` is enabled.
+- CPU, memory, PID, temporary-storage, and rotating-log limits are set.
+- Port 5001 binds only to VM loopback; Funnel terminates public HTTPS.
+- The container restarts unless explicitly stopped and has an HTTP healthcheck.
 
-```bash
-cd ~/avalon
-git pull --ff-only
-git rev-parse --short HEAD
-```
-
-The expected commit is the latest commit on `main`.
-
-### 4. Install and connect Tailscale
-
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-tailscale status
-```
-
-Open the authentication URL printed by `tailscale up`. Then obtain the VM's
-full MagicDNS name:
-
-```bash
-tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))'
-```
-
-It will look similar to `avalon-vm.example-tailnet.ts.net`.
-See the [official Tailscale Linux instructions](https://tailscale.com/docs/install/linux)
-if the installer reports an unsupported distribution.
-
-### 5. Create the production configuration
+Install Docker Engine/Compose and Tailscale using their official instructions,
+clone this repository, then create the production environment:
 
 ```bash
 cd ~/avalon
 cp -n .env.example .env
 python3 -c 'import secrets; print(secrets.token_hex(32))'
 nano .env
-```
-
-Replace `SECRET_KEY` with the generated value. Replace both example URLs with
-the exact HTTPS URL formed from the Tailscale DNS name, without a trailing
-slash. For example:
-
-```dotenv
-APP_ENV=production
-SECRET_KEY=PASTE_THE_GENERATED_VALUE_HERE
-PUBLIC_BASE_URL=https://avalon-vm.example-tailnet.ts.net
-PUBLIC_ORIGIN=https://avalon-vm.example-tailnet.ts.net
-TRUST_PROXY_HEADERS=true
-ENABLE_DEV_ROUTES=false
-MAX_CONNECTIONS=100
-MAX_GAMES=50
-MAX_RATE_KEYS=5000
-GAME_TTL_SECONDS=43200
-```
-
-Protect the file and validate the Compose configuration:
-
-```bash
 chmod 600 .env
-sudo docker compose config --quiet
 ```
 
-The application intentionally refuses to start with the example secret.
-Never commit `.env`.
-
-### 6. Build and start Avalon locally
+Set `SECRET_KEY` to the generated value. Set `PUBLIC_BASE_URL` and
+`PUBLIC_ORIGIN` to the exact public HTTPS origin, without a trailing slash.
+The application refuses unsafe/incomplete production configuration.
 
 ```bash
+sudo docker compose config --quiet
 sudo docker compose build --pull
 sudo docker compose up -d
 sudo docker compose ps
 curl --fail http://127.0.0.1:5001/healthz
 ```
 
-The expected response is `{"status":"ok"}` and Compose should report the
-container as healthy. Port 5001 is bound only to `127.0.0.1`; do not add a
-router port-forward or change it to `0.0.0.0`.
-
-View logs without exposing `.env`:
-
-```bash
-sudo docker compose logs --tail=100 avalon
-```
-
-### 7. Publish through Tailscale Funnel
-
-Only do this after the local health check succeeds:
+Publish only the loopback service:
 
 ```bash
 sudo tailscale funnel --bg 5001
 tailscale funnel status
 ```
 
-The first run may print an approval URL. Funnel terminates public HTTPS and
-proxies only to Avalon's loopback port. Anyone can use the resulting `ts.net`
-URL; players do not need Tailscale.
-The current command options are documented in the
-[official Funnel CLI reference](https://tailscale.com/docs/reference/tailscale-cli/funnel).
+Do not bind the Compose port to `0.0.0.0`, expose the Docker socket, mount host
+credentials, or add a router port-forward. The VM and Tailscale Funnel are the
+intended network boundary.
 
-Test both pages from a phone with Wi-Fi turned off:
+### Configuration
 
-```text
-https://YOUR-VM-NAME.YOUR-TAILNET.ts.net
-https://YOUR-VM-NAME.YOUR-TAILNET.ts.net/host
-```
+| Variable | Production purpose / default |
+| --- | --- |
+| `APP_ENV` | Set to `production` to enforce production checks. |
+| `SECRET_KEY` | Required random secret of at least 32 characters. |
+| `PUBLIC_BASE_URL` | Public HTTPS URL used in join instructions. |
+| `PUBLIC_ORIGIN` | Exact allowed HTTP/WebSocket origin. |
+| `TRUST_PROXY_HEADERS` | `true` when running behind Funnel/proxy. |
+| `ENABLE_DEV_ROUTES` | Keep `false` in production. |
+| `MAX_CONNECTIONS` | Global live connection limit; default `100`. |
+| `MAX_CONNECTIONS_PER_IP` | Per-source limit; default `30`. |
+| `MAX_GAMES` | Active in-memory room limit; default `50`. |
+| `MAX_RATE_KEYS` | Bound for rate-limit bookkeeping; default `5000`. |
+| `GAME_TTL_SECONDS` | Inactive-room lifetime; default `43200` (12 hours). |
+| `CHAT_DB_PATH` | SQLite path; Compose uses `/data/avalon-chats.sqlite3`. |
+| `CHAT_DB_MAX_BYTES` | Requested DB cap, hard-limited to 900 MiB. |
 
-Stop public access without stopping the local container:
+Keep `.env` private and uncommitted. The checked-in `.env.example` contains no
+working credential.
 
-```bash
-sudo tailscale funnel reset
-```
+### Updating and operations
 
-## Updating
-
-Update between games because restarting clears all active rooms:
+Update between games:
 
 ```bash
 cd ~/avalon
 git pull --ff-only
-sudo docker compose build --pull
-sudo docker compose up -d
+sudo docker compose up -d --build
 curl --fail http://127.0.0.1:5001/healthz
 ```
 
-Useful status commands:
+Useful checks:
 
 ```bash
 sudo docker compose ps
@@ -247,7 +187,30 @@ sudo docker compose logs --tail=100 avalon
 tailscale funnel status
 ```
 
-## Local development
+Routine request logging is disabled. Docker retains at most three 10 MiB local
+log files; application errors still appear in the container log. Keep Ubuntu,
+Docker, Tailscale, and Python dependencies patched.
+
+## Security model
+
+This is hardened for a small public hobby game, not sustained hostile traffic:
+
+- A random host capability protects host-only actions; the room code alone
+  grants only player access.
+- Private reconnect tokens and roles are sent only to the relevant browser.
+- Replacement-phone seat recovery requires a short-lived code issued by the
+  authenticated host and rotates the previous reconnect token.
+- Reconnecting from a replacement tab revokes the old socket.
+- HTTP and WebSocket payload sizes, names, lists, room/player counts, games,
+  connections, and event rates are bounded and validated server-side.
+- Production WebSockets accept only the configured origin.
+- Security headers deny framing and unnecessary browser capabilities.
+- Debug/development routes cannot be enabled in production.
+- Stale rooms, sockets, timers, and rate-limit state are cleaned up.
+
+Four-letter room codes are intentionally discoverable and are not passwords.
+
+## Local development and tests
 
 ```bash
 python3 -m venv .venv
@@ -255,25 +218,15 @@ python3 -m venv .venv
 .venv/bin/python server.py
 ```
 
-Open `http://127.0.0.1:5001/host`. Run the test suite with:
+Open `http://127.0.0.1:5001/host` and `http://127.0.0.1:5001`. To enable the
+local debug route, set `ENABLE_DEV_ROUTES=true`; it remains unavailable in
+production.
 
 ```bash
 .venv/bin/pytest -q
 ```
 
-Development-only routes require `ENABLE_DEV_ROUTES=true` and remain forbidden
-when `APP_ENV=production`.
-
-## Capacity and operational notes
-
-- One Gunicorn process is required while state remains in memory; do not add
-  application workers.
-- The default discussion timer is 60 seconds and can be adjusted from 10
-  seconds to 10 minutes on the host lobby screen.
-- The process has 100 threads for hosts and players across concurrent rooms.
-- Defaults allow 100 live connections and 50 active room records. A full game
-  uses up to 11 connections (one host plus ten players).
-- `GAME_TTL_SECONDS=43200` reclaims inactive rooms after 12 hours when another
-  room is created.
-- A container restart ends all games and invalidates all reconnect tokens.
-- Keep Ubuntu, Docker, Tailscale, and Python dependencies patched.
+The application is deliberately database-light and framework-light: Flask,
+Flask-SocketIO, Gunicorn, vanilla JavaScript/CSS, and SQLite. Source image and
+sound assets are retained for possible future use but excluded from the current
+container; the current UI is silent and uses CSS/inline SVG artwork.

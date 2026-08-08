@@ -9,6 +9,35 @@ html, body {
     overflow-x: hidden;
 }
 
+/* Joining, readiness, and action timers */
+.join-recovery-toggle {
+    border: 0;
+    background: none;
+    color: var(--text-dim);
+    text-decoration: underline;
+    text-underline-offset: 0.2rem;
+    cursor: pointer;
+    font: 0.75rem var(--font-body);
+}
+.join-recovery {
+    display: grid;
+    gap: 0.55rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-gold);
+}
+.join-recovery label { color: var(--text-secondary); font: 0.72rem var(--font-heading); }
+.join-recovery input { text-align: center; letter-spacing: 0.35em; font-variant-numeric: tabular-nums; }
+.lobby-ready-btn { width: 100%; margin-top: 0.65rem; }
+.lobby-ready-btn.ready { border-color: #6fc28a; color: #b8efc8; background: rgba(39, 91, 56, 0.24); }
+.proposal-timer-player {
+    color: var(--text-dim);
+    font: 0.72rem var(--font-heading);
+    letter-spacing: 0.05em;
+}
+.proposal-timer-player strong { color: var(--gold-light); font-variant-numeric: tabular-nums; }
+.proposal-timer-player strong.warning { color: #ff8080; }
+.game-chronicle { padding-bottom: 1rem; }
+
 #app {
     min-height: 100vh;
     min-height: 100dvh;
@@ -74,6 +103,27 @@ html, body {
     font-size: 1.1rem;
     text-align: center;
 }
+.avatar-picker { width: 100%; text-align: center; }
+.avatar-picker-label {
+    margin-bottom: 0.4rem;
+    color: var(--text-secondary);
+    font-family: var(--font-heading);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.avatar-options { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem; }
+.avatar-option {
+    width: 42px;
+    height: 42px;
+    padding: 2px;
+    border: 1px solid rgba(201,168,76,0.35);
+    border-radius: 50%;
+    background: #11100d;
+    cursor: pointer;
+}
+.avatar-option svg { display: block; width: 100%; height: 100%; border-radius: 50%; }
+.avatar-option.selected { border: 2px solid var(--gold-light); box-shadow: 0 0 12px rgba(201,168,76,0.5); }
 
 /* ============================================================
    JOIN SCREEN
@@ -195,12 +245,15 @@ html, body {
 #screen-role {
     justify-content: center;
     align-items: center;
-    gap: 2rem;
+    gap: clamp(0.55rem, 1.6dvh, 1rem);
+    overflow: hidden;
 }
 .role-card-wrapper {
     perspective: 1000px;
-    width: 260px;
-    height: 360px;
+    width: clamp(178px, min(56vw, 29dvh), 220px);
+    height: auto;
+    aspect-ratio: 13 / 18;
+    flex: 0 1 auto;
 }
 .role-card {
     width: 100%;
@@ -235,10 +288,11 @@ html, body {
     );
 }
 .role-card-back-face .card-back-pattern {
-    font-family: var(--font-title);
-    font-size: 4rem;
+    font-family: var(--font-heading);
+    font-size: clamp(0.72rem, 3.5vw, 0.95rem);
+    letter-spacing: 0.28em;
     color: var(--border-gold);
-    opacity: 0.4;
+    opacity: 0.65;
 }
 .role-card-front-face {
     transform: rotateY(180deg);
@@ -278,6 +332,11 @@ html, body {
     font-size: 0.95rem;
     color: var(--text-secondary);
     line-height: 1.5;
+}
+.role-confirm-button {
+    width: min(100%, 22rem);
+    margin-top: 0;
+    flex: 0 0 auto;
 }
 
 /* Shuffle animation */
@@ -345,7 +404,7 @@ html, body {
    DISCUSSION SCREEN
    ============================================================ */
 #screen-discussion {
-    gap: 1.5rem;
+    gap: clamp(0.45rem, 1.5dvh, 1rem);
 }
 .discussion-info {
     width: 100%;
@@ -381,6 +440,45 @@ html, body {
     text-align: center;
 }
 .timer-small.warning { color: #ff8080; }
+
+.screen.presence-active {
+    gap: clamp(0.5rem, 1.5dvh, 0.9rem);
+    overflow: hidden;
+}
+.presence-player-panel {
+    flex: 0 1 auto;
+    width: 100%;
+    max-height: min(39dvh, 310px);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(0.4rem, 1.2dvh, 0.75rem);
+    padding: clamp(0.65rem, 1.8dvh, 1rem);
+    overflow-y: auto;
+    border: 1px solid rgba(201,168,76,0.4);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(145deg, rgba(28,21,11,0.95), rgba(8,8,9,0.97));
+    box-shadow: inset 0 0 22px rgba(0,0,0,0.35), 0 6px 20px rgba(0,0,0,0.38);
+}
+.presence-player-panel .screen-header { margin-bottom: 0.25rem; }
+.presence-player-panel .screen-title-small { font-size: clamp(1rem, 5vw, 1.35rem) !important; }
+.presence-player-panel .waiting-text { margin-top: 0 !important; font-size: clamp(0.82rem, 3.7vw, 1rem) !important; }
+.presence-player-panel .player-select-list,
+.presence-player-panel .assassin-target-list,
+.presence-player-panel .roles-list { overflow: visible; }
+.presence-table.presence-player {
+    flex: 1 1 260px;
+    width: 100%;
+    min-height: 205px;
+    max-height: none;
+}
+.presence-player .presence-field { min-height: 175px; }
+.presence-player .presence-center-content .timer-small {
+    font-size: clamp(1.8rem, 10vw, 2.7rem);
+    font-variant-numeric: tabular-nums;
+}
+#screen-game-over.presence-active .game-over-roles { display: none; }
 
 /* ============================================================
    TEAM PROPOSAL SCREEN (leader)
@@ -663,17 +761,34 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
 
 .pb-stats {
     display: flex;
-    gap: 0.45rem;
+    flex-direction: column;
+    gap: 0.05rem;
     flex-shrink: 0;
 }
-.pb-stat { display:flex; flex-direction:column; align-items:flex-end; }
+.pb-stat {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.35rem;
+    min-width: 5.75rem;
+}
 .pb-stat span {
     font-family: var(--font-heading);
     font-size: 0.42rem;
     color: var(--text-dim);
     letter-spacing: 0.08em;
 }
-.pb-stat strong { font-family:var(--font-heading); font-size:0.62rem; color:var(--gold-light); white-space:nowrap; }
+.pb-stat strong {
+    font-family: var(--font-heading);
+    font-size: 0.62rem;
+    color: var(--gold-light);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+}
+.pb-proposal-stat strong { color: var(--gold-light); }
+.pb-proposal-stat.danger strong { color: #ff8d83; }
+#pb-game-time { display: inline-block; width: 7ch; text-align: right; }
 
 /* ============================================================
    CHAT
@@ -716,7 +831,7 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
 }
 .chat-bubble.self { border-color: rgba(201,168,76,0.35); align-self: flex-end; }
 .chat-bubble.fading { opacity: 0; transform: translateY(-4px); }
-.chat-name { color: var(--gold-light); font-family: var(--font-heading); font-size: 0.68rem; margin-right: 0.25rem; }
+.chat-name { color: var(--gold-light); font-family: var(--font-heading); font-size: 0.68rem; margin-right: 0.25rem; font-weight: 700; }
 
 .chat-history-panel {
     background: rgba(8,6,2,0.97);
@@ -763,7 +878,7 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
     line-height: 1.35;
     word-break: break-word;
 }
-.chat-history-entry .chat-name { color: var(--gold-light); font-family: var(--font-heading); font-size: 0.65rem; margin-right: 0.25rem; }
+.chat-history-entry .chat-name { color: var(--gold-light); font-family: var(--font-heading); font-size: 0.65rem; margin-right: 0.25rem; font-weight: 700; }
 .chat-history-entry .chat-time { color: var(--text-dim); font-size: 0.6rem; margin-left: 0.3rem; float: right; }
 
 .chat-input-row {
@@ -900,13 +1015,6 @@ body {
     padding-block: clamp(0.7rem, 2dvh, 0.9rem);
 }
 
-.role-card-wrapper {
-    width: clamp(200px, min(64vw, 32dvh), 260px);
-    height: auto;
-    aspect-ratio: 13 / 18;
-    flex: 0 1 auto;
-}
-
 .role-card-face {
     padding: clamp(0.85rem, 2.5dvh, 1.5rem);
     gap: clamp(0.4rem, 1.4dvh, 0.75rem);
@@ -969,9 +1077,14 @@ body.chat-visible .screen {
     .waiting-text { font-size: 0.95rem; }
     .timer-small { font-size: 2.4rem; }
     .role-description { font-size: 0.86rem; line-height: 1.35; }
-    .role-card-wrapper { width: clamp(190px, min(58vw, 30dvh), 220px); }
+    .role-card-wrapper { width: clamp(168px, min(52vw, 28dvh), 195px); }
     .vote-buttons .btn { padding: 0.85rem 0.5rem; }
     .choice-icon { font-size: 2.1rem; }
+    .presence-heading { min-height: 24px; }
+    .presence-reset { min-height: 24px; }
+    .presence-player-panel { max-height: min(37dvh, 245px); padding: 0.6rem; }
+    .presence-table.presence-player { flex-basis: 220px; min-height: 180px; }
+    .presence-player .presence-field { min-height: 155px; }
 }
 
 @media (orientation: landscape) and (max-height: 520px) {

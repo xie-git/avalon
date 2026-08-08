@@ -1,5 +1,6 @@
 import secrets
 import threading
+import time
 from enum import Enum
 
 
@@ -108,7 +109,15 @@ secure_random = secrets.SystemRandom()
 
 
 class PlayerInfo:
-    def __init__(self, player_id: str, name: str, *, is_bot: bool = False):
+    def __init__(
+        self,
+        player_id: str,
+        name: str,
+        *,
+        is_bot: bool = False,
+        color_index: int = 0,
+        avatar_index: int = 0,
+    ):
         self.player_id = player_id
         self.name = name
         self.sid = None
@@ -117,6 +126,9 @@ class PlayerInfo:
         self.connected = True
         self.session_token = None
         self.is_bot = is_bot
+        self.color_index = color_index
+        self.avatar_index = avatar_index
+        self.ready = is_bot
 
     def to_dict(self, include_role=False):
         d = {
@@ -124,6 +136,9 @@ class PlayerInfo:
             "name": self.name,
             "connected": self.connected,
             "is_bot": self.is_bot,
+            "color_index": self.color_index,
+            "avatar_index": self.avatar_index,
+            "ready": self.ready,
         }
         if include_role:
             d["role"] = self.role
@@ -152,6 +167,8 @@ class GameState:
         self.current_leader_index = 0
         self.current_mission = 0  # 0-indexed 0..4
         self.mission_results: list[str] = []  # "pass" or "fail"
+        self.mission_history: list[dict] = []
+        self.proposal_history: list[dict] = []
         self.consecutive_rejections = 0
 
         # Per-phase state
@@ -172,6 +189,11 @@ class GameState:
 
         # Timer cancellation flag
         self.timer_phase_key: str | None = None
+        self.timer_deadline: float | None = None
+        self.timer_kind: str | None = None
+
+        # Host-issued, short-lived recovery codes for disconnected seats.
+        self.seat_recovery_codes: dict[str, tuple[str, float]] = {}
 
     def player_count(self) -> int:
         return len(self.players)
@@ -208,9 +230,12 @@ class GameState:
         for player in self.players.values():
             player.role = None
             player.team = None
+            player.ready = player.is_bot
         self.current_leader_index = 0
         self.current_mission = 0
         self.mission_results = []
+        self.mission_history = []
+        self.proposal_history = []
         self.consecutive_rejections = 0
         self.proposed_team = []
         self.votes = {}
@@ -220,6 +245,9 @@ class GameState:
         self.winner = None
         self.win_reason = None
         self.timer_phase_key = None
+        self.timer_deadline = None
+        self.timer_kind = None
+        self.seat_recovery_codes = {}
         self.pending_mission_outcome = None
         self.started_at = None
 
@@ -253,7 +281,14 @@ def add_player(game: GameState, name: str, player_id: str) -> PlayerInfo:
     for p in game.players.values():
         if p.name.lower() == name.lower():
             raise ValueError(f"Name '{name}' is already taken")
-    player = PlayerInfo(player_id=player_id, name=name)
+    used_colors = {player.color_index for player in game.players.values()}
+    color_index = next(index for index in range(10) if index not in used_colors)
+    player = PlayerInfo(
+        player_id=player_id,
+        name=name,
+        color_index=color_index,
+        avatar_index=color_index % 8,
+    )
     game.players[player_id] = player
     game.player_order.append(player_id)
     return player
@@ -269,7 +304,11 @@ def remove_player(game: GameState, player_id: str) -> None:
 def reorder_players(game: GameState, ordered_names: list[str]) -> None:
     """Set player_order by name. Raises ValueError if names don't match."""
     name_to_id = {p.name: pid for pid, p in game.players.items()}
-    if set(ordered_names) != set(name_to_id.keys()):
+    if (
+        len(ordered_names) != len(name_to_id)
+        or len(set(ordered_names)) != len(ordered_names)
+        or set(ordered_names) != set(name_to_id)
+    ):
         raise ValueError("Player list mismatch")
     game.player_order = [name_to_id[n] for n in ordered_names]
 
@@ -510,6 +549,8 @@ def get_game_summary(game: GameState) -> dict:
             p.name: {"role": p.role, "team": p.team} for p in game.players.values()
         },
         "mission_results": game.mission_results,
+        "mission_history": game.mission_history,
+        "proposal_history": game.proposal_history,
         "player_order": [game.players[pid].name for pid in game.player_order],
     }
 
@@ -532,6 +573,7 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
         },
         "current_mission": game.current_mission,
         "mission_results": game.mission_results,
+        "mission_history": game.mission_history,
         "consecutive_rejections": game.consecutive_rejections,
         "game_started_at": game.started_at,
         "mission_sizes": MISSION_SIZES.get(game.player_count(), []),
@@ -539,6 +581,12 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
             "discussion_time": game.discussion_time,
             "proposal_time": game.proposal_time,
         },
+        "timer_kind": game.timer_kind,
+        "timer_remaining": (
+            max(0, int(game.timer_deadline - time.time() + 0.999))
+            if game.timer_deadline
+            else None
+        ),
     }
     if game.player_count() in MISSION_SIZES:
         snap["mission_size"] = game.mission_size()
@@ -572,18 +620,22 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
 
     if game.phase == GamePhase.ASSASSIN_PHASE:
         assassin = get_assassin(game)
-        snap.update(
-            {
-                "assassin_name": assassin.name if assassin else "Unknown",
-                "assassin_id": assassin.player_id if assassin else None,
-                "targets": [
-                    {"name": p.name, "player_id": p.player_id}
-                    for p in get_assassin_targets(game)
-                ],
-            }
-        )
+        snap["assassin_name"] = assassin.name if assassin else "Unknown"
+        if player and assassin and player_id == assassin.player_id:
+            snap.update(
+                {
+                    "assassin_id": assassin.player_id,
+                    "targets": [
+                        {"name": p.name, "player_id": p.player_id}
+                        for p in get_assassin_targets(game)
+                    ],
+                }
+            )
 
     if game.phase == GamePhase.GAME_OVER:
         snap["summary"] = get_game_summary(game)
+
+    if game.phase == GamePhase.MISSION_REVEAL and game.mission_history:
+        snap["latest_mission"] = game.mission_history[-1]
 
     return snap

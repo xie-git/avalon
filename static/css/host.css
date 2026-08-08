@@ -7,6 +7,50 @@ body {
     user-select: none;
 }
 
+/* Join tools, recovery, TV chat, and compact post-game chronicle */
+.join-tools { display: flex; align-items: center; justify-content: center; gap: 0.8rem; margin-top: 0.55rem; }
+.join-qr { width: clamp(86px, 10vw, 132px); aspect-ratio: 1; border: 4px solid #f1e8cf; border-radius: var(--radius-sm); background: #f1e8cf; }
+.join-tool-actions { display: grid; gap: 0.45rem; }
+.join-tool-actions .btn { min-width: 9rem; padding: 0.55rem 0.75rem; font-size: 0.7rem; }
+.tv-chat-setting { display: flex; align-items: center; gap: 0.55rem; color: var(--text-secondary); font: 0.78rem var(--font-heading); }
+.seat-recovery-list { display: grid; gap: 0.45rem; width: 100%; }
+.seat-recovery-label { color: #ffb0a8; font: 0.72rem var(--font-heading); letter-spacing: 0.08em; text-transform: uppercase; }
+.seat-recovery-button { width: 100%; font-size: 0.72rem; }
+.seat-recovery-result { display: grid; gap: 0.35rem; padding: 0.7rem; border: 1px solid var(--gold); border-radius: var(--radius-sm); background: rgba(201,168,76,0.1); }
+.seat-recovery-result strong,
+.seat-recovery-result small { color: var(--text-secondary); }
+.seat-recovery-result span { color: var(--gold-light); font: 700 1.8rem var(--font-heading); letter-spacing: 0.22em; font-variant-numeric: tabular-nums; }
+.proposal-timer-host { color: var(--text-dim); font: 0.78rem var(--font-heading); }
+.proposal-timer-host strong { color: var(--gold-light); font-variant-numeric: tabular-nums; }
+.proposal-timer-host strong.warning { color: #ff8080; }
+.host-chat-strip {
+    position: fixed;
+    z-index: 180;
+    left: max(0.75rem, env(safe-area-inset-left));
+    bottom: max(0.65rem, env(safe-area-inset-bottom));
+    width: min(36rem, calc(100vw - 1.5rem));
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid rgba(201,168,76,0.36);
+    border-radius: var(--radius-md);
+    background: rgba(8, 7, 5, 0.82);
+    backdrop-filter: blur(8px);
+    pointer-events: none;
+}
+.host-chat-strip div { display: flex; gap: 0.5rem; min-width: 0; font-size: clamp(0.68rem, 1.25vw, 0.9rem); }
+.host-chat-strip strong { flex: 0 0 auto; font-family: var(--font-heading); }
+.host-chat-strip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.host-chronicle { width: 100%; }
+.host-chronicle #chronicle-host { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.4rem; }
+.host-chronicle .chronicle-entry { margin: 0; padding: 0.42rem 0.5rem; font-size: clamp(0.52rem, 0.8vw, 0.68rem); }
+.ready-icon { fill: #9de0af; font: 700 18px sans-serif; }
+@media (max-width: 800px) {
+    .join-tools { flex-direction: column; }
+    .host-chronicle #chronicle-host { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .host-chat-strip { width: calc(100vw - 1.5rem); }
+}
+
 #app {
     position: relative;
     width: 100vw;
@@ -118,6 +162,68 @@ body {
     color: var(--text-secondary);
     letter-spacing: 0.05em;
 }
+.host-can-play-note {
+    margin-top: 0.4rem;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-style: italic;
+    color: var(--text-dim);
+}
+.host-top-meta {
+    position: fixed;
+    top: max(0.5rem, env(safe-area-inset-top));
+    left: 50%;
+    z-index: 403;
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.45rem;
+    width: min(760px, calc(100vw - 1rem));
+    pointer-events: none;
+}
+.host-top-meta .leader-display {
+    justify-self: end;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid rgba(201,168,76,0.5);
+    border-radius: var(--radius-pill);
+    background: rgba(8,7,4,0.9);
+    box-shadow: 0 3px 14px rgba(0,0,0,0.5);
+    font-family: var(--font-heading);
+    font-size: clamp(0.55rem, 1.5vw, 0.72rem);
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+}
+.host-top-meta .leader-display span { font-size: inherit; letter-spacing: 0.08em; }
+.host-room-code-badge {
+    justify-self: center;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid rgba(201,168,76,0.5);
+    border-radius: var(--radius-pill);
+    background: rgba(8,7,4,0.9);
+    color: var(--text-secondary);
+    font-family: var(--font-heading);
+    font-size: clamp(0.55rem, 1.5vw, 0.72rem);
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+    box-shadow: 0 3px 14px rgba(0,0,0,0.5);
+    pointer-events: auto;
+}
+.host-room-code-badge strong { color: var(--gold-light); letter-spacing: 0.16em; }
+.host-settings-button {
+    justify-self: start;
+    min-width: 2rem;
+    min-height: 2rem;
+    border: 1px solid var(--border-gold);
+    border-radius: 50%;
+    background: rgba(20,15,5,0.9);
+    color: var(--gold-light);
+    font-size: 0.85rem;
+    cursor: pointer;
+    pointer-events: auto;
+}
+.host-settings-button:hover,
+.host-settings-button:focus-visible { border-color: var(--gold); outline: none; }
 
 /* Round table */
 .round-table-container {
@@ -143,17 +249,18 @@ body {
     opacity: 0.5;
 }
 .player-node circle {
-    fill: var(--bg-card);
-    stroke: var(--border-gold);
+    fill: #211b10;
+    stroke: var(--gold-dim);
     stroke-width: 2;
     transition: all 0.3s ease;
 }
 .player-node.leader circle { stroke: var(--gold); stroke-width: 3; }
 .player-node.disconnected circle { fill: #111; stroke: var(--text-dim); opacity: 0.5; }
 .player-node text {
-    fill: var(--text-primary);
+    fill: var(--gold-light);
     font-family: var(--font-heading);
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: 700;
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
@@ -161,17 +268,10 @@ body {
 .player-node.leader text { fill: var(--gold-light); }
 .crown-icon {
     fill: var(--gold);
-    font-size: 14px;
+    font-size: 17px;
     text-anchor: middle;
     pointer-events: none;
 }
-
-/* Player node join animation */
-@keyframes node-appear {
-    from { opacity: 0; transform: scale(0) translate(0, 0); }
-    to   { opacity: 1; transform: scale(1) translate(0, 0); }
-}
-.player-node { animation: node-appear 0.4s ease-out; }
 
 /* Sidebar: player count & settings */
 .player-count-indicator {
@@ -270,6 +370,17 @@ input[type="range"] {
 .start-btn-wrapper {
     text-align: center;
 }
+.lobby-close-room {
+    width: 100%;
+    margin-top: 0.75rem;
+    border-color: rgba(192, 57, 43, 0.55);
+    color: #e8a0a0;
+}
+.lobby-close-room:hover,
+.lobby-close-room:focus-visible {
+    border-color: var(--red-glow);
+    color: #ffd0d0;
+}
 
 /* ============================================================
    GAME HEADER (mission tracker + rejection tracker)
@@ -341,10 +452,45 @@ input[type="range"] {
     border-radius: 3px;
 }
 
-.game-stats { display:flex; gap:1rem; }
-.game-stats div { display:flex; flex-direction:column; align-items:flex-end; }
+.game-stats { display:flex; flex-direction:column; gap:0.15rem; }
+.game-stats div { display:flex; align-items:baseline; justify-content:space-between; gap:0.75rem; min-width:8rem; }
 .game-stats span { font-family:var(--font-heading); font-size:0.65rem; color:var(--text-secondary); letter-spacing:.1em; }
-.game-stats strong { font-family:var(--font-heading); font-size:0.9rem; color:var(--gold-light); white-space:nowrap; }
+.game-stats strong { font-family:var(--font-heading); font-size:0.9rem; color:var(--gold-light); white-space:nowrap; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1; }
+#host-game-time { display:inline-block; width:7ch; text-align:right; }
+.proposal-track {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    gap: 0.18rem 0.6rem;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid rgba(201,168,76,0.42);
+    border-radius: var(--radius-sm);
+    background: rgba(8,7,4,0.82);
+}
+.proposal-track-label {
+    color: var(--text-secondary);
+    font: 0.58rem var(--font-heading);
+    letter-spacing: 0.11em;
+}
+.proposal-track strong {
+    grid-row: 1 / 3;
+    grid-column: 2;
+    color: var(--gold-light);
+    font: 700 0.85rem var(--font-heading);
+    font-variant-numeric: tabular-nums;
+}
+.proposal-track-tokens { display: flex; gap: 0.25rem; }
+.proposal-track-tokens i {
+    width: clamp(12px, 1.25vw, 18px);
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.12);
+}
+.proposal-track-tokens i.active { background: var(--gold); box-shadow: 0 0 7px rgba(201,168,76,0.5); }
+.proposal-track.danger { border-color: rgba(192,57,43,0.8); }
+.proposal-track.danger strong,
+.proposal-track.danger .proposal-track-label { color: #ff9a90; }
+.proposal-track.danger .proposal-track-tokens i.active { background: #e85b4d; box-shadow: 0 0 7px rgba(232,91,77,0.6); }
 
 /* Leader display */
 .leader-display {
@@ -441,6 +587,168 @@ input[type="range"] {
     color: var(--gold-light);
 }
 .timer-text.warning { color: #ff8080; }
+
+/* Phase information sits above a persistent, spacious TV round table. */
+#screen-night.presence-active,
+#screen-round.presence-active,
+#screen-proposal.presence-active,
+#screen-vote.presence-active,
+#screen-vote-reveal.presence-active,
+#screen-mission.presence-active,
+#screen-mission-reveal.presence-active,
+#screen-assassin.presence-active,
+#screen-game-over.presence-active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+#screen-round.presence-active,
+#screen-proposal.presence-active,
+#screen-vote.presence-active,
+#screen-vote-reveal.presence-active,
+#screen-mission.presence-active,
+#screen-mission-reveal.presence-active {
+    padding-top: calc(var(--host-header-height) + clamp(0.5rem, 1.5dvh, 1rem));
+}
+.presence-table.presence-host {
+    position: relative;
+    inset: auto;
+    flex: 1 1 auto;
+    z-index: 1;
+    width: min(98vw, 1250px);
+    min-height: min(380px, calc(100dvh - var(--host-header-height) - 190px));
+    max-height: 780px;
+    margin: auto;
+    pointer-events: auto;
+}
+.presence-host .presence-heading {
+    justify-content: flex-start;
+    padding-inline: clamp(0.25rem, 1vw, 0.75rem);
+}
+.presence-host .presence-field {
+    min-height: 340px;
+    border-color: rgba(201,168,76,0.14);
+    background:
+        radial-gradient(ellipse at center, rgba(95,72,25,0.1) 0 27%, transparent 28%),
+        radial-gradient(ellipse at center, rgba(201,168,76,0.04), transparent 70%);
+}
+.presence-host .presence-node { width: clamp(78px, 8vw, 112px); }
+.presence-host .presence-portrait { width: clamp(52px, 5.3vw, 76px); }
+.presence-host .presence-name { font-size: clamp(0.62rem, 1.05vw, 0.82rem); padding: 0.2rem 0.35rem; }
+.presence-host .presence-table-center {
+    z-index: 1;
+    width: min(24%, 220px);
+    aspect-ratio: 1.25;
+    padding: clamp(0.4rem, 1vmin, 0.7rem);
+    overflow: visible;
+    pointer-events: auto;
+}
+.presence-game-panel {
+    flex: 0 0 auto;
+    width: min(92vw, 940px);
+    max-height: none;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(0.3rem, 0.9dvh, 0.7rem);
+    padding: clamp(0.65rem, 1.4vmin, 1rem) clamp(0.9rem, 2vw, 1.6rem);
+    overflow: visible;
+    border: 1px solid rgba(201,168,76,0.42);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(145deg, rgba(28,21,11,0.94), rgba(8,8,9,0.96));
+    box-shadow: inset 0 0 25px rgba(0,0,0,0.4), 0 8px 28px rgba(0,0,0,0.42);
+    position: relative;
+    z-index: 4;
+}
+.presence-game-panel > * { min-width: 0; }
+.presence-game-panel::before {
+    content: 'GAME STATUS';
+    flex: 1 0 100%;
+    padding-bottom: 0.38rem;
+    border-bottom: 1px solid rgba(201,168,76,0.24);
+    color: var(--gold-dim);
+    font-family: var(--font-heading);
+    font-size: clamp(0.52rem, 0.9vw, 0.68rem);
+    letter-spacing: 0.2em;
+    text-align: left;
+}
+#screen-night .presence-game-panel::before { content: 'NIGHT PHASE'; }
+#screen-round .presence-game-panel::before { content: 'MISSION DISCUSSION'; }
+#screen-proposal .presence-game-panel::before { content: 'QUEST PARTY'; }
+#screen-vote .presence-game-panel::before { content: 'FELLOWSHIP VOTE'; }
+#screen-vote-reveal .presence-game-panel::before { content: 'VOTE REVEAL'; }
+#screen-mission .presence-game-panel::before { content: 'QUEST IN PROGRESS'; }
+#screen-mission-reveal .presence-game-panel::before { content: 'QUEST RESULT'; }
+#screen-assassin .presence-game-panel::before { content: 'THE FINAL CHOICE'; }
+#screen-game-over .presence-game-panel::before { content: 'FINAL RECKONING'; }
+#screen-round .presence-game-panel .round-title,
+#screen-round .presence-game-panel .leader-announce { margin-inline: clamp(0.4rem, 1.5vw, 1.2rem); }
+#screen-round .presence-game-panel .leader-announce { display: none; }
+#screen-round .presence-game-panel .btn { margin-left: clamp(0.4rem, 2vw, 1.5rem); }
+#screen-proposal .presence-game-panel .proposal-title,
+#screen-proposal .presence-game-panel .proposal-subtitle,
+#screen-proposal .presence-game-panel #proposal-mission-size { margin: 0; }
+#screen-proposal .presence-game-panel .proposed-players { flex-basis: 100%; }
+#screen-vote .presence-game-panel .vote-team-banner { flex: 1 1 330px; }
+#screen-vote .presence-game-panel .vote-status-grid { flex: 1 1 360px; }
+#screen-vote-reveal .presence-game-panel .vote-cards-grid { max-width: none; }
+#screen-vote-reveal .presence-game-panel .vote-card { width: clamp(78px, 8vw, 110px); }
+#screen-mission .presence-game-panel .mission-team-display { flex: 1 1 100%; }
+#screen-mission-reveal .presence-game-panel .mission-cards-display { flex: 1 1 auto; }
+#screen-assassin .presence-game-panel .assassin-title { flex-basis: 100%; }
+.presence-game-panel .round-title {
+    font-size: clamp(1.35rem, 2.6vw, 2.2rem);
+    line-height: 1;
+}
+.presence-game-panel .leader-announce { font-size: clamp(0.9rem, 1.8vw, 1.25rem); }
+.presence-game-panel .btn {
+    position: relative;
+    z-index: 5;
+    min-height: 40px;
+    padding: 0.5rem 1rem;
+    touch-action: manipulation;
+}
+.presence-game-panel .proposal-title { font-size: clamp(1.15rem, 2.3vw, 1.7rem); line-height: 1.1; }
+.presence-game-panel .proposal-subtitle,
+.presence-game-panel .night-progress,
+.presence-game-panel .mission-progress { font-size: clamp(0.78rem, 1.4vw, 1rem); }
+.presence-game-panel .proposed-players,
+.presence-game-panel .vote-status-grid,
+.presence-game-panel .mission-team-display { gap: clamp(0.3rem, 0.8vw, 0.55rem); }
+.presence-game-panel .proposed-player-chip,
+.presence-game-panel .vote-status-chip,
+.presence-game-panel .mission-member-card { font-size: clamp(0.62rem, 1.2vw, 0.78rem); }
+.presence-game-panel .vote-team-banner {
+    width: min(100%, 760px);
+    padding: clamp(0.55rem, 1.3vmin, 0.9rem);
+    border-color: rgba(201,168,76,0.38);
+    background: rgba(8,7,5,0.48);
+}
+.presence-game-panel .vote-team-banner h2 { margin-bottom: 0.35rem; font-size: clamp(0.7rem, 1.25vw, 0.9rem); }
+.presence-game-panel .vote-team-names { font-size: clamp(1rem, 2vw, 1.35rem); overflow-wrap: anywhere; }
+.presence-game-panel .mission-member-card { padding: 0.45rem 0.8rem; }
+.presence-game-panel .night-title,
+.presence-game-panel .assassin-title { font-size: clamp(1.2rem, 2.4vw, 2rem); }
+.presence-game-panel .crosshair-icon { font-size: clamp(1.6rem, 3.4vw, 2.7rem); }
+.presence-game-panel .game-over-banner { font-size: clamp(1.5rem, 3vw, 2.6rem); }
+.presence-game-panel .win-reason { font-size: clamp(0.85rem, 1.8vw, 1.15rem); }
+#screen-night .presence-game-panel .dim-text { font-size: clamp(0.8rem, 1.6vw, 1.05rem) !important; }
+#screen-assassin .presence-game-panel .assassin-subtitle { font-size: clamp(0.86rem, 1.6vw, 1.1rem); }
+#screen-game-over .presence-game-panel { gap: clamp(0.4rem, 1dvh, 0.75rem); }
+#screen-game-over .presence-game-panel .game-over-actions { margin-top: 0.2rem; }
+.presence-host .presence-center-content .timer-container,
+.presence-host .presence-center-content .timer-svg {
+    width: clamp(130px, 17dvh, 175px);
+    height: clamp(130px, 17dvh, 175px);
+}
+.presence-host .presence-center-content .timer-text {
+    font-size: clamp(1.8rem, 3vw, 2.5rem);
+    font-variant-numeric: tabular-nums;
+}
 
 @keyframes screen-edge-flash {
     0%, 100% { box-shadow: inset 0 0 0 0 transparent; }
@@ -896,6 +1204,8 @@ body,
     .crosshair-icon { font-size: 2.75rem; }
     #screen-game-over { gap: 0.65rem; }
     .role-reveal-card { padding: 0.65rem; }
+    .presence-host .presence-heading { min-height: 22px; }
+    .presence-host .presence-reset { min-height: 22px; }
 }
 
 @media (max-width: 800px) {
@@ -917,6 +1227,62 @@ body,
     }
 
     .start-btn-wrapper { grid-column: 1 / -1; }
-    #game-header { overflow-x: auto; gap: 0.5rem; }
-    .leader-display { display: none; }
+    #game-header {
+        top: 2.35rem;
+        overflow-x: auto;
+        gap: 0.5rem;
+    }
+    #screen-round,
+    #screen-proposal,
+    #screen-vote,
+    #screen-vote-reveal,
+    #screen-mission,
+    #screen-mission-reveal {
+        padding-top: calc(var(--host-header-height) + 2.7rem);
+    }
+    .host-top-meta {
+        top: max(0.3rem, env(safe-area-inset-top));
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 0.3rem;
+    }
+    .host-top-meta .leader-display { font-size: 0.62rem; overflow: hidden; text-overflow: ellipsis; }
+    .host-top-meta .leader-display span { font-size: 0.68rem; }
+    .host-room-code-badge { padding: 0.25rem 0.45rem; }
+    .host-settings-button { min-width: 1.85rem; min-height: 1.85rem; }
+    #screen-night.presence-active,
+    #screen-round.presence-active,
+    #screen-proposal.presence-active,
+    #screen-vote.presence-active,
+    #screen-vote-reveal.presence-active,
+    #screen-mission.presence-active,
+    #screen-mission-reveal.presence-active,
+    #screen-assassin.presence-active,
+    #screen-game-over.presence-active {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.7rem;
+        overflow: hidden;
+    }
+    .presence-table.presence-host {
+        position: relative;
+        inset: auto;
+        flex: 1 1 auto;
+        align-self: center;
+        width: min(100%, 700px);
+        min-height: min(300px, calc(100dvh - var(--host-header-height) - 12rem));
+        max-height: none;
+        margin: 0 auto;
+    }
+    .presence-host .presence-field { min-height: 265px; }
+    .presence-host .presence-table-center { width: min(38%, 165px); height: auto; padding: 0.35rem; }
+    .presence-game-panel {
+        width: min(100%, 700px);
+        max-height: none;
+        gap: 0.4rem;
+    }
+    .presence-host .presence-node { width: clamp(60px, 18vw, 82px); }
+    .presence-host .presence-portrait { width: clamp(42px, 12vw, 58px); }
+    .presence-host .presence-name { font-size: clamp(0.5rem, 2vw, 0.68rem); }
+    .presence-host .presence-role { font-size: clamp(0.38rem, 1.6vw, 0.5rem); }
 }

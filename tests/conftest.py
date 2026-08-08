@@ -18,6 +18,7 @@ def reset_server_state():
     server.sid_to_info.clear()
     server.session_tokens.clear()
     server.connected_sids.clear()
+    server.sid_to_ip.clear()
     server.rate_windows.clear()
     yield
     server.games.clear()
@@ -25,6 +26,7 @@ def reset_server_state():
     server.sid_to_info.clear()
     server.session_tokens.clear()
     server.connected_sids.clear()
+    server.sid_to_ip.clear()
     server.rate_windows.clear()
 
 

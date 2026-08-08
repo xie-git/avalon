@@ -3,6 +3,31 @@
    ============================================================ */
 
 const socket = io();
+const connectionStatus = document.getElementById('connection-status');
+const presenceTable = new AvalonPresenceTable({ mode: 'host' });
+const HOST_CODE_KEY = 'avalon-host-game-code';
+const HOST_TOKEN_KEY = 'avalon-host-token';
+const TV_CHAT_KEY = 'avalon-tv-chat-enabled';
+const presenceScreenLabels = {
+    'screen-night': 'Night Phase',
+    'screen-round': 'Mission Discussion',
+    'screen-proposal': 'Quest Party',
+    'screen-vote': 'Fellowship Vote',
+    'screen-vote-reveal': 'The Votes Are Revealed',
+    'screen-mission': 'The Quest Begins',
+    'screen-mission-reveal': 'The Quest Returns',
+    'screen-assassin': 'The Final Choice',
+    'screen-game-over': 'Roles Revealed',
+};
+
+function showConnectionStatus(message) {
+    connectionStatus.textContent = message;
+    connectionStatus.classList.remove('hidden');
+}
+
+function hideConnectionStatus() {
+    connectionStatus.classList.add('hidden');
+}
 
 // ---------------------------------------------------------------------------
 // State
@@ -16,6 +41,7 @@ let proposalDuration = 60;
 let missionSizes = [];
 let currentMission = 0;
 let missionResults = [];
+let missionHistory = [];
 let consecutiveRejections = 0;
 let currentLeaderName = '';
 let proposedTeam = [];
@@ -25,6 +51,87 @@ let betaTestMode = false;
 let betaTestPlayerCount = 6;
 let gameStartedAt = null;
 let gameClockInterval = null;
+let tvChatMessages = [];
+let tvChatEnabled = localStorage.getItem(TV_CHAT_KEY) !== 'false';
+
+function hostSession() {
+    const code = localStorage.getItem(HOST_CODE_KEY) || sessionStorage.getItem('host_game_code');
+    const token = localStorage.getItem(HOST_TOKEN_KEY) || sessionStorage.getItem('host_token');
+    if (code && token) {
+        localStorage.setItem(HOST_CODE_KEY, code);
+        localStorage.setItem(HOST_TOKEN_KEY, token);
+    }
+    return { code, token };
+}
+
+function saveHostSession(code, token) {
+    localStorage.setItem(HOST_CODE_KEY, code);
+    localStorage.setItem(HOST_TOKEN_KEY, token);
+}
+
+function clearHostSession() {
+    localStorage.removeItem(HOST_CODE_KEY);
+    localStorage.removeItem(HOST_TOKEN_KEY);
+    sessionStorage.removeItem('host_game_code');
+    sessionStorage.removeItem('host_token');
+}
+
+function joinLink() {
+    if (!gameCode) return window.location.origin;
+    return `${window.location.origin}/?room=${encodeURIComponent(gameCode)}`;
+}
+
+function updateJoinTools() {
+    const qr = document.getElementById('join-qr');
+    if (!gameCode) {
+        qr.classList.add('hidden');
+        qr.removeAttribute('src');
+        return;
+    }
+    qr.src = `/join-qr.svg?room=${encodeURIComponent(gameCode)}`;
+    qr.classList.remove('hidden');
+}
+
+function renderTvChat() {
+    const strip = document.getElementById('host-chat-strip');
+    strip.classList.toggle('hidden', !tvChatEnabled || !gameStartedAt || !tvChatMessages.length);
+    strip.replaceChildren();
+    tvChatMessages.slice(-2).forEach(item => {
+        const line = document.createElement('div');
+        const name = document.createElement('strong');
+        name.textContent = item.name;
+        name.style.color = presenceTable.colorForName(item.name, item.color_index);
+        const message = document.createElement('span');
+        message.textContent = item.message;
+        line.append(name, message);
+        strip.appendChild(line);
+    });
+}
+
+function renderRecoveryList() {
+    const list = document.getElementById('seat-recovery-list');
+    list.replaceChildren();
+    const disconnected = players.filter(player => !player.connected && !player.is_bot);
+    if (!disconnected.length) {
+        document.getElementById('seat-recovery-result').classList.add('hidden');
+        return;
+    }
+    const label = document.createElement('div');
+    label.className = 'seat-recovery-label';
+    label.textContent = 'Disconnected players';
+    list.appendChild(label);
+    disconnected.forEach(player => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn seat-recovery-button';
+        button.textContent = `Recover ${player.name}’s seat`;
+        button.addEventListener('click', () => {
+            button.disabled = true;
+            socket.emit('request_seat_recovery', { player_id: player.player_id });
+        });
+        list.appendChild(button);
+    });
+}
 
 
 // ---------------------------------------------------------------------------
@@ -35,6 +142,11 @@ function showScreen(id) {
     const target = document.getElementById(id);
     if (target) target.classList.add('active');
     currentPhase = id.replace('screen-', '');
+    const topMeta = document.getElementById('host-top-meta');
+    topMeta.classList.toggle('hidden', !gameCode || id === 'screen-title' || id === 'screen-lobby');
+    const presenceLabel = presenceScreenLabels[id];
+    if (presenceLabel && players.length) presenceTable.show(target, presenceLabel);
+    else presenceTable.hide();
 }
 
 function transition(id, delay = 0) {
@@ -81,7 +193,7 @@ function updateMissionTracker() {
         else if (isCurrent) stateClass = 'current';
 
         tracker.innerHTML += `
-            <div class="mission-shield ${stateClass}">
+            <div class="mission-shield ${stateClass}${missionHistory[i] ? ' mission-history-clickable' : ''}" data-mission-index="${i}" ${missionHistory[i] ? 'role="button" tabindex="0"' : ''}>
                 ${doubleFailIndicator}
                 <svg class="shield-svg" viewBox="0 0 52 64" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path class="shield-path" d="M26 2 L50 12 L50 36 Q50 54 26 62 Q2 54 2 36 L2 12 Z"/>
@@ -90,6 +202,16 @@ function updateMissionTracker() {
                 <span class="shield-size">${size}p</span>
             </div>`;
     }
+    tracker.querySelectorAll('.mission-history-clickable').forEach(shield => {
+        const show = event => {
+            event.stopPropagation();
+            AvalonMissionTooltip.show(shield, missionHistory[Number(shield.dataset.missionIndex)]);
+        };
+        shield.addEventListener('click', show);
+        shield.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') show(event);
+        });
+    });
 }
 
 function formatElapsed(seconds) {
@@ -98,7 +220,20 @@ function formatElapsed(seconds) {
 }
 function updateGameStats() {
     document.getElementById('host-fails').textContent = `${missionResults.filter(r => r === 'fail').length}/3`;
+    updateHostProposalTrack();
     if (gameStartedAt) document.getElementById('host-game-time').textContent = formatElapsed(Math.max(0, Math.floor((Date.now() - gameStartedAt) / 1000)));
+}
+function updateHostProposalTrack() {
+    const track = document.getElementById('host-proposal-track');
+    const count = document.getElementById('host-proposal-count');
+    if (!track || !count) return;
+    const attempt = Math.min(5, consecutiveRejections + 1);
+    count.textContent = `${attempt} / 5`;
+    track.setAttribute('aria-label', `Team proposal ${attempt} of 5`);
+    track.classList.toggle('danger', attempt >= 5);
+    track.querySelectorAll('.proposal-track-tokens i').forEach((token, index) => {
+        token.classList.toggle('active', index < attempt);
+    });
 }
 function startGameClock(epochSeconds) {
     if (!epochSeconds) return;
@@ -111,6 +246,15 @@ function startGameClock(epochSeconds) {
 function updateLeaderDisplay(name) {
     document.getElementById('leader-display').innerHTML =
         `Leader: <span>${name}</span>`;
+}
+
+function showHostRoomCode(code) {
+    const badge = document.getElementById('host-room-code-badge');
+    badge.querySelector('strong').textContent = code || '----';
+}
+
+function syncPresencePlayers(playerList = players) {
+    presenceTable.setPlayers(playerList || [], playerOrder || []);
 }
 
 // ---------------------------------------------------------------------------
@@ -129,10 +273,11 @@ function renderRoundTable(playerList) {
         const isLeader = p.name === currentLeaderName;
         const isDisconnected = !p.connected;
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('class', `player-node${isLeader ? ' leader' : ''}${isDisconnected ? ' disconnected' : ''}`);
+        g.setAttribute('class', `player-node${isLeader ? ' leader' : ''}${isDisconnected ? ' disconnected' : ''}${p.ready ? ' ready' : ''}`);
         g.innerHTML = `
-            <circle cx="${x}" cy="${y}" r="30"/>
-            ${isLeader ? `<text x="${x}" y="${y - 38}" class="crown-icon">♔</text>` : ''}
+            <circle cx="${x}" cy="${y}" r="36"/>
+            ${isLeader ? `<text x="${x}" y="${y - 44}" class="crown-icon">♔</text>` : ''}
+            ${p.ready ? `<text x="${x + 29}" y="${y - 27}" class="ready-icon">✓</text>` : ''}
             <text x="${x}" y="${y}">${escapeHtml(p.name)}</text>
         `;
         svg.appendChild(g);
@@ -150,7 +295,7 @@ function renderReorderList(playerList) {
         li.className = 'reorder-item';
         li.draggable = true;
         li.dataset.index = i;
-        li.innerHTML = `<span class="reorder-num">${i + 1}</span>${escapeHtml(p.name)}`;
+        li.innerHTML = `<span class="reorder-num">${i + 1}</span>${escapeHtml(p.name)}${p.ready ? '<span class="ready-mark">✓ Ready</span>' : ''}`;
 
         li.addEventListener('dragstart', e => {
             _dragSrcIndex = i;
@@ -177,6 +322,7 @@ function renderReorderList(playerList) {
 
 function renderLobbyPlayers(playerList) {
     players = playerList;
+    syncPresencePlayers(playerList);
     renderRoundTable(playerList);
     renderReorderList(playerList);
     const n = playerList.length;
@@ -191,8 +337,9 @@ function renderLobbyPlayers(playerList) {
     btn.classList.toggle('beta-start', betaTestMode && valid);
     btn.textContent = betaTestMode ? 'Start Beta Test Game' : 'Begin the Quest';
     hint.textContent = valid
-        ? (betaTestMode ? 'Bots make random legal moves automatically' : '')
+        ? (betaTestMode ? 'Bots make random legal moves automatically' : `${playerList.filter(player => player.ready).length} of ${n} ready`)
         : (n < 6 ? `Need ${6 - n} more player(s)` : 'Too many players (max 10)');
+    renderRecoveryList();
 }
 
 function renderBetaTestMode(enabled, targetCount = betaTestPlayerCount) {
@@ -204,6 +351,12 @@ function renderBetaTestMode(enabled, targetCount = betaTestPlayerCount) {
     toggle.setAttribute('aria-pressed', String(betaTestMode));
     toggle.querySelector('.beta-toggle-state').textContent = betaTestMode ? 'ON' : 'OFF';
     renderLobbyPlayers(players);
+}
+
+function renderProposalSetting(seconds) {
+    proposalDuration = Number(seconds) || 0;
+    document.getElementById('proposal-timer-enabled').checked = proposalDuration > 0;
+    document.getElementById('proposal-time-display').textContent = proposalDuration > 0 ? fmtTime(proposalDuration) : 'Off';
 }
 
 // ---------------------------------------------------------------------------
@@ -302,10 +455,41 @@ function animateMissionReveal(cards) {
     });
 }
 
+function renderChronicle(container, summary) {
+    if (!container) return;
+    container.replaceChildren();
+    const proposals = summary.proposal_history || [];
+    const missions = summary.mission_history || [];
+    const completedMissionNumbers = new Set(missions.map(item => item.mission_num));
+    missions.forEach(mission => {
+        const section = document.createElement('section');
+        section.className = `chronicle-entry ${mission.passed ? 'pass' : 'fail'}`;
+        const title = document.createElement('strong');
+        title.textContent = `Mission ${mission.mission_num} — ${mission.passed ? 'Succeeded' : 'Failed'}`;
+        const detail = document.createElement('span');
+        detail.textContent = `${mission.leader_name} led ${mission.team.join(', ')} · ${mission.success_count} Success / ${mission.fail_count} Fail`;
+        section.append(title, detail);
+        proposals.filter(item => item.mission_num === mission.mission_num && !item.approved).forEach(item => {
+            const rejected = document.createElement('small');
+            rejected.textContent = `Rejected proposal by ${item.leader_name}: ${item.approve_count}–${item.reject_count}`;
+            section.appendChild(rejected);
+        });
+        container.appendChild(section);
+    });
+    proposals.filter(item => !completedMissionNumbers.has(item.mission_num)).forEach(item => {
+        const section = document.createElement('section');
+        section.className = 'chronicle-entry rejected';
+        section.textContent = `Mission ${item.mission_num}: ${item.leader_name}’s party was rejected ${item.approve_count}–${item.reject_count}`;
+        container.appendChild(section);
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Game over: role reveal
 // ---------------------------------------------------------------------------
 function renderGameOver(summary) {
+    if (summary.win_reason === 'rejections') consecutiveRejections = 5;
+    updateHostProposalTrack();
     const banner = document.getElementById('game-over-banner');
     const reasonEl = document.getElementById('win-reason-text');
     const grid = document.getElementById('roles-reveal-grid');
@@ -322,17 +506,10 @@ function renderGameOver(summary) {
     };
     reasonEl.textContent = reasons[summary.win_reason] || summary.win_reason;
 
-    grid.innerHTML = '';
-    (summary.player_order || Object.keys(summary.roles)).forEach((name, idx) => {
-        const info = summary.roles[name];
-        const card = document.createElement('div');
-        card.className = `role-reveal-card ${info.team}`;
-        card.style.animationDelay = `${idx * 0.1}s`;
-        card.innerHTML = `
-            <div class="player-name">${escapeHtml(name)}</div>
-            <div class="player-role">${info.role}</div>`;
-        grid.appendChild(card);
-    });
+    grid.replaceChildren();
+    grid.classList.add('hidden');
+    presenceTable.setRoleReveal(summary.roles || {});
+    renderChronicle(document.getElementById('chronicle-host'), summary);
 }
 
 // ---------------------------------------------------------------------------
@@ -376,38 +553,56 @@ document.getElementById('confirm-no').addEventListener('click', () => {
 // ---------------------------------------------------------------------------
 
 socket.on('connect', () => {
-    const stored = sessionStorage.getItem('host_game_code');
-    const hostToken = sessionStorage.getItem('host_token');
+    const { code: stored, token: hostToken } = hostSession();
     if (stored && hostToken) {
+        showConnectionStatus('Connected — restoring the host screen…');
         socket.emit('register_host_screen', { game_code: stored, host_token: hostToken });
-    }
+    } else hideConnectionStatus();
 });
+
+socket.on('disconnect', () => showConnectionStatus('Connection lost — reconnecting…'));
+socket.on('connect_error', () => showConnectionStatus('Unable to reach the game server — retrying…'));
 
 socket.on('game_created', data => {
     gameCode = data.room_code;
-    sessionStorage.setItem('host_game_code', gameCode);
-    sessionStorage.setItem('host_token', data.host_token);
+    saveHostSession(gameCode, data.host_token);
+    presenceTable.setRoomCode(gameCode);
+    showHostRoomCode(gameCode);
+    hideConnectionStatus();
     document.getElementById('host-create-error').textContent = '';
     document.getElementById('btn-create-game').disabled = false;
     document.getElementById('room-code-display').textContent = gameCode;
     document.getElementById('join-url-display').textContent = `Join at ${data.join_url}`;
+    updateJoinTools();
     transition('screen-lobby');
 });
 
 socket.on('host_registered', data => {
     gameCode = data.code;
+    presenceTable.setRoomCode(gameCode);
+    showHostRoomCode(gameCode);
+    hideConnectionStatus();
     document.getElementById('room-code-display').textContent = gameCode;
     document.getElementById('join-url-display').textContent = `Join at ${data.join_url}`;
+    updateJoinTools();
     players = data.players || [];
     missionSizes = data.mission_sizes || [];
     missionResults = data.mission_results || [];
+    missionHistory = data.mission_history || [];
+    tvChatMessages = data.recent_chat || [];
     currentMission = data.current_mission || 0;
     consecutiveRejections = data.consecutive_rejections || 0;
     currentLeaderName = data.current_leader || '';
     betaTestMode = Boolean(data.beta_test_mode);
     betaTestPlayerCount = Number(data.beta_test_player_count) || 6;
     if (data.game_started_at) startGameClock(data.game_started_at);
+    updateHostProposalTrack();
     if (data.discussion_time) discussionDuration = data.discussion_time;
+    renderProposalSetting(data.proposal_time);
+    timerMax = discussionDuration;
+    syncPresencePlayers(players);
+    renderTvChat();
+    renderRecoveryList();
 
     if (data.phase === 'LOBBY') {
         transition('screen-lobby');
@@ -434,11 +629,18 @@ socket.on('host_registered', data => {
         };
         const targetScreen = phaseScreenMap[data.phase] || 'screen-round';
         showScreen(targetScreen);
-        if (data.phase === 'TEAM_PROPOSAL') {
+        if (data.phase === 'NIGHT_PHASE') {
+            spawnStars();
+            document.getElementById('night-confirmed').textContent = data.night_confirmed || 0;
+            document.getElementById('night-total').textContent = data.night_total || players.length;
+            hideGameHeader();
+        } else if (data.phase === 'TEAM_PROPOSAL') {
             document.getElementById('proposal-leader-name').textContent =
                 currentLeaderName;
             document.getElementById('proposal-mission-size').textContent =
                 `Select ${missionSizes[currentMission] || '?'} members for the quest`;
+            document.getElementById('proposal-timer-host').textContent =
+                data.timer_remaining === null ? 'Take the time you need' : fmtTime(data.timer_remaining);
         } else if (data.phase === 'TEAM_VOTE' || data.phase === 'VOTE_REVEAL') {
             proposedTeam = data.proposed_team || [];
             document.getElementById('vote-team-names').textContent =
@@ -460,6 +662,18 @@ socket.on('host_registered', data => {
             document.getElementById('mission-played').textContent = data.mission_cards_played;
             document.getElementById('mission-total').textContent = proposedTeam.length;
         } else if (data.phase === 'MISSION_REVEAL' && data.pending_mission_outcome) {
+            const latest = data.latest_mission;
+            if (latest) {
+                const cards = [
+                    ...Array(latest.success_count).fill('success'),
+                    ...Array(latest.fail_count).fill('fail'),
+                ];
+                animateMissionReveal(cards);
+                const banner = document.getElementById('mission-result-banner');
+                banner.className = `mission-result-banner ${latest.passed ? 'pass' : 'fail'}`;
+                banner.textContent = latest.passed ? '⚔ The Quest Succeeds!' : '☠ The Quest Has Failed...';
+                banner.classList.remove('hidden');
+            }
             document.getElementById('btn-next-round').classList.remove('hidden');
         } else if (data.phase === 'ASSASSIN_PHASE') {
             document.getElementById('assassin-choosing-text').textContent =
@@ -467,25 +681,29 @@ socket.on('host_registered', data => {
         } else if (data.phase === 'GAME_OVER' && data.summary) {
             renderGameOver(data.summary);
         }
-        document.getElementById('btn-host-settings').style.display = 'block';
     }
 });
 
 socket.on('player_joined', data => {
     players = data.players || [];
+    syncPresencePlayers(players);
     renderLobbyPlayers(players);
 });
 
 socket.on('player_disconnected', data => {
     players = data.players || [];
+    syncPresencePlayers(players);
     if (currentPhase === 'lobby') renderLobbyPlayers(players);
     else renderRoundTable(players);
+    renderRecoveryList();
 });
 
 socket.on('player_reconnected', data => {
     players = data.players || [];
+    syncPresencePlayers(players);
     if (currentPhase === 'lobby') renderLobbyPlayers(players);
     else renderRoundTable(players);
+    renderRecoveryList();
 });
 
 socket.on('lobby_update', data => {
@@ -497,6 +715,7 @@ socket.on('lobby_update', data => {
         const sliderEl = document.getElementById('discussion-slider');
         if (dispEl) dispEl.textContent = fmtTime(discussionDuration);
         if (sliderEl) sliderEl.value = discussionDuration;
+        renderProposalSetting(data.settings.proposal_time);
         renderBetaTestMode(data.settings.beta_test_mode, data.settings.beta_test_player_count);
     }
 });
@@ -505,6 +724,7 @@ socket.on('game_starting', data => {
     players = players; // keep
     startGameClock(data.game_started_at);
     flash('white', 500);
+    renderTvChat();
 });
 
 socket.on('night_phase_start', data => {
@@ -526,13 +746,14 @@ socket.on('night_phase_complete', () => {
 
 socket.on('round_start', data => {
     document.getElementById('btn-next-round').classList.add('hidden');
-    document.getElementById('btn-host-settings').style.display = 'block';
     currentMission = data.mission_num - 1;
     currentLeaderName = data.leader_name;
     consecutiveRejections = data.reject_count;
     missionResults = data.mission_results || [];
+    missionHistory = data.mission_history || missionHistory;
     missionSizes = data.mission_sizes || [];
     if (data.player_order) playerOrder = data.player_order;
+    syncPresencePlayers(players);
 
     document.getElementById('round-title').textContent = `Mission ${data.mission_num}`;
     document.getElementById('round-leader-name').textContent = data.leader_name;
@@ -566,8 +787,22 @@ socket.on('proposal_start', data => {
     document.getElementById('proposal-leader-name').textContent = data.leader_name;
     document.getElementById('proposal-mission-size').textContent =
         `Select ${data.mission_size} members for the quest`;
+    proposalDuration = Number(data.duration_seconds) || 0;
+    document.getElementById('proposal-timer-host').textContent = proposalDuration ? fmtTime(proposalDuration) : 'No timer';
     document.getElementById('proposed-players-display').innerHTML = '';
     transition('screen-proposal');
+});
+
+socket.on('proposal_tick', data => {
+    const timer = document.getElementById('proposal-timer-host');
+    timer.textContent = fmtTime(data.remaining_seconds);
+    timer.classList.toggle('warning', data.remaining_seconds <= 10);
+});
+
+socket.on('proposal_timer_expired', () => {
+    const timer = document.getElementById('proposal-timer-host');
+    timer.textContent = 'Take the time you need';
+    timer.classList.remove('warning');
 });
 
 socket.on('team_preview', data => {
@@ -626,9 +861,12 @@ socket.on('vote_reveal', data => {
 socket.on('rejection_warning', data => {
     consecutiveRejections = data.consecutive;
     updateLeaderDisplay(data.leader_name);
+    updateHostProposalTrack();
 });
 
 socket.on('evil_wins_by_rejection', () => {
+    consecutiveRejections = 5;
+    updateHostProposalTrack();
     flash('red', 1000);
     const banner = document.getElementById('vote-result-banner');
     banner.className = 'vote-result-banner rejected';
@@ -637,6 +875,8 @@ socket.on('evil_wins_by_rejection', () => {
 });
 
 socket.on('mission_start', data => {
+    consecutiveRejections = 0;
+    updateHostProposalTrack();
     proposedTeam = data.team || [];
     const display = document.getElementById('mission-team-display');
     display.innerHTML = '';
@@ -677,6 +917,7 @@ socket.on('mission_reveal', data => {
 
 socket.on('mission_tracker_update', data => {
     missionResults = data.mission_results || [];
+    missionHistory = data.mission_history || missionHistory;
     updateMissionTracker();
     updateGameStats();
     if (data.good_wins < 3 && data.evil_wins < 3) {
@@ -708,26 +949,71 @@ socket.on('game_over', data => {
     transition('screen-game-over');
 });
 
+socket.on('chat_message', data => {
+    tvChatMessages.push(data);
+    if (tvChatMessages.length > 20) tvChatMessages.shift();
+    renderTvChat();
+});
+
+socket.on('seat_recovery_code', data => {
+    renderRecoveryList();
+    const result = document.getElementById('seat-recovery-result');
+    result.replaceChildren();
+    const title = document.createElement('strong');
+    title.textContent = `${data.player_name}’s recovery code`;
+    const code = document.createElement('span');
+    code.textContent = data.code;
+    const note = document.createElement('small');
+    note.textContent = 'Enter this on the replacement phone within five minutes.';
+    result.append(title, code, note);
+    result.classList.remove('hidden');
+});
+
 socket.on('return_to_lobby', data => {
     clearInterval(gameClockInterval); gameClockInterval = null; gameStartedAt = null;
     document.getElementById('host-game-time').textContent = '00:00';
     players = data.players || [];
     currentMission = 0;
     missionResults = [];
+    missionHistory = [];
     consecutiveRejections = 0;
     currentLeaderName = '';
-    document.getElementById('btn-host-settings').style.display = 'none';
+    tvChatMessages = [];
+    renderTvChat();
     hideGameHeader();
+    presenceTable.setRoleReveal(null);
     renderLobbyPlayers(players);
     transition('screen-lobby');
 });
 
 socket.on('game_ended', () => {
     clearInterval(gameClockInterval);
-    document.getElementById('btn-host-settings').style.display = 'none';
+    gameClockInterval = null;
+    gameStartedAt = null;
+    gameCode = null;
+    players = [];
+    playerOrder = [];
+    missionSizes = [];
+    missionResults = [];
+    missionHistory = [];
+    currentMission = 0;
+    consecutiveRejections = 0;
+    currentLeaderName = '';
+    proposedTeam = [];
+    pendingVoters = [];
+    tvChatMessages = [];
+    document.getElementById('host-game-time').textContent = '00:00';
+    document.getElementById('room-code-display').textContent = '----';
+    document.getElementById('join-url-display').textContent = '';
     hideGameHeader();
-    sessionStorage.removeItem('host_game_code');
-    sessionStorage.removeItem('host_token');
+    presenceTable.setRoleReveal(null);
+    clearHostSession();
+    presenceTable.hide();
+    presenceTable.setRoomCode('');
+    showHostRoomCode('');
+    updateJoinTools();
+    renderTvChat();
+    renderLobbyPlayers([]);
     document.getElementById('btn-create-game').disabled = false;
     transition('screen-title');
 });
@@ -737,6 +1023,18 @@ socket.on('error', data => {
     const errorEl = document.getElementById('host-create-error');
     if (errorEl && document.getElementById('screen-title').classList.contains('active')) {
         errorEl.textContent = data.message;
+        document.getElementById('btn-create-game').disabled = false;
+    }
+    if (currentPhase === 'lobby') {
+        document.getElementById('btn-start-game').disabled = false;
+    }
+    if (/host authorization invalid|Game not found/i.test(data.message || '')) {
+        clearHostSession();
+        showHostRoomCode('');
+        hideConnectionStatus();
+        showScreen('screen-title');
+        document.getElementById('host-create-error').textContent =
+            'The previous game is no longer available. Create a new game to continue.';
         document.getElementById('btn-create-game').disabled = false;
     }
 });
@@ -752,7 +1050,16 @@ document.getElementById('btn-create-game').addEventListener('click', () => {
 });
 
 document.getElementById('btn-start-game').addEventListener('click', () => {
+    document.getElementById('btn-start-game').disabled = true;
     socket.emit('start_game');
+});
+
+document.getElementById('btn-close-room').addEventListener('click', async () => {
+    const ok = await showConfirm(
+        'Close This Room?',
+        'All joined players will be disconnected and this room code will stop working.'
+    );
+    if (ok) socket.emit('end_game');
 });
 
 document.getElementById('btn-beta-test-mode').addEventListener('click', () => {
@@ -780,6 +1087,7 @@ document.getElementById('btn-return-lobby').addEventListener('click', () => {
 
 // In-game settings
 document.getElementById('btn-host-settings').addEventListener('click', () => {
+    renderRecoveryList();
     document.getElementById('host-settings-modal').style.display = 'flex';
 });
 document.getElementById('btn-host-settings-close').addEventListener('click', () => {
@@ -796,12 +1104,44 @@ document.getElementById('btn-host-end-game').addEventListener('click', async () 
     if (ok) socket.emit('end_game');
 });
 
-// Settings sliders (emit to server — host screen acts as a relay for settings)
-// Note: host screen doesn't have a player ID so settings changes must come from
-// the host player's phone. The sliders here are display-only for reference.
-// We'll still emit to let a connected host player update settings if desired.
+// Lobby settings are host-authorized server events.
 document.getElementById('discussion-slider').addEventListener('input', e => {
     discussionDuration = parseInt(e.target.value);
     document.getElementById('discussion-time-display').textContent = fmtTime(discussionDuration);
+});
+document.getElementById('discussion-slider').addEventListener('change', () => {
     socket.emit('update_settings', { discussion_time: discussionDuration });
+});
+document.getElementById('proposal-timer-enabled').addEventListener('change', event => {
+    const seconds = event.target.checked ? 60 : 0;
+    renderProposalSetting(seconds);
+    socket.emit('update_settings', { proposal_time: seconds });
+});
+
+const tvChatToggle = document.getElementById('toggle-tv-chat');
+tvChatToggle.checked = tvChatEnabled;
+tvChatToggle.addEventListener('change', event => {
+    tvChatEnabled = event.target.checked;
+    localStorage.setItem(TV_CHAT_KEY, String(tvChatEnabled));
+    renderTvChat();
+});
+
+document.getElementById('btn-copy-join').addEventListener('click', async event => {
+    const text = `Join our Avalon game: ${joinLink()}`;
+    try {
+        await navigator.clipboard.writeText(text);
+        event.currentTarget.textContent = 'Copied!';
+    } catch (_) {
+        window.prompt('Copy this invite:', text);
+    }
+    setTimeout(() => { event.currentTarget.textContent = 'Copy Invite'; }, 1800);
+});
+
+document.getElementById('btn-share-join').addEventListener('click', async () => {
+    const url = joinLink();
+    if (navigator.share) {
+        try { await navigator.share({ title: 'Join Avalon', text: `Room ${gameCode}`, url }); } catch (_) { /* cancelled */ }
+    } else {
+        try { await navigator.clipboard.writeText(url); } catch (_) { window.prompt('Copy this invite:', url); }
+    }
 });
