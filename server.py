@@ -15,6 +15,7 @@ from collections import defaultdict, deque
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from functools import wraps
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import segno
@@ -23,6 +24,7 @@ from flask_socketio import SocketIO, emit, join_room
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from chat_store import configured_chat_store
+from selfie_archive import SelfieArchive
 from game_logic import (
     GameState,
     GamePhase,
@@ -108,9 +110,23 @@ socketio = SocketIO(
 logger = logging.getLogger("avalon")
 chat_store = configured_chat_store()
 chat_store.initialize()
+SELFIE_ARCHIVE_DIR = Path(
+    os.environ.get(
+        "SELFIE_ARCHIVE_DIR", str(chat_store.path.parent / "private" / "selfies")
+    )
+)
+static_root = Path(app.static_folder).resolve()
+resolved_selfie_archive = SELFIE_ARCHIVE_DIR.resolve()
+if (
+    resolved_selfie_archive == static_root
+    or static_root in resolved_selfie_archive.parents
+):
+    raise RuntimeError("SELFIE_ARCHIVE_DIR must be outside the public static directory")
+selfie_archive = SelfieArchive(str(SELFIE_ARCHIVE_DIR))
 chat_persistence_error_logged = False
 game_persistence_error_logged = False
 room_persistence_error_logged = False
+selfie_persistence_error_logged = False
 
 
 @app.after_request
@@ -2137,6 +2153,7 @@ def on_select_avatar(data):
 @socketio.on("select_selfie")
 @rate_limited()
 def on_select_selfie(data):
+    global selfie_persistence_error_logged
     try:
         game, player = validate_caller(request.sid, require_phase=GamePhase.LOBBY)
         data = require_object(data)
@@ -2149,8 +2166,26 @@ def on_select_selfie(data):
             raise ValueError("Selfie data is invalid") from error
         if not decoded.startswith(b"\xff\xd8"):
             raise ValueError("Selfie data is not a JPEG image")
+        if not decoded.endswith(b"\xff\xd9"):
+            raise ValueError("Selfie data is not a complete JPEG image")
         if len(decoded) > 36_000:
             raise ValueError("Selfie is too large")
+        try:
+            digest, storage_name, byte_count = selfie_archive.save(decoded)
+            chat_store.save_selfie_reference(
+                room_code=game.code,
+                game_started_at=game.started_at,
+                player_id=player.player_id,
+                player_name=player.name,
+                image_sha256=digest,
+                storage_name=storage_name,
+                byte_count=byte_count,
+            )
+            selfie_persistence_error_logged = False
+        except Exception:
+            if not selfie_persistence_error_logged:
+                logger.exception("Could not privately archive selfie")
+                selfie_persistence_error_logged = True
         player.avatar_image = image
         emit_to_game(game.code, "lobby_update", lobby_payload(game))
     except ValueError as error:
@@ -2601,7 +2636,7 @@ def on_send_chat(data):
         return
     try:
         data = require_object(data)
-        msg = require_string(data, "message", minimum=1, maximum=100)
+        msg = require_string(data, "message", minimum=1, maximum=500)
     except ValueError as error:
         emit_validation_error(error)
         return

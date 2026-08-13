@@ -150,28 +150,6 @@ body::after {
 .presence-reset:focus-visible { color: var(--gold-light); border-color: var(--gold); outline: none; }
 .presence-reset-placeholder { visibility: hidden; pointer-events: none; }
 
-.accessibility-setting {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.7rem;
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid rgba(201,168,76,0.32);
-    border-radius: var(--radius-sm);
-    background: rgba(201,168,76,0.06);
-    color: var(--text-primary);
-    font-family: var(--font-heading);
-    cursor: pointer;
-}
-.accessibility-setting input { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; accent-color: var(--gold); }
-.accessibility-setting span { display: flex; flex-direction: column; gap: 0.2rem; }
-.accessibility-setting strong { color: var(--gold-light); font-size: 0.78rem; }
-.accessibility-setting small { color: var(--text-secondary); font: 0.78rem/1.25 var(--font-body); }
-.accessibility-setting-max {
-    border-color: rgba(126,200,255,0.42);
-    background: linear-gradient(135deg, rgba(35,104,151,0.13), rgba(201,168,76,0.08));
-}
-.accessibility-setting-max strong { color: #a9dcff; }
 .presence-field {
     position: relative;
     flex: 1 1 auto;

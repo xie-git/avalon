@@ -16,8 +16,6 @@ const RECONNECT_PLAYER_KEY = 'avalon-player-id';
 const HOST_CODE_KEY = 'avalon-host-game-code';
 const HOST_TOKEN_KEY = 'avalon-host-token';
 const FORCE_NEW = document.body.dataset.forceNew === 'true';
-const LARGE_TEXT_KEY = 'avalon-large-text-mode';
-const EXTRA_LARGE_TEXT_KEY = 'avalon-extra-large-text-mode';
 const DEFAULT_TITLE = document.title;
 const presenceScreenLabels = {
     'screen-lobby': 'Drag anywhere · overlap avatars to cluster',
@@ -31,25 +29,6 @@ const presenceScreenLabels = {
     'screen-assassin': 'The Final Choice',
     'screen-game-over': 'Roles Revealed',
 };
-
-function applyLargeTextMode(enabled, extraLarge = false) {
-    const large = Boolean(enabled || extraLarge);
-    document.body.classList.toggle('large-text-mode', large);
-    document.body.classList.toggle('extra-large-text-mode', Boolean(extraLarge));
-    const toggle = document.getElementById('toggle-large-text');
-    const extraToggle = document.getElementById('toggle-extra-large-text');
-    if (toggle) toggle.checked = large;
-    if (extraToggle) extraToggle.checked = Boolean(extraLarge);
-    try {
-        localStorage.setItem(LARGE_TEXT_KEY, String(large));
-        localStorage.setItem(EXTRA_LARGE_TEXT_KEY, String(Boolean(extraLarge)));
-    } catch (_) { /* optional */ }
-}
-
-applyLargeTextMode(
-    localStorage.getItem(LARGE_TEXT_KEY) === 'true',
-    localStorage.getItem(EXTRA_LARGE_TEXT_KEY) === 'true',
-);
 
 function showConnectionStatus(message) {
     connectionStatus.textContent = message;
@@ -329,6 +308,53 @@ function fmtChatTime(value = null) {
     return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 }
 
+function appendLinkifiedText(container, value) {
+    const text = String(value);
+    const urlPattern = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+    let cursor = 0;
+    for (const match of text.matchAll(urlPattern)) {
+        const raw = match[0];
+        let label = raw;
+        let trailing = '';
+        while (/[.,!?;:)\]}]$/.test(label)) {
+            trailing = label.slice(-1) + trailing;
+            label = label.slice(0, -1);
+        }
+        container.append(document.createTextNode(text.slice(cursor, match.index)));
+        const href = label.toLowerCase().startsWith('www.') ? `https://${label}` : label;
+        try {
+            const parsed = new URL(href);
+            if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && label) {
+                const link = document.createElement('a');
+                link.href = parsed.href;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.textContent = label;
+                container.appendChild(link);
+            } else {
+                container.append(document.createTextNode(label));
+            }
+        } catch (_error) {
+            container.append(document.createTextNode(label));
+        }
+        container.append(document.createTextNode(trailing));
+        cursor = match.index + raw.length;
+    }
+    container.append(document.createTextNode(text.slice(cursor)));
+}
+
+function createChatName(name, senderIsSpectator) {
+    const element = document.createElement('span');
+    element.className = 'chat-name';
+    element.textContent = name;
+    if (senderIsSpectator) {
+        const badge = document.createElement('em');
+        badge.textContent = 'spectator';
+        element.append(' ', badge);
+    }
+    return element;
+}
+
 function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue = null, showBubble = true, senderIsSpectator = false) {
     const timestamp = fmtChatTime(timestampValue);
     const playerColor = presenceTable.colorForName(name, colorIndex);
@@ -340,8 +366,14 @@ function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue 
     if (histList) {
         const entry = document.createElement('div');
         entry.className = 'chat-history-entry';
-        entry.innerHTML = `<span class="chat-name">${escapeHtml(name)}${senderIsSpectator ? ' <em>spectator</em>' : ''}</span>${escapeHtml(message)}<span class="chat-time">${timestamp}</span>`;
-        entry.querySelector('.chat-name').style.color = playerColor;
+        const nameElement = createChatName(name, senderIsSpectator);
+        nameElement.style.color = playerColor;
+        const timeElement = document.createElement('span');
+        timeElement.className = 'chat-time';
+        timeElement.textContent = timestamp;
+        entry.appendChild(nameElement);
+        appendLinkifiedText(entry, message);
+        entry.appendChild(timeElement);
         histList.appendChild(entry);
         while (histList.children.length > MAX_CHAT_HISTORY) {
             histList.firstElementChild.remove();
@@ -367,8 +399,10 @@ function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue 
 
     const bubble = document.createElement('div');
     bubble.className = 'chat-bubble' + (isSelf ? ' self' : '');
-    bubble.innerHTML = `<span class="chat-name">${escapeHtml(name)}${senderIsSpectator ? ' <em>spectator</em>' : ''}</span>${escapeHtml(message)}`;
-    bubble.querySelector('.chat-name').style.color = playerColor;
+    const nameElement = createChatName(name, senderIsSpectator);
+    nameElement.style.color = playerColor;
+    bubble.appendChild(nameElement);
+    appendLinkifiedText(bubble, message);
     container.appendChild(bubble);
     chatBubbleEls.push(bubble);
 
@@ -948,7 +982,7 @@ function applyStateSnapshot(snap) {
     document.getElementById('lobby-code-display').textContent = gameCode;
     document.getElementById('lobby-host-controls').classList.toggle('hidden', !isHost);
     document.getElementById('settings-game-actions').classList.toggle('hidden', !isHost);
-    document.getElementById('btn-settings').classList.remove('hidden');
+    document.getElementById('btn-settings').classList.toggle('hidden', !isHost);
 
     // Restore mission board state
     if (snap.mission_sizes && snap.mission_sizes.length) {
@@ -1076,7 +1110,7 @@ socket.on('join_success', data => {
 
     document.getElementById('lobby-code-display').textContent = gameCode;
     document.getElementById('lobby-host-controls').classList.toggle('hidden', !isHost);
-    document.getElementById('btn-settings').classList.remove('hidden');
+    document.getElementById('btn-settings').classList.toggle('hidden', !isHost);
     document.getElementById('settings-game-actions').classList.toggle('hidden', !isHost);
     renderLobbyPlayers(data.players || []);
     presenceTable.setPublicPositions(data.public_spectrum || {});
@@ -1684,12 +1718,6 @@ document.getElementById('btn-settings').addEventListener('click', () => {
 });
 document.getElementById('btn-close-settings').addEventListener('click', () => {
     document.getElementById('settings-overlay').classList.add('hidden');
-});
-document.getElementById('toggle-large-text').addEventListener('change', event => {
-    applyLargeTextMode(event.target.checked, false);
-});
-document.getElementById('toggle-extra-large-text').addEventListener('change', event => {
-    applyLargeTextMode(true, event.target.checked);
 });
 document.getElementById('btn-back-to-lobby').addEventListener('click', () => {
     document.getElementById('settings-overlay').classList.add('hidden');

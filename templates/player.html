@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260813-polish3">
-<link rel="stylesheet" href="/static/css/player.css?v=20260813-resume1">
+<link rel="stylesheet" href="/static/css/common.css?v=20260813-cleansettings1">
+<link rel="stylesheet" href="/static/css/player.css?v=20260813-cleansettings1">
 </head>
 <body data-force-new="{{ 'true' if force_new else 'false' }}">
 
@@ -45,7 +45,7 @@
     <div class="chat-input-row">
         <button class="chat-history-btn" id="btn-history-toggle" title="Show chat history">📜</button>
         <span id="settings-chat-slot"></span>
-        <input type="text" id="chat-input" placeholder="Quick quip..." maxlength="80" autocomplete="off" autocorrect="off">
+        <input type="text" id="chat-input" placeholder="Quick quip..." maxlength="500" autocomplete="off" autocorrect="off">
         <button class="chat-send-btn" id="btn-chat-send">Send</button>
     </div>
 </div>
@@ -140,7 +140,6 @@
                 <strong>Use a selfie</strong>
                 <input type="file" id="input-selfie" accept="image/*" capture="user">
             </label>
-            <small class="selfie-note">Resized on your phone and kept only for this live room.</small>
             <small class="error-message" id="selfie-error"></small>
         </div>
         <button type="button" class="btn lobby-ready-btn" id="btn-ready" aria-pressed="false">I’m Ready</button>
@@ -326,14 +325,6 @@
     <div class="role-overlay-box" style="max-width:320px">
         <div class="role-overlay-name" style="font-size:1.2rem;margin-bottom:1.25rem">Settings</div>
         <div style="width:100%;text-align:left;display:flex;flex-direction:column;gap:0.75rem">
-            <label class="accessibility-setting">
-                <input type="checkbox" id="toggle-large-text">
-                <span><strong>Retard Mode</strong><small>Makes the game header and all its counters and controls easier to read.</small></span>
-            </label>
-            <label class="accessibility-setting accessibility-setting-max">
-                <input type="checkbox" id="toggle-extra-large-text">
-                <span><strong>Going Full Retard!!</strong><small>Maximum-size, three-row header for the clearest possible view.</small></span>
-            </label>
             <div id="settings-game-actions" class="hidden" style="display:flex;flex-direction:column;gap:0.5rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border-gold)">
                 <button class="btn" id="btn-back-to-lobby" style="width:100%;font-size:0.8rem">↩ Back to Lobby</button>
                 <button class="btn" id="btn-new-game" style="width:100%;font-size:0.8rem;border-color:var(--red-glow);color:#ff8080">✕ End Game</button>
@@ -461,6 +452,6 @@
 
 <script src="/static/js/socket.io.min.js"></script>
 <script src="/static/js/presence.js?v=20260813-polish3"></script>
-<script src="/static/js/player.js?v=20260813-resume1"></script>
+<script src="/static/js/player.js?v=20260813-cleansettings1"></script>
 </body>
 </html>

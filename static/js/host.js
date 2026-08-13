@@ -10,8 +10,6 @@ const presenceTable = new AvalonPresenceTable({
 const HOST_CODE_KEY = 'avalon-host-game-code';
 const HOST_TOKEN_KEY = 'avalon-host-token';
 const TV_CHAT_KEY = 'avalon-tv-chat-enabled';
-const LARGE_TEXT_KEY = 'avalon-large-text-mode';
-const EXTRA_LARGE_TEXT_KEY = 'avalon-extra-large-text-mode';
 const presenceScreenLabels = {
     'screen-night': 'Night Phase',
     'screen-round': 'Mission Discussion',
@@ -23,25 +21,6 @@ const presenceScreenLabels = {
     'screen-assassin': 'The Final Choice',
     'screen-game-over': 'Roles Revealed',
 };
-
-function applyLargeTextMode(enabled, extraLarge = false) {
-    const large = Boolean(enabled || extraLarge);
-    document.body.classList.toggle('large-text-mode', large);
-    document.body.classList.toggle('extra-large-text-mode', Boolean(extraLarge));
-    const toggle = document.getElementById('toggle-host-large-text');
-    const extraToggle = document.getElementById('toggle-host-extra-large-text');
-    if (toggle) toggle.checked = large;
-    if (extraToggle) extraToggle.checked = Boolean(extraLarge);
-    try {
-        localStorage.setItem(LARGE_TEXT_KEY, String(large));
-        localStorage.setItem(EXTRA_LARGE_TEXT_KEY, String(Boolean(extraLarge)));
-    } catch (_) { /* optional */ }
-}
-
-applyLargeTextMode(
-    localStorage.getItem(LARGE_TEXT_KEY) === 'true',
-    localStorage.getItem(EXTRA_LARGE_TEXT_KEY) === 'true',
-);
 
 function showConnectionStatus(message) {
     connectionStatus.textContent = message;
@@ -115,6 +94,41 @@ function updateJoinTools() {
     qr.classList.remove('hidden');
 }
 
+function appendLinkifiedText(container, value) {
+    const text = String(value);
+    const urlPattern = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+    let cursor = 0;
+    for (const match of text.matchAll(urlPattern)) {
+        const raw = match[0];
+        let label = raw;
+        let trailing = '';
+        while (/[.,!?;:)\]}]$/.test(label)) {
+            trailing = label.slice(-1) + trailing;
+            label = label.slice(0, -1);
+        }
+        container.append(document.createTextNode(text.slice(cursor, match.index)));
+        const href = label.toLowerCase().startsWith('www.') ? `https://${label}` : label;
+        try {
+            const parsed = new URL(href);
+            if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && label) {
+                const link = document.createElement('a');
+                link.href = parsed.href;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.textContent = label;
+                container.appendChild(link);
+            } else {
+                container.append(document.createTextNode(label));
+            }
+        } catch (_error) {
+            container.append(document.createTextNode(label));
+        }
+        container.append(document.createTextNode(trailing));
+        cursor = match.index + raw.length;
+    }
+    container.append(document.createTextNode(text.slice(cursor)));
+}
+
 function renderTvChat() {
     const strip = document.getElementById('host-chat-strip');
     strip.classList.toggle('hidden', !tvChatEnabled || !gameStartedAt || !tvChatMessages.length);
@@ -125,7 +139,7 @@ function renderTvChat() {
         name.textContent = `${item.name}${item.is_spectator ? ' · spectator' : ''}`;
         name.style.color = presenceTable.colorForName(item.name, item.color_index);
         const message = document.createElement('span');
-        message.textContent = item.message;
+        appendLinkifiedText(message, item.message);
         line.append(name, message);
         strip.appendChild(line);
     });
@@ -1117,12 +1131,6 @@ document.getElementById('btn-host-settings').addEventListener('click', () => {
 });
 document.getElementById('btn-host-settings-close').addEventListener('click', () => {
     document.getElementById('host-settings-modal').style.display = 'none';
-});
-document.getElementById('toggle-host-large-text').addEventListener('change', event => {
-    applyLargeTextMode(event.target.checked, false);
-});
-document.getElementById('toggle-host-extra-large-text').addEventListener('change', event => {
-    applyLargeTextMode(true, event.target.checked);
 });
 document.getElementById('btn-host-back-lobby').addEventListener('click', async () => {
     document.getElementById('host-settings-modal').style.display = 'none';

@@ -46,6 +46,18 @@ def test_party_pages_do_not_reference_portrait_or_audio_assets():
         assert marker not in combined
 
 
+def test_chat_links_are_http_only_and_open_safely():
+    client = server.app.test_client()
+    player_js = client.get("/static/js/player.js").data
+    host_js = client.get("/static/js/host.js").data
+
+    for script in (player_js, host_js):
+        assert b"parsed.protocol === 'http:'" in script
+        assert b"parsed.protocol === 'https:'" in script
+        assert b"link.target = '_blank'" in script
+        assert b"link.rel = 'noopener noreferrer'" in script
+
+
 def test_join_qr_is_same_origin_and_only_exists_for_live_rooms(socket_client, create_game):
     created = create_game(socket_client)
     client = server.app.test_client()

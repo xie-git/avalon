@@ -98,13 +98,23 @@ It persists across container recreation and stores:
   and final result.
 - Active-room snapshots: the latest authoritative room state and hashed
   capabilities needed for restart-safe resumption.
+- Selfie metadata: timestamp, room, player ID/name, content hash,
+  private filename, and compressed byte count.
+
+Selfies are resized to 128 x 128 and JPEG-compressed in the player's browser.
+The server stores the bytes by SHA-256 content hash under
+`/data/private/selfies`, outside Flask's public `static` tree, with directory
+mode `0700` and file mode `0600`. Repeated identical images share one file but
+each upload receives its own SQLite metadata row. No HTTP route serves
+the archive.
 
 No cookies, reconnect tokens, authorization values, environment variables, or
 IP addresses are written to this database. Game logs intentionally contain
 player names and hidden game information for later replay and balance analysis.
 
-Chat and events share a hard 900 MiB SQLite limit, leaving headroom below
-1 GiB. Near the limit, old records are pruned to approximately 720 MiB.
+Chat, events, room snapshots, and selfie metadata share a hard 2.5 GiB SQLite
+limit. Near the limit, old chat and game-event records are pruned to
+approximately 2 GiB.
 
 ```bash
 # List and read chat
@@ -115,6 +125,9 @@ sudo docker compose exec avalon python chat_history.py --date 2026-08-07 --room 
 # List recorded games, then replay one chronological event stream
 sudo docker compose exec avalon python game_history.py --games
 sudo docker compose exec avalon python game_history.py --room ABCD --started-at 1786123456.123
+
+# List private selfie metadata and server-side file paths (no public endpoint)
+sudo docker compose exec avalon python selfie_history.py --limit 100
 ```
 
 ## Production deployment
@@ -179,7 +192,8 @@ intended network boundary.
 | `MAX_RATE_KEYS` | Bound for rate-limit bookkeeping; default `5000`. |
 | `GAME_TTL_SECONDS` | Suspended-room lifetime; default `86400` (24 hours). |
 | `CHAT_DB_PATH` | SQLite path; Compose uses `/data/avalon-chats.sqlite3`. |
-| `CHAT_DB_MAX_BYTES` | Requested DB cap, hard-limited to 900 MiB. |
+| `SELFIE_ARCHIVE_DIR` | Private, non-static directory for compressed selfies. |
+| `CHAT_DB_MAX_BYTES` | Requested DB cap, hard-limited to 2.5 GiB. |
 
 Keep `.env` private and uncommitted. The checked-in `.env.example` contains no
 working credential.

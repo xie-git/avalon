@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 import json
 
 import server
-from chat_store import ChatStore
+from chat_store import HARD_MAX_BYTES, ChatStore
 
 
 def packets_for(client, name):
@@ -68,6 +68,17 @@ def test_chat_store_prunes_before_its_size_limit(tmp_path):
     assert rows[-1]["message"].startswith("1999-")
 
 
+def test_chat_store_enforces_two_and_a_half_gib_hard_limit(tmp_path):
+    store = ChatStore(str(tmp_path / "bounded.sqlite3"), max_bytes=HARD_MAX_BYTES * 2)
+
+    assert HARD_MAX_BYTES == 2_560 * 1024 * 1024
+    assert store.max_bytes == HARD_MAX_BYTES
+    with store._connect() as connection:
+        page_size = connection.execute("PRAGMA page_size").fetchone()[0]
+        max_page_count = connection.execute("PRAGMA max_page_count").fetchone()[0]
+    assert page_size * max_page_count == HARD_MAX_BYTES
+
+
 def test_game_events_share_database_and_can_be_replayed(tmp_path):
     store = ChatStore(str(tmp_path / "history.sqlite3"), max_bytes=1024 * 1024)
     store.initialize()
@@ -85,6 +96,25 @@ def test_game_events_share_database_and_can_be_replayed(tmp_path):
     events = store.events_for_game("abcd", 123.5)
     assert events[0]["event_type"] == "mission_completed"
     assert json.loads(events[0]["payload_json"])["team"] == ["Arthur", "Merlin"]
+
+
+def test_selfie_metadata_is_indexed_without_storing_image_bytes(tmp_path):
+    store = ChatStore(str(tmp_path / "history.sqlite3"), max_bytes=1024 * 1024)
+    store.save_selfie_reference(
+        room_code="abcd",
+        game_started_at=None,
+        player_id="player-1",
+        player_name="Arthur",
+        image_sha256="a" * 64,
+        storage_name=f"{'a' * 64}.jpg",
+        byte_count=1234,
+    )
+
+    row = dict(store.saved_selfies()[0])
+    assert row["room_code"] == "ABCD"
+    assert row["player_name"] == "Arthur"
+    assert row["byte_count"] == 1234
+    assert "image" not in row
 
 
 def test_server_persists_chat_without_exposing_tokens(
@@ -137,6 +167,27 @@ def test_server_persists_chat_without_exposing_tokens(
     replacement.disconnect()
 
 
+def test_chat_accepts_long_meme_urls(
+    tmp_path, monkeypatch, socket_client, create_game
+):
+    store = ChatStore(str(tmp_path / "server-chat.sqlite3"))
+    store.initialize()
+    monkeypatch.setattr(server, "chat_store", store)
+    created = create_game(socket_client)
+    player = server.socketio.test_client(server.app)
+    player.emit("join_game", {"room_code": created["room_code"], "player_name": "Arthur"})
+    game = server.games[created["room_code"]]
+    game.phase = server.GamePhase.DISCUSSION
+    game.started_at = 100.0
+    player.get_received()
+    url = "https://example.com/memes/" + "a" * 300
+
+    player.emit("send_chat", {"message": url})
+
+    assert packets_for(player, "chat_message")[-1]["message"] == url
+    player.disconnect()
+
+
 def test_player_can_select_avatar_in_lobby(socket_client, create_game):
     created = create_game(socket_client)
     player = server.socketio.test_client(server.app)
@@ -153,19 +204,33 @@ def test_player_can_select_avatar_in_lobby(socket_client, create_game):
     player.disconnect()
 
 
-def test_player_can_use_a_small_in_memory_selfie(socket_client, create_game):
+def test_player_can_use_and_privately_archive_a_small_selfie(
+    tmp_path, monkeypatch, socket_client, create_game
+):
     import base64
+    from selfie_archive import SelfieArchive
+
+    store = ChatStore(str(tmp_path / "server-chat.sqlite3"))
+    store.initialize()
+    monkeypatch.setattr(server, "chat_store", store)
+    monkeypatch.setattr(server, "selfie_archive", SelfieArchive(str(tmp_path / "selfies")))
 
     created = create_game(socket_client)
     player = server.socketio.test_client(server.app)
     player.emit("join_game", {"room_code": created["room_code"], "player_name": "Arthur"})
     joined = packets_for(player, "join_success")[0]
     player.get_received()
-    image = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8" + b"x" * 80).decode()
+    jpeg = b"\xff\xd8" + b"x" * 80 + b"\xff\xd9"
+    image = "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()
 
     player.emit("select_selfie", {"image": image})
 
     game = server.games[created["room_code"]]
     assert game.players[joined["player_id"]].avatar_image == image
     assert packets_for(player, "lobby_update")[-1]["players"][0]["avatar_image"] == image
+    archived = dict(store.saved_selfies()[0])
+    assert archived["player_id"] == joined["player_id"]
+    saved_file = tmp_path / "selfies" / archived["storage_name"]
+    assert saved_file.read_bytes() == jpeg
+    assert saved_file.stat().st_mode & 0o777 == 0o600
     player.disconnect()

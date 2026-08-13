@@ -6,8 +6,8 @@ from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
 
-DEFAULT_MAX_BYTES = 900 * 1024 * 1024
-HARD_MAX_BYTES = 900 * 1024 * 1024
+DEFAULT_MAX_BYTES = 2_560 * 1024 * 1024
+HARD_MAX_BYTES = 2_560 * 1024 * 1024
 DEFAULT_DB_PATH = "/tmp/avalon-chats.sqlite3"
 
 
@@ -28,6 +28,9 @@ class ChatStore:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA busy_timeout = 5000")
         connection.execute("PRAGMA synchronous = NORMAL")
+        page_size = connection.execute("PRAGMA page_size").fetchone()[0]
+        max_pages = max(128, self.max_bytes // page_size)
+        connection.execute(f"PRAGMA max_page_count = {max_pages}")
         return connection
 
     def _initialize(self, connection: sqlite3.Connection) -> None:
@@ -35,9 +38,6 @@ class ChatStore:
             return
         connection.execute("PRAGMA page_size = 4096")
         connection.execute("PRAGMA auto_vacuum = FULL")
-        page_size = connection.execute("PRAGMA page_size").fetchone()[0]
-        max_pages = max(128, self.max_bytes // page_size)
-        connection.execute(f"PRAGMA max_page_count = {max_pages}")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS chat_messages (
@@ -85,6 +85,25 @@ class ChatStore:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_active_rooms_expires_at "
             "ON active_rooms(expires_at)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS selfie_uploads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                room_code TEXT NOT NULL,
+                game_started_at REAL,
+                player_id TEXT NOT NULL,
+                player_name TEXT NOT NULL,
+                image_sha256 TEXT NOT NULL,
+                storage_name TEXT NOT NULL,
+                byte_count INTEGER NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_selfie_uploads_created_at "
+            "ON selfie_uploads(created_at)"
         )
         connection.commit()
         self._initialized = True
@@ -214,6 +233,60 @@ class ChatStore:
                     (timestamp_text, room_code.upper(), game_started_at, event_type, payload_json),
                 )
                 connection.commit()
+
+    def save_selfie_reference(
+        self,
+        *,
+        room_code: str,
+        game_started_at: float | None,
+        player_id: str,
+        player_name: str,
+        image_sha256: str,
+        storage_name: str,
+        byte_count: int,
+        created_at: datetime | None = None,
+    ) -> None:
+        """Index a selfie stored outside the public web root."""
+        timestamp_text = self._timestamp_text(created_at)
+        with self._lock, self._connect() as connection:
+            self._initialize(connection)
+            if self._database_bytes(connection) >= self.prune_at_bytes:
+                self._prune(connection)
+            connection.execute(
+                """
+                INSERT INTO selfie_uploads (
+                    created_at, room_code, game_started_at, player_id,
+                    player_name, image_sha256, storage_name, byte_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    timestamp_text,
+                    room_code.upper(),
+                    game_started_at,
+                    player_id,
+                    player_name,
+                    image_sha256,
+                    storage_name,
+                    int(byte_count),
+                ),
+            )
+            connection.commit()
+
+    def saved_selfies(self, limit: int = 1000) -> list[sqlite3.Row]:
+        with self._lock, self._connect() as connection:
+            self._initialize(connection)
+            return list(
+                connection.execute(
+                    """
+                    SELECT created_at, room_code, game_started_at, player_id,
+                           player_name, image_sha256, storage_name, byte_count
+                    FROM selfie_uploads
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (max(1, min(int(limit), 10000)),),
+                )
+            )
 
     def save_room_snapshot(
         self,
