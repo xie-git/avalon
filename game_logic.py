@@ -148,11 +148,22 @@ class PlayerInfo:
         return d
 
 
+class SpectatorInfo:
+    def __init__(self, spectator_id: str, name: str, color_index: int = 0):
+        self.spectator_id = spectator_id
+        self.name = name
+        self.sid = None
+        self.connected = True
+        self.session_token = None
+        self.color_index = color_index
+
+
 class GameState:
     def __init__(self, game_code: str):
         self.code = game_code
         self.phase = GamePhase.LOBBY
         self.players: dict[str, PlayerInfo] = {}  # player_id -> PlayerInfo
+        self.spectators: dict[str, SpectatorInfo] = {}
         self.player_order: list[str] = []  # ordered list of player_ids
         self.host_sid: str | None = None  # host display screen sid
         self.host_token: str | None = None  # unguessable host-screen capability
@@ -593,6 +604,18 @@ def spectrum_average_positions(game: GameState) -> dict[str, dict[str, float]]:
     }
 
 
+def role_manifest(game: GameState) -> list[dict]:
+    """Public role lineup for this player count, without assignments."""
+    teams = PLAYER_COUNT_ROLES.get(game.player_count())
+    if not teams:
+        return []
+    return [
+        {"role": role.value, "team": ROLE_TO_TEAM[role].value}
+        for team_roles in teams
+        for role in team_roles
+    ]
+
+
 def build_state_snapshot(game: GameState, player_id: str) -> dict:
     """Full state snapshot for a reconnecting player."""
     player = game.players.get(player_id)
@@ -622,6 +645,7 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
             "beta_test_player_count": game.beta_test_player_count,
         },
         "public_spectrum": spectrum_average_positions(game),
+        "role_manifest": role_manifest(game),
         "timer_kind": game.timer_kind,
         "timer_remaining": (
             max(0, int(game.timer_deadline - time.time() + 0.999))

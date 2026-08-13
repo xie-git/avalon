@@ -93,25 +93,15 @@ body::after {
     position: relative;
     user-select: none;
 }
-.presence-heading {
+.presence-controls {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 0.55rem;
-    min-height: 27px;
-    font-family: var(--font-heading);
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-}
-.presence-title { color: var(--gold-light); font-size: 0.68rem; }
-.presence-count { color: var(--text-dim); font-size: 0.55rem; }
-.presence-context {
-    color: rgba(205, 211, 222, 0.5);
-    font: 0.48rem var(--font-heading);
-    letter-spacing: 0.06em;
+    justify-content: space-between;
+    gap: 0.6rem;
+    width: 100%;
 }
 .presence-view-toggle {
-    align-self: center;
+    align-self: flex-start;
     display: flex;
     align-items: center;
     gap: 0.25rem;
@@ -141,12 +131,6 @@ body::after {
     background: linear-gradient(145deg, rgba(177,128,38,0.62), rgba(91,62,18,0.78));
     color: #fff0b5;
     box-shadow: 0 0 10px rgba(201,168,76,0.2);
-}
-.presence-privacy-note {
-    padding: 0 0.55rem 0 0.35rem;
-    color: rgba(205,211,222,0.58);
-    font: 0.48rem var(--font-heading);
-    letter-spacing: 0.04em;
 }
 .presence-reset {
     margin-left: auto;
@@ -205,6 +189,25 @@ body::after {
         rgba(4, 5, 8, 0.9);
     box-shadow: inset 0 0 38px rgba(0,0,0,0.5), 0 0 24px rgba(53,116,179,0.07), 0 0 24px rgba(184,47,51,0.05);
 }
+.presence-role-manifest {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.25rem;
+    margin-top: 0.28rem;
+    padding: 0.12rem 0.2rem;
+}
+.presence-character {
+    padding: 0.13rem 0.3rem;
+    border: 1px solid currentColor;
+    border-radius: var(--radius-pill);
+    background: rgba(4,5,8,0.7);
+    font: 0.45rem/1.2 var(--font-heading);
+    letter-spacing: 0.025em;
+    white-space: nowrap;
+}
+.presence-character.good { color: #8bcfff; box-shadow: inset 0 0 8px rgba(46,134,222,0.09); }
+.presence-character.evil { color: #ff8d8d; box-shadow: inset 0 0 8px rgba(192,57,43,0.1); }
 .presence-spectrum-labels {
     position: absolute;
     z-index: 3;
@@ -314,11 +317,9 @@ body::after {
 .presence-node:focus-visible .presence-portrait { outline: 2px solid var(--gold-light); outline-offset: 3px; }
 
 @media (max-width: 520px) {
-    .presence-heading { flex-wrap: wrap; justify-content: flex-start; gap: 0.3rem 0.45rem; }
-    .presence-context { order: 3; flex: 1 0 100%; }
+    .presence-controls { gap: 0.4rem; }
     .presence-reset { min-height: 24px; }
-    .presence-view-toggle { width: 100%; justify-content: center; }
-    .presence-privacy-note { flex: 1; padding-right: 0.35rem; line-height: 1.25; }
+    .presence-view-toggle { justify-content: flex-start; }
 }
 
 .mission-history-tooltip {

@@ -18,6 +18,7 @@ from game_logic import (
     process_vote_result,
     record_mission_card,
     record_vote,
+    role_manifest,
     validate_team_proposal,
 )
 
@@ -79,6 +80,10 @@ def test_every_supported_player_count_matches_rulebook(
     assert sum(p.role == Role.MERLIN for p in game.players.values()) == 1
     assert sum(p.role == Role.ASSASSIN for p in game.players.values()) == 1
     assert MISSION_SIZES[count] == mission_sizes
+    manifest = role_manifest(game)
+    assert len(manifest) == count
+    assert sum(role["team"] == "good" for role in manifest) == good_count
+    assert sum(role["team"] == "evil" for role in manifest) == evil_count
 
     for mission_index in range(5):
         game.current_mission = mission_index

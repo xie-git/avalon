@@ -12,9 +12,14 @@ accounts, app installation, or Tailscale access are required for players.
   phase-specific status panels, optional recent chat, and in-game settings.
 - A phone UI with private actionable controls, reconnect messaging, role
   reminder, mission board, and short live chat.
+- Spectators can join without taking a player seat, watch every public phase,
+  chat with a visible spectator badge, and arrange their own private suspicion
+  board without affecting the group average.
 - A persistent draggable fellowship table on host and joined-player screens.
   Players choose from eight knight variants; each player keeps a stable color
   across their avatar, name, and chat messages.
+- The suspicion spectrum includes a compact, team-colored key showing exactly
+  which Good and Evil characters are present for the current 6–10 player game.
 - Completed mission shields are clickable on host and phones. Their tooltip
   shows the leader, quest party, Success count, and Fail count.
 - Refresh and temporary-disconnect recovery restores the same seat, role, and

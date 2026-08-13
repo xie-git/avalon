@@ -5,8 +5,10 @@
 html, body {
     max-width: 480px;
     margin: 0 auto;
+    width: 100%;
+    height: 100%;
     min-height: 100%;
-    overflow-x: hidden;
+    overflow: hidden;
 }
 
 /* Joining, readiness, and action timers */
@@ -19,6 +21,33 @@ html, body {
     cursor: pointer;
     font: 0.75rem var(--font-body);
 }
+.spectator-join-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid rgba(139,207,255,0.3);
+    border-radius: var(--radius-sm);
+    background: rgba(46,134,222,0.07);
+    cursor: pointer;
+}
+.spectator-join-option input { margin-top: 0.18rem; accent-color: #71c5ff; }
+.spectator-join-option span { display: flex; flex-direction: column; }
+.spectator-join-option strong { color: #a9dcff; font: 0.7rem var(--font-heading); }
+.spectator-join-option small { color: var(--text-secondary); font-size: 0.72rem; line-height: 1.25; }
+.spectator-banner {
+    padding: 0.35rem 0.8rem;
+    border: 1px solid rgba(126,200,255,0.42);
+    border-radius: var(--radius-pill);
+    background: rgba(35,104,151,0.14);
+    color: #a9dcff;
+    font: 0.62rem var(--font-heading);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+body.spectator-mode #avatar-picker,
+body.spectator-mode #btn-ready,
+body.spectator-mode #lobby-host-controls { display: none !important; }
 .join-recovery {
     display: grid;
     gap: 0.55rem;
@@ -552,11 +581,13 @@ html, body {
 .screen.presence-active {
     gap: clamp(0.5rem, 1.5dvh, 0.9rem);
     overflow: hidden;
+    overscroll-behavior: none;
 }
 .presence-player-panel {
-    flex: 0 1 auto;
+    flex: 0 0 clamp(280px, 43dvh, 330px);
     width: 100%;
-    max-height: min(39dvh, 310px);
+    height: clamp(280px, 43dvh, 330px);
+    max-height: clamp(280px, 43dvh, 330px);
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -576,12 +607,14 @@ html, body {
 .presence-player-panel .assassin-target-list,
 .presence-player-panel .roles-list { overflow: visible; }
 .presence-table.presence-player {
-    flex: 1 1 260px;
+    flex: 0.72 1 205px;
     width: 100%;
-    min-height: 205px;
+    min-height: 185px;
     max-height: none;
 }
-.presence-player .presence-field { min-height: 175px; }
+.presence-player .presence-field { min-height: 155px; }
+.presence-player .presence-node { width: clamp(52px, 16vw, 68px); }
+.presence-player .presence-portrait { width: clamp(34px, 10vw, 46px); }
 #screen-game-over.presence-active .game-over-roles { display: none; }
 
 /* ============================================================
@@ -819,7 +852,7 @@ html, body {
     align-items: center;
     justify-content: space-between;
     padding: 0 0.75rem;
-    height: calc(50px + env(safe-area-inset-top));
+    height: calc(75px + env(safe-area-inset-top));
     padding-top: env(safe-area-inset-top);
     gap: 0.5rem;
     backdrop-filter: blur(6px);
@@ -828,7 +861,7 @@ html, body {
 .player-board.hidden { display: none; }
 
 /* Adjust screen padding when board is visible */
-body.board-visible .screen { padding-top: calc(2rem + 58px + env(safe-area-inset-top)); }
+body.board-visible .screen { padding-top: calc(2rem + 83px + env(safe-area-inset-top)); }
 body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-inset-bottom)); }
 
 .pb-shields {
@@ -839,7 +872,7 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
 }
 .pb-shield {
     flex: 1;
-    height: 38px;
+    height: 57px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -858,10 +891,10 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
     box-shadow: 0 0 8px rgba(201,168,76,0.35);
 }
 .pb-shield.pb-future { background: rgba(255,255,255,0.02); }
-.pb-num  { font-family: var(--font-heading); font-size: 0.65rem; color: var(--text-secondary); line-height: 1; }
-.pb-size { font-family: var(--font-heading); font-size: 0.55rem; color: var(--text-dim); line-height: 1; margin-top: 1px; }
-.pb-icon { font-size: 0.7rem; line-height: 1; }
-.pb-double { font-size: 0.45rem; color: var(--red-glow); position: absolute; top: 2px; right: 3px; font-family: var(--font-heading); }
+.pb-num  { font-family: var(--font-heading); font-size: 0.48rem; color: var(--text-dim); line-height: 1; }
+.pb-size { font-family: var(--font-heading); font-size: 0.84rem; font-weight: 700; color: var(--gold-light); line-height: 1; margin-top: 3px; }
+.pb-icon { font-size: 0.82rem; line-height: 1; }
+.pb-double { font-size: 0.55rem; color: #ff7468; position: absolute; top: 3px; right: 4px; font-family: var(--font-heading); }
 
 .pb-stats {
     display: flex;
@@ -869,34 +902,27 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
     gap: 0.05rem;
     flex-shrink: 0;
 }
-.pb-team-counts {
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-    gap: 0.08rem;
-    font: 0.46rem var(--font-heading);
-    letter-spacing: 0.05em;
-}
-.pb-team-counts span { white-space: nowrap; }
-.pb-team-counts strong { font-size: 0.66rem; }
-.pb-team-counts .good { color: #7ec8ff; }
-.pb-team-counts .evil { color: #ff8080; }
 .pb-stat {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 0.35rem;
-    min-width: 5.75rem;
+    min-width: 6.25rem;
+}
+.role-reminder-trigger { cursor: pointer; border-radius: 5px; }
+.role-reminder-trigger:focus-visible {
+    outline: 1px solid var(--gold-light);
+    outline-offset: 2px;
 }
 .pb-stat span {
     font-family: var(--font-heading);
-    font-size: 0.42rem;
+    font-size: 0.52rem;
     color: var(--text-dim);
     letter-spacing: 0.08em;
 }
 .pb-stat strong {
     font-family: var(--font-heading);
-    font-size: 0.62rem;
+    font-size: 0.76rem;
     color: var(--gold-light);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
@@ -906,8 +932,8 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
 .pb-proposal-stat.danger strong { color: #ff8d83; }
 .pb-proposal-circles { display: flex; align-items: center; gap: 3px; }
 .pb-proposal-circles i {
-    width: 7px;
-    height: 7px;
+    width: 9px;
+    height: 9px;
     border: 1px solid rgba(201,168,76,0.62);
     border-radius: 50%;
     background: transparent;
@@ -915,6 +941,19 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
 .pb-proposal-circles i.active { background: var(--gold); border-color: var(--gold-light); }
 .pb-proposal-stat.danger .pb-proposal-circles i { border-color: rgba(232,91,77,0.75); }
 .pb-proposal-stat.danger .pb-proposal-circles i.active { background: #e85b4d; border-color: #ff9a90; }
+.pb-fail-circles { display: flex; align-items: center; gap: 4px; }
+.pb-fail-circles i {
+    width: 9px;
+    height: 9px;
+    border: 1px solid rgba(232,91,77,0.75);
+    border-radius: 50%;
+    background: transparent;
+}
+.pb-fail-circles i.active {
+    background: #e85b4d;
+    border-color: #ff9a90;
+    box-shadow: 0 0 5px rgba(232,91,77,0.5);
+}
 #pb-game-time { display: inline-block; width: 7ch; text-align: right; }
 
 /* Optional per-device high-legibility header. The extra row keeps every
@@ -933,14 +972,8 @@ body.large-text-mode .pb-num { font-size: 0.82rem; }
 body.large-text-mode .pb-size { font-size: 0.7rem; }
 body.large-text-mode .pb-icon { font-size: 0.88rem; }
 body.large-text-mode .pb-double { font-size: 0.6rem; }
-body.large-text-mode .pb-team-counts {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.75rem;
-    font-size: 0.7rem;
-}
-body.large-text-mode .pb-team-counts strong { font-size: 0.95rem; }
 body.large-text-mode .pb-stats {
+    grid-column: 1 / -1;
     min-width: 0;
     flex-direction: row;
     align-items: center;
@@ -952,18 +985,10 @@ body.large-text-mode .pb-stat span { font-size: 0.58rem; }
 body.large-text-mode .pb-stat strong { font-size: 0.86rem; }
 body.large-text-mode .pb-proposal-circles { gap: 4px; }
 body.large-text-mode .pb-proposal-circles i { width: 10px; height: 10px; }
+body.large-text-mode .pb-fail-circles i { width: 10px; height: 10px; }
 body.large-text-mode #pb-game-time { width: auto; }
-body.large-text-mode .player-utility-dock {
-    top: calc(var(--player-board-height) + 8px + env(safe-area-inset-top));
-}
-body.large-text-mode .player-utility-dock button {
-    min-width: 40px;
-    height: 36px;
-    padding-inline: 0.75rem;
-    font-size: 0.7rem;
-}
 body.large-text-mode.board-visible .screen {
-    padding-top: calc(var(--player-board-height) + 52px + env(safe-area-inset-top));
+    padding-top: calc(var(--player-board-height) + env(safe-area-inset-top) + clamp(0.75rem, 2dvh, 1.5rem));
 }
 
 body.extra-large-text-mode { --player-board-height: 156px; }
@@ -973,25 +998,19 @@ body.extra-large-text-mode .player-board {
     gap: 0;
 }
 body.extra-large-text-mode .pb-shields,
-body.extra-large-text-mode .pb-team-counts,
 body.extra-large-text-mode .pb-stats { grid-column: 1; }
 body.extra-large-text-mode .pb-shield { height: 58px; }
 body.extra-large-text-mode .pb-num { font-size: 1.05rem; }
 body.extra-large-text-mode .pb-size { font-size: 0.86rem; }
 body.extra-large-text-mode .pb-icon { font-size: 1.1rem; }
-body.extra-large-text-mode .pb-team-counts { justify-content: center; gap: 1.5rem; font-size: 0.88rem; }
-body.extra-large-text-mode .pb-team-counts strong { font-size: 1.2rem; }
 body.extra-large-text-mode .pb-stats { justify-content: space-around; gap: 0.5rem; }
 body.extra-large-text-mode .pb-stat { gap: 0.4rem; }
 body.extra-large-text-mode .pb-stat span { font-size: 0.72rem; }
 body.extra-large-text-mode .pb-stat strong { font-size: 1.05rem; }
 body.extra-large-text-mode .pb-proposal-circles i { width: 12px; height: 12px; }
-body.extra-large-text-mode .player-utility-dock {
-    top: calc(var(--player-board-height) + 8px + env(safe-area-inset-top));
-}
-body.extra-large-text-mode .player-utility-dock button { min-width: 46px; height: 42px; font-size: 0.78rem; }
+body.extra-large-text-mode .pb-fail-circles i { width: 12px; height: 12px; }
 body.extra-large-text-mode.board-visible .screen {
-    padding-top: calc(var(--player-board-height) + 58px + env(safe-area-inset-top));
+    padding-top: calc(var(--player-board-height) + env(safe-area-inset-top) + clamp(0.75rem, 2dvh, 1.5rem));
 }
 
 /* ============================================================
@@ -1036,6 +1055,14 @@ body.extra-large-text-mode.board-visible .screen {
 .chat-bubble.self { border-color: rgba(201,168,76,0.35); align-self: flex-end; }
 .chat-bubble.fading { opacity: 0; transform: translateY(-4px); }
 .chat-name { color: var(--gold-light); font-family: var(--font-heading); font-size: 0.68rem; margin-right: 0.25rem; font-weight: 700; }
+.chat-name em {
+    padding: 0.05rem 0.22rem;
+    border: 1px solid rgba(126,200,255,0.5);
+    border-radius: var(--radius-pill);
+    color: #a9dcff;
+    font: normal 0.48rem var(--font-heading);
+    text-transform: uppercase;
+}
 
 .chat-history-panel {
     background: rgba(8,6,2,0.97);
@@ -1117,6 +1144,12 @@ body.extra-large-text-mode.board-visible .screen {
     transition: background 0.15s;
 }
 .chat-history-btn.active { background: rgba(201,168,76,0.18); }
+.chat-input-row .settings-float-btn {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    box-shadow: none;
+}
 .chat-input-row input {
     flex: 1;
     background: rgba(255,255,255,0.04);
@@ -1158,7 +1191,7 @@ body.extra-large-text-mode.board-visible .screen {
     --phone-space: clamp(0.75rem, 2.4dvh, 1.5rem);
     --phone-top: max(clamp(0.75rem, 3dvh, 2rem), env(safe-area-inset-top));
     --phone-bottom: max(clamp(0.75rem, 3dvh, 2rem), env(safe-area-inset-bottom));
-    --player-board-height: 50px;
+    --player-board-height: 75px;
     --player-chat-height: 52px;
 }
 
@@ -1292,11 +1325,15 @@ body.chat-visible .screen {
     .role-card-wrapper { width: clamp(168px, min(52vw, 28dvh), 195px); }
     .vote-buttons .btn { padding: 0.85rem 0.5rem; }
     .choice-icon { font-size: 2.1rem; }
-    .presence-heading { min-height: 24px; }
     .presence-reset { min-height: 24px; }
-    .presence-player-panel { max-height: min(37dvh, 245px); padding: 0.6rem; }
-    .presence-table.presence-player { flex-basis: 220px; min-height: 180px; }
-    .presence-player .presence-field { min-height: 155px; }
+    .presence-player-panel {
+        flex-basis: clamp(265px, 43dvh, 295px);
+        height: clamp(265px, 43dvh, 295px);
+        max-height: clamp(265px, 43dvh, 295px);
+        padding: 0.6rem;
+    }
+    .presence-table.presence-player { flex-basis: 175px; min-height: 155px; }
+    .presence-player .presence-field { min-height: 132px; }
 }
 
 @media (orientation: landscape) and (max-height: 520px) {

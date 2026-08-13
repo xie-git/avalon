@@ -122,7 +122,7 @@ function renderTvChat() {
     tvChatMessages.slice(-2).forEach(item => {
         const line = document.createElement('div');
         const name = document.createElement('strong');
-        name.textContent = item.name;
+        name.textContent = `${item.name}${item.is_spectator ? ' · spectator' : ''}`;
         name.style.color = presenceTable.colorForName(item.name, item.color_index);
         const message = document.createElement('span');
         message.textContent = item.message;
@@ -607,6 +607,7 @@ socket.on('host_registered', data => {
     timerMax = discussionDuration;
     syncPresencePlayers(players);
     presenceTable.setPublicPositions(data.public_spectrum || {});
+    presenceTable.setRoleManifest(data.role_manifest || []);
     renderTvChat();
     renderRecoveryList();
 
@@ -698,6 +699,7 @@ socket.on('host_registered', data => {
 socket.on('player_joined', data => {
     players = data.players || [];
     syncPresencePlayers(players);
+    presenceTable.setRoleManifest(data.role_manifest || []);
     renderLobbyPlayers(players);
 });
 
@@ -721,6 +723,7 @@ socket.on('lobby_update', data => {
     players = data.players || [];
     renderLobbyPlayers(players);
     presenceTable.setPublicPositions(data.public_spectrum || {});
+    presenceTable.setRoleManifest(data.role_manifest || []);
     if (data.settings) {
         discussionDuration = data.settings.discussion_time;
         const dispEl = document.getElementById('discussion-time-display');

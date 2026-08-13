@@ -682,10 +682,6 @@ input[type="range"] {
     margin: auto;
     pointer-events: auto;
 }
-.presence-host .presence-heading {
-    justify-content: flex-start;
-    padding-inline: clamp(0.25rem, 1vw, 0.75rem);
-}
 .presence-host .presence-field {
     min-height: 340px;
     border-color: rgba(201,168,76,0.14);
@@ -1260,7 +1256,6 @@ body,
     .crosshair-icon { font-size: 2.75rem; }
     #screen-game-over { gap: 0.65rem; }
     .role-reveal-card { padding: 0.65rem; }
-    .presence-host .presence-heading { min-height: 22px; }
     .presence-host .presence-reset { min-height: 22px; }
 }
 

@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260808-qa8">
-<link rel="stylesheet" href="/static/css/player.css?v=20260808-qa10">
+<link rel="stylesheet" href="/static/css/common.css?v=20260813-polish3">
+<link rel="stylesheet" href="/static/css/player.css?v=20260813-polish7">
 </head>
 <body>
 
@@ -17,17 +17,17 @@
 <!-- Mission board (fixed top, shown during game) -->
 <div id="player-board" class="player-board hidden">
     <div class="pb-shields" id="pb-shields"></div>
-    <div class="pb-team-counts" aria-label="Team composition">
-        <span class="good">GOOD <strong id="pb-good-count">—</strong></span>
-        <span class="evil">EVIL <strong id="pb-evil-count">—</strong></span>
-    </div>
     <div class="pb-stats">
-        <div class="pb-stat pb-proposal-stat" aria-label="Team proposal 1 of 5">
+        <div class="pb-stat pb-proposal-stat role-reminder-trigger" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Team proposal 1 of 5; show my role">
             <span>PROPOSAL</span>
             <div class="pb-proposal-circles" aria-hidden="true"><i class="active"></i><i></i><i></i><i></i><i></i></div>
             <strong id="pb-proposal" class="sr-only">1/5</strong>
         </div>
-        <div class="pb-stat"><span>FAILED</span><strong id="pb-fails">0/3</strong></div>
+        <div class="pb-stat pb-fail-stat role-reminder-trigger" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Failed missions 0 of 3; show my role">
+            <span>FAILED</span>
+            <div class="pb-fail-circles" aria-hidden="true"><i></i><i></i><i></i></div>
+            <strong id="pb-fails" class="sr-only">0/3</strong>
+        </div>
         <div class="pb-stat"><span>TIME</span><strong id="pb-game-time">00:00</strong></div>
     </div>
 </div>
@@ -44,6 +44,7 @@
     </div>
     <div class="chat-input-row">
         <button class="chat-history-btn" id="btn-history-toggle" title="Show chat history">📜</button>
+        <span id="settings-chat-slot"></span>
         <input type="text" id="chat-input" placeholder="Quick quip..." maxlength="80" autocomplete="off" autocorrect="off">
         <button class="chat-send-btn" id="btn-chat-send">Send</button>
     </div>
@@ -67,6 +68,10 @@
                 <small class="form-hint" id="real-name-hint">Use the name people call you in real life—Avalon gets confusing otherwise.</small>
             </div>
             <div class="error-message" id="join-error"></div>
+            <label class="spectator-join-option">
+                <input type="checkbox" id="join-as-spectator">
+                <span><strong>Join as a spectator</strong><small>Watch, chat, and use a private board without taking a player seat.</small></span>
+            </label>
             <button class="btn btn-primary" id="btn-join">Join Game</button>
             <button type="button" class="btn" id="btn-create-player-game">Host a New Game</button>
             <button type="button" class="join-recovery-toggle" id="btn-show-recovery">Recover a disconnected seat</button>
@@ -85,6 +90,7 @@
             <div class="screen-title-small">AVALON</div>
             <div class="screen-subtitle">Room: <span id="lobby-code-display" style="color:var(--gold)">----</span></div>
         </div>
+        <div id="spectator-banner" class="spectator-banner hidden">◈ Spectator · watching only</div>
         <div id="lobby-host-controls" class="hidden" style="width:100%;text-align:center;margin-bottom:1rem">
             <div class="phone-bot-controls">
                 <div class="phone-bot-copy">
@@ -289,9 +295,8 @@
 
 </div>
 
-<div class="player-utility-dock">
-    <button id="btn-role-reminder" class="role-reminder-btn hidden" aria-label="My Role"><span>My Role</span></button>
-    <button id="btn-settings" class="settings-float-btn hidden" aria-label="Settings">⚙</button>
+<div class="player-utility-dock" id="player-utility-dock">
+    <button id="btn-settings" class="settings-float-btn hidden" aria-label="Settings" title="Settings">⚙</button>
 </div>
 
 <!-- Settings overlay -->
@@ -317,7 +322,7 @@
 </div>
 
 <!-- Role reminder overlay -->
-<div id="role-overlay" class="role-overlay hidden">
+<div id="role-overlay" class="role-overlay role-tooltip hidden">
     <div class="role-overlay-box">
         <div class="role-overlay-team" id="overlay-team-badge"></div>
         <div class="role-overlay-name" id="overlay-role-name"></div>
@@ -346,25 +351,13 @@
     transition: box-shadow 0.2s, filter 0.2s;
 }
 .settings-float-btn:hover { box-shadow: 0 0 20px rgba(201,168,76,0.4); filter: brightness(1.2); }
-
-.role-reminder-btn {
-    position: static;
+.player-utility-dock {
+    position: fixed;
+    top: max(0.75rem, env(safe-area-inset-top));
+    right: max(0.75rem, env(safe-area-inset-right));
     z-index: 200;
-    background: linear-gradient(135deg, #2a2010, #1a1508);
-    border: 1.5px solid var(--gold);
-    border-radius: var(--radius-pill);
-    color: var(--gold-light);
-    font-family: var(--font-heading);
-    font-size: 0.75rem;
-    letter-spacing: 0.1em;
-    padding: 0.5rem 1rem;
-    cursor: pointer;
-    box-shadow: 0 0 12px rgba(201,168,76,0.25);
-    transition: box-shadow 0.2s, filter 0.2s;
 }
-.role-reminder-btn:hover { box-shadow: 0 0 20px rgba(201,168,76,0.4); filter: brightness(1.15); }
-.player-utility-dock { position:fixed; top:calc(56px + env(safe-area-inset-top)); right:max(0.6rem, env(safe-area-inset-right)); z-index:200; display:flex; gap:0.35rem; }
-.player-utility-dock button { width:auto; height:28px; min-width:32px; padding:0 0.55rem; font-size:0.58rem; }
+#settings-chat-slot { display: flex; flex: 0 0 auto; }
 
 .role-overlay {
     position: fixed;
@@ -377,6 +370,23 @@
     padding: 1rem;
 }
 .role-overlay.hidden { display: none; }
+.role-overlay.role-tooltip {
+    align-items: flex-start;
+    justify-content: flex-end;
+    padding: calc(var(--player-board-height, 75px) + env(safe-area-inset-top) + 0.45rem)
+        max(0.6rem, env(safe-area-inset-right)) 0.6rem 0.6rem;
+    background: transparent;
+}
+.role-tooltip .role-overlay-box {
+    width: min(310px, calc(100vw - 1.2rem));
+    padding: 1rem 1.1rem;
+    border-width: 1px;
+    border-radius: var(--radius-md);
+    box-shadow: 0 10px 35px rgba(0,0,0,0.82), 0 0 24px rgba(201,168,76,0.16);
+}
+.role-tooltip .role-overlay-name { font-size: 1.2rem; margin-bottom: 0.45rem; }
+.role-tooltip .role-overlay-desc { font-size: 0.82rem; margin-bottom: 0.55rem; }
+.role-tooltip .role-overlay-knowledge { font-size: 0.76rem; padding: 0.45rem 0.55rem; }
 .role-overlay-box {
     background: var(--bg-parchment);
     border: 2px solid var(--gold);
@@ -428,7 +438,7 @@
 </style>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/presence.js?v=20260808-qa13"></script>
-<script src="/static/js/player.js?v=20260808-qa15"></script>
+<script src="/static/js/presence.js?v=20260813-polish3"></script>
+<script src="/static/js/player.js?v=20260813-polish6"></script>
 </body>
 </html>

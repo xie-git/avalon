@@ -127,6 +127,8 @@
             this.publicPositions = {};
             this.view = 'private';
             this.revealedRoles = null;
+            this.roleManifest = [];
+            this.contributesToAverage = true;
             this.drag = null;
             this.mountedScreen = null;
 
@@ -134,16 +136,12 @@
             this.element.className = `presence-table presence-${this.mode} hidden`;
             this.element.setAttribute('aria-label', 'Good to bad suspicion spectrum');
             this.element.innerHTML = `
-                <div class="presence-heading">
-                    <span class="presence-title">Suspicion Spectrum</span>
-                    <span class="presence-count" aria-live="polite"></span>
-                    <span class="presence-context"></span>
+                <div class="presence-controls">
+                    <div class="presence-view-toggle" role="group" aria-label="Choose suspicion spectrum">
+                        <button type="button" data-view="private" aria-pressed="true">Private</button>
+                        <button type="button" data-view="public" aria-pressed="false">Group Average</button>
+                    </div>
                     <button type="button" class="presence-reset" title="Reset avatar positions">Reset positions</button>
-                </div>
-                <div class="presence-view-toggle" role="group" aria-label="Choose suspicion spectrum">
-                    <button type="button" data-view="private" aria-pressed="true">Private</button>
-                    <button type="button" data-view="public" aria-pressed="false">Group Average</button>
-                    <span class="presence-privacy-note">Only you can see this layout</span>
                 </div>
                 <div class="presence-field">
                     <div class="presence-spectrum-labels" aria-hidden="true">
@@ -152,12 +150,11 @@
                         <span>Most likely bad</span>
                     </div>
                     <div class="presence-nodes"></div>
-                </div>`;
+                </div>
+                <div class="presence-role-manifest hidden" aria-label="Characters in this game"></div>`;
             this.field = this.element.querySelector('.presence-field');
             this.nodes = this.element.querySelector('.presence-nodes');
-            this.count = this.element.querySelector('.presence-count');
-            this.contextLabel = this.element.querySelector('.presence-context');
-            this.privacyNote = this.element.querySelector('.presence-privacy-note');
+            this.manifest = this.element.querySelector('.presence-role-manifest');
             this.element.querySelector('.presence-reset').addEventListener('click', () => this.reset());
             this.element.querySelectorAll('[data-view]').forEach(button => {
                 button.addEventListener('click', () => this.setView(button.dataset.view));
@@ -172,7 +169,7 @@
         }
 
         storageKey() {
-            return this.roomCode ? `avalon-private-spectrum:${this.mode}:${this.roomCode}` : '';
+            return this.roomCode ? `avalon-private-spectrum:v2:${this.mode}:${this.roomCode}` : '';
         }
 
         viewStorageKey() {
@@ -203,6 +200,8 @@
         }
 
         setPlayers(playerList, orderedNames = []) {
+            const previousPlayers = this.players;
+            const previousCount = previousPlayers.length;
             const byName = new Map((playerList || []).map(player => [player.name, player]));
             const ordered = [];
             for (const name of orderedNames || []) {
@@ -212,6 +211,19 @@
                 }
             }
             this.players = ordered.concat([...byName.values()]);
+            if (previousCount && previousCount !== this.players.length) {
+                this.players.forEach((player, newIndex) => {
+                    const oldIndex = previousPlayers.findIndex(candidate =>
+                        String(candidate.player_id || candidate.name) === String(player.player_id || player.name));
+                    const key = String(player.player_id || player.name);
+                    const saved = this.privatePositions[key];
+                    if (oldIndex < 0 || !saved) return;
+                    const oldDefault = this.defaultPosition(oldIndex, previousCount);
+                    if (Math.abs(saved.x - oldDefault.x) < 0.002 && Math.abs(saved.y - oldDefault.y) < 0.002) {
+                        this.privatePositions[key] = this.defaultPosition(newIndex, this.players.length);
+                    }
+                });
+            }
             this.prunePositions();
             this.ensurePrivatePositions();
             this.render();
@@ -289,9 +301,36 @@
             reset.classList.toggle('presence-reset-placeholder', isPublic);
             reset.disabled = isPublic;
             reset.setAttribute('aria-hidden', String(isPublic));
-            this.privacyNote.textContent = isPublic
-                ? 'Read-only average · self-ratings excluded'
-                : 'Only you can see this layout';
+        }
+
+        setContributionEnabled(enabled) {
+            this.contributesToAverage = Boolean(enabled);
+            this.updateViewControls();
+        }
+
+        setRoleManifest(manifest) {
+            this.roleManifest = Array.isArray(manifest) ? manifest : [];
+            const abbreviations = {
+                'Merlin': 'Mer',
+                'Percival': 'Per',
+                'Loyal Servant': 'Loy',
+                'Assassin': 'Asn',
+                'Morgana': 'Mor',
+                'Mordred': 'Mrd',
+                'Oberon': 'Obr',
+                'Minion of Mordred': 'Min',
+            };
+            this.manifest.replaceChildren();
+            this.roleManifest.forEach(item => {
+                if (!item || !item.role || !['good', 'evil'].includes(item.team)) return;
+                const badge = document.createElement('span');
+                badge.className = `presence-character ${item.team}`;
+                badge.textContent = `${item.team === 'good' ? '✦' : '◆'} ${abbreviations[item.role] || item.role.slice(0, 3)}`;
+                badge.title = item.role;
+                badge.setAttribute('aria-label', `${item.team}, ${item.role}`);
+                this.manifest.appendChild(badge);
+            });
+            this.manifest.classList.toggle('hidden', !this.manifest.children.length);
         }
 
         activePositions() {
@@ -332,9 +371,6 @@
 
         render() {
             this.nodes.replaceChildren();
-            const connected = this.players.filter(player => player.connected !== false).length;
-            this.count.textContent = `${connected} of ${this.players.length} connected`;
-
             this.players.forEach(player => {
                 const key = String(player.player_id || player.name);
                 const palette = this.paletteFor(player, key);
@@ -413,7 +449,6 @@
             }
             if (panel.nextElementSibling !== this.element) panel.after(this.element);
 
-            this.contextLabel.textContent = label;
             this.element.classList.remove('hidden');
             requestAnimationFrame(() => this.layout());
         }
@@ -426,7 +461,6 @@
             if (this.mountedScreen) this.mountedScreen.classList.remove('presence-active');
             this.mountedScreen = null;
             container.appendChild(this.element);
-            this.contextLabel.textContent = label;
             this.element.classList.remove('hidden');
             requestAnimationFrame(() => this.layout());
         }
@@ -521,7 +555,7 @@
         }
 
         notifyPrivateChange() {
-            if (!this.roomCode) return;
+            if (!this.roomCode || !this.contributesToAverage) return;
             this.onPrivateChange({ positions: this.sanitizePositions(this.privatePositions) });
         }
 

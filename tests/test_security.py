@@ -248,6 +248,63 @@ def test_group_spectrum_rejects_invalid_or_unauthorized_updates(socket_client, c
     player.disconnect()
 
 
+def test_spectator_can_watch_chat_and_reconnect_without_taking_a_seat(
+    socket_client, create_game
+):
+    created = create_game(socket_client)
+    spectator = server.socketio.test_client(server.app)
+    spectator.emit(
+        "join_spectator",
+        {"room_code": created["room_code"], "spectator_name": "Observer"},
+    )
+    joined = packets_for(spectator, "spectator_join_success")[0]
+    game = server.games[created["room_code"]]
+
+    assert game.player_count() == 0
+    assert len(game.spectators) == 1
+    assert joined["snapshot"]["is_spectator"] is True
+    assert "my_role" not in joined["snapshot"]
+
+    token = joined["session_token"]
+    spectator.disconnect()
+    replacement = server.socketio.test_client(server.app)
+    replacement.emit("reconnect_game", {"session_token": token})
+    restored = packets_for(replacement, "state_snapshot")[0]
+    assert restored["is_spectator"] is True
+    assert restored["my_name"] == "Observer"
+    replacement.disconnect()
+
+
+def test_spectator_chat_is_labeled_and_game_inputs_are_rejected(
+    socket_client, create_game
+):
+    created = create_game(socket_client)
+    spectator = server.socketio.test_client(server.app)
+    spectator.emit(
+        "join_spectator",
+        {"room_code": created["room_code"], "spectator_name": "Observer"},
+    )
+    packets_for(spectator, "spectator_join_success")
+    game = server.games[created["room_code"]]
+    game.phase = server.GamePhase.DISCUSSION
+    game.started_at = 1.0
+
+    spectator.emit("send_chat", {"message": "Hail!"})
+    message = packets_for(socket_client, "chat_message")[-1]
+    assert message["name"] == "Observer"
+    assert message["is_spectator"] is True
+
+    spectator.emit("update_spectrum_ratings", {"positions": {}})
+    assert packets_for(spectator, "error")[-1]["message"] == "Not a player"
+    assert game.spectrum_ratings == {}
+
+    game.phase = server.GamePhase.TEAM_VOTE
+    spectator.emit("cast_vote", {"vote": "approve"})
+    assert packets_for(spectator, "error")[-1]["message"] == "Not a player"
+    assert game.votes == {}
+    spectator.disconnect()
+
+
 def test_host_display_owner_can_also_join_as_a_player(socket_client, create_game):
     created = create_game(socket_client)
     player_view = server.socketio.test_client(server.app)

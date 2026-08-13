@@ -40,6 +40,8 @@ from game_logic import (
     get_game_summary,
     build_state_snapshot,
     spectrum_average_positions,
+    role_manifest,
+    SpectatorInfo,
     MISSION_SIZES,
     secure_random,
 )
@@ -132,6 +134,7 @@ games: dict[str, GameState] = {}  # code -> GameState
 game_activity: dict[str, float] = {}  # code -> last activity (monotonic seconds)
 sid_to_info: dict[str, dict] = {}  # sid -> {game_code, player_id, is_host_screen}
 session_tokens: dict[str, tuple] = {}  # token -> (game_code, player_id)
+spectator_tokens: dict[str, tuple[str, str]] = {}
 state_lock = threading.RLock()
 rate_lock = threading.Lock()
 rate_windows: dict[tuple[str, str], deque] = defaultdict(deque)
@@ -232,12 +235,24 @@ def recent_chat_payload(game: GameState, limit: int = 30) -> list[dict]:
     """Return a small player-safe chat tail for reconnecting clients."""
     try:
         colors = {player.name: player.color_index for player in game.players.values()}
+        colors.update(
+            {
+                spectator.name: spectator.color_index
+                for spectator in game.spectators.values()
+            }
+        )
+        spectator_names = {spectator.name for spectator in game.spectators.values()}
         return [
             {
                 "timestamp": row["created_at"],
                 "name": row["player_name"],
                 "message": row["message"],
                 "color_index": colors.get(row["player_name"], 0),
+                **(
+                    {"is_spectator": True}
+                    if row["player_name"] in spectator_names
+                    else {}
+                ),
             }
             for row in chat_store.recent_messages_for_game(
                 game.code, game.started_at, limit=limit
@@ -278,6 +293,9 @@ def discard_game(game_code: str, *, notify: bool = False) -> None:
         for token, (token_game_code, _) in list(session_tokens.items()):
             if token_game_code == game_code:
                 del session_tokens[token]
+        for token, (token_game_code, _) in list(spectator_tokens.items()):
+            if token_game_code == game_code:
+                del spectator_tokens[token]
         for sid, info in list(sid_to_info.items()):
             if info.get("game_code") == game_code:
                 del sid_to_info[sid]
@@ -379,6 +397,8 @@ def event_game_lock(args):
         if not game_code:
             token = data.get("session_token")
             token_entry = session_tokens.get(token) if isinstance(token, str) else None
+            if not token_entry and isinstance(token, str):
+                token_entry = spectator_tokens.get(token)
             game_code = token_entry[0] if token_entry else None
         game = games.get(game_code)
         return game.lock if game else nullcontext()
@@ -488,6 +508,7 @@ def lobby_payload(game: GameState) -> dict:
     return {
         "players": game.public_players(),
         "public_spectrum": public_spectrum_payload(game),
+        "role_manifest": role_manifest(game),
         "settings": {
             "discussion_time": game.discussion_time,
             "proposal_time": game.proposal_time,
@@ -497,9 +518,37 @@ def lobby_payload(game: GameState) -> dict:
     }
 
 
+def spectator_snapshot(game: GameState, spectator: SpectatorInfo) -> dict:
+    snapshot = build_state_snapshot(game, "")
+    snapshot.update(
+        {
+            "is_spectator": True,
+            "spectator_id": spectator.spectator_id,
+            "my_name": spectator.name,
+        }
+    )
+    return snapshot
+
+
+def validate_participant_name(game: GameState, name: str) -> str:
+    name = name.strip()
+    if not name or len(name) > 12:
+        raise ValueError("Name must be between 1 and 12 characters")
+    if not all(character.isalnum() or character == " " for character in name):
+        raise ValueError("Name must contain only letters, numbers, and spaces")
+    used_names = [player.name for player in game.players.values()]
+    used_names.extend(spectator.name for spectator in game.spectators.values())
+    if any(existing.lower() == name.lower() for existing in used_names):
+        raise ValueError(f"Name '{name}' is already taken")
+    return name
+
+
 def add_beta_bots(game: GameState, target_count: int = 6) -> None:
     bot_number = 1
     existing_names = {player.name.lower() for player in game.players.values()}
+    existing_names.update(
+        spectator.name.lower() for spectator in game.spectators.values()
+    )
     while game.player_count() < target_count:
         while f"bot {bot_number}" in existing_names:
             bot_number += 1
@@ -1027,6 +1076,13 @@ def on_disconnect(reason=None):
             if game.host_sid == sid:
                 game.host_sid = None
             return
+        spectator_id = info.get("spectator_id")
+        if spectator_id and spectator_id in game.spectators:
+            spectator = game.spectators[spectator_id]
+            if spectator.sid == sid:
+                spectator.connected = False
+                spectator.sid = None
+            return
         player_id = info.get("player_id")
         if player_id and player_id in game.players:
             player = game.players[player_id]
@@ -1090,6 +1146,7 @@ def on_register_host_screen(data):
                 "join_url": public_base_url(),
                 "players": game.public_players(),
                 "public_spectrum": public_spectrum_payload(game),
+                "role_manifest": role_manifest(game),
                 "phase": game.phase,
                 "mission_sizes": MISSION_SIZES.get(player_count, []),
                 "mission_results": game.mission_results,
@@ -1246,6 +1303,7 @@ def on_create_player_game(data):
                 "room_code": code,
                 "players": game.public_players(),
                 "public_spectrum": public_spectrum_payload(game),
+                "role_manifest": role_manifest(game),
                 "settings": lobby_payload(game)["settings"],
             },
         )
@@ -1292,11 +1350,13 @@ def on_join_game(data):
                         "room_code": code,
                         "players": game.public_players(),
                         "public_spectrum": public_spectrum_payload(game),
+                        "role_manifest": role_manifest(game),
                         "settings": lobby_payload(game)["settings"],
                     },
                 )
                 return
             raise ValueError("This connection is already in another game")
+        validate_participant_name(game, name)
         if game.beta_test_mode and game.player_count() >= game.beta_test_player_count:
             bot = next((p for p in reversed(game.player_order) if game.players[p].is_bot), None)
             if bot is not None:
@@ -1320,6 +1380,7 @@ def on_join_game(data):
                 "room_code": code,
                 "players": game.public_players(),
                 "public_spectrum": public_spectrum_payload(game),
+                "role_manifest": role_manifest(game),
                 "settings": {
                     "discussion_time": game.discussion_time,
                     "proposal_time": game.proposal_time,
@@ -1335,7 +1396,49 @@ def on_join_game(data):
                 "new_player": player.name,
                 "players": game.public_players(),
                 "player_count": game.player_count(),
+                "role_manifest": role_manifest(game),
             },
+        )
+    except ValueError as error:
+        emit_validation_error(error)
+
+
+@socketio.on("join_spectator")
+@rate_limited("join_game")
+def on_join_spectator(data):
+    try:
+        data = require_object(data)
+        code = require_string(data, "room_code", minimum=4, maximum=4).upper()
+        name = require_string(data, "spectator_name", minimum=1, maximum=12)
+        game = games.get(code)
+        if not game:
+            raise ValueError("Room not found. Check the code and try again.")
+        if sid_to_info.get(request.sid):
+            raise ValueError("This connection is already in another game")
+        if len(game.spectators) >= 20:
+            raise ValueError("Spectator gallery is full")
+        name = validate_participant_name(game, name)
+        spectator_id = str(uuid.uuid4())
+        spectator = SpectatorInfo(
+            spectator_id,
+            name,
+            color_index=(game.player_count() + len(game.spectators)) % 10,
+        )
+        token = secrets.token_urlsafe(32)
+        spectator.session_token = token
+        spectator.sid = request.sid
+        game.spectators[spectator_id] = spectator
+        spectator_tokens[token] = (game.code, spectator_id)
+        join_room(game.code)
+        sid_to_info[request.sid] = {
+            "game_code": game.code,
+            "spectator_id": spectator_id,
+        }
+        snapshot = spectator_snapshot(game, spectator)
+        snapshot["recent_chat"] = recent_chat_payload(game)
+        emit(
+            "spectator_join_success",
+            {"session_token": token, "snapshot": snapshot},
         )
     except ValueError as error:
         emit_validation_error(error)
@@ -1351,6 +1454,32 @@ def on_reconnect_game(data):
         data = require_object(data)
         token = require_string(data, "session_token", minimum=32, maximum=128)
         entry = session_tokens.get(token)
+        spectator_entry = spectator_tokens.get(token)
+        if not entry and spectator_entry:
+            game_code, spectator_id = spectator_entry
+            game = games.get(game_code)
+            spectator = game.spectators.get(spectator_id) if game else None
+            if not game or not spectator:
+                raise ValueError("Spectator session no longer exists.")
+            existing_info = sid_to_info.get(request.sid)
+            if existing_info and (
+                existing_info.get("game_code") != game_code
+                or existing_info.get("spectator_id") != spectator_id
+            ):
+                raise ValueError("This connection is already in another game")
+            if spectator.sid != request.sid:
+                disconnect_replaced_socket(spectator.sid)
+            spectator.sid = request.sid
+            spectator.connected = True
+            join_room(game_code)
+            sid_to_info[request.sid] = {
+                "game_code": game_code,
+                "spectator_id": spectator_id,
+            }
+            snapshot = spectator_snapshot(game, spectator)
+            snapshot["recent_chat"] = recent_chat_payload(game)
+            emit("state_snapshot", snapshot)
+            return
         if not entry:
             raise ValueError("Session not found. Please rejoin.")
         game_code, player_id = entry
@@ -1955,6 +2084,7 @@ def on_return_to_lobby():
             "return_to_lobby",
             {
                 "players": game.public_players(),
+                "role_manifest": role_manifest(game),
                 "settings": {
                     "discussion_time": game.discussion_time,
                     "proposal_time": game.proposal_time,
@@ -1995,11 +2125,14 @@ def on_send_chat(data):
     game = games.get(info.get("game_code"))
     if not game or game.phase == GamePhase.LOBBY:
         return
-    player_id = info.get("player_id")
-    if not player_id:
-        return
-    player = game.players.get(player_id)
-    if not player:
+    player = game.players.get(info.get("player_id")) if info.get("player_id") else None
+    spectator = (
+        game.spectators.get(info.get("spectator_id"))
+        if info.get("spectator_id")
+        else None
+    )
+    participant = player or spectator
+    if not participant:
         return
     try:
         data = require_object(data)
@@ -2013,7 +2146,7 @@ def on_send_chat(data):
         chat_store.save(
             room_code=game.code,
             game_started_at=game.started_at,
-            player_name=player.name,
+            player_name=participant.name,
             message=msg,
             created_at=created_at,
         )
@@ -2028,9 +2161,10 @@ def on_send_chat(data):
         game.code,
         "chat_message",
         {
-            "name": player.name,
+            "name": participant.name,
             "message": msg,
-            "color_index": player.color_index,
+            "color_index": participant.color_index,
+            "is_spectator": spectator is not None,
             "timestamp": timestamp,
         },
     )

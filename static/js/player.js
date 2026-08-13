@@ -4,9 +4,12 @@
 
 const socket = io();
 const connectionStatus = document.getElementById('connection-status');
+let isSpectator = false;
 const presenceTable = new AvalonPresenceTable({
     mode: 'player',
-    onPrivateChange: update => socket.emit('update_spectrum_ratings', update),
+    onPrivateChange: update => {
+        if (!isSpectator) socket.emit('update_spectrum_ratings', update);
+    },
 });
 const RECONNECT_TOKEN_KEY = 'avalon-player-session-token';
 const RECONNECT_PLAYER_KEY = 'avalon-player-id';
@@ -92,6 +95,22 @@ const MAX_CHAT_HISTORY = 200;
 let presencePlayers = [];
 let wakeLock = null;
 
+function applySpectatorMode(enabled) {
+    isSpectator = Boolean(enabled);
+    document.body.classList.toggle('spectator-mode', isSpectator);
+    document.getElementById('spectator-banner').classList.toggle('hidden', !isSpectator);
+    presenceTable.setContributionEnabled(!isSpectator);
+}
+
+function showSpectatorNight() {
+    document.getElementById('night-sees-label').textContent = 'The realm sleeps';
+    document.getElementById('night-sees-names').innerHTML = '<div class="night-no-info">Players are privately learning their roles.</div>';
+    document.getElementById('btn-confirm-night').classList.add('hidden');
+    document.getElementById('night-waiting-text').classList.remove('hidden');
+    document.getElementById('night-waiting-text').textContent = 'Watching as a spectator…';
+    showScreen('screen-night');
+}
+
 function reconnectToken() {
     try {
         const token = localStorage.getItem(RECONNECT_TOKEN_KEY) || sessionStorage.getItem('session_token');
@@ -135,7 +154,9 @@ function releaseWakeLock() {
 }
 
 function requestAttention(message = 'Your action is needed') {
-    if (navigator.vibrate) navigator.vibrate(80);
+    if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) {
+        navigator.vibrate([90, 55, 140]);
+    }
     document.title = `Avalon — ${message}`;
 }
 
@@ -250,16 +271,19 @@ function renderPlayerBoard() {
         });
     });
 
-    document.getElementById('pb-fails').textContent = `${pbMissionResults.filter(r => r === 'fail').length}/3`;
+    const failedMissions = pbMissionResults.filter(result => result === 'fail').length;
+    const failedCount = document.getElementById('pb-fails');
+    failedCount.textContent = `${failedMissions}/3`;
+    const failedRow = failedCount.closest('.pb-fail-stat');
+    failedRow.setAttribute('aria-label', `Failed missions ${failedMissions} of 3; show my role`);
+    failedRow.querySelectorAll('.pb-fail-circles i').forEach((circle, index) => {
+        circle.classList.toggle('active', index < failedMissions);
+    });
     updatePlayerProposalTrack();
     updateGameClock();
 }
 
-function updateTeamCounts(counts) {
-    if (!counts) return;
-    document.getElementById('pb-good-count').textContent = counts.good ?? '—';
-    document.getElementById('pb-evil-count').textContent = counts.evil ?? '—';
-}
+function updateTeamCounts() {}
 
 function updatePlayerProposalTrack() {
     const count = document.getElementById('pb-proposal');
@@ -268,7 +292,7 @@ function updatePlayerProposalTrack() {
     const attempt = Math.min(5, pbConsecutiveRejections + 1);
     count.textContent = `${attempt}/5`;
     row.classList.toggle('danger', attempt >= 5);
-    row.setAttribute('aria-label', `Team proposal ${attempt} of 5`);
+    row.setAttribute('aria-label', `Team proposal ${attempt} of 5; show my role`);
     row.querySelectorAll('.pb-proposal-circles i').forEach((circle, index) => {
         circle.classList.toggle('active', index < attempt);
     });
@@ -278,6 +302,9 @@ function updatePlayerProposalTrack() {
 // Chat
 // ---------------------------------------------------------------------------
 function showChat() {
+    const settings = document.getElementById('btn-settings');
+    const chatSlot = document.getElementById('settings-chat-slot');
+    if (settings && chatSlot && settings.parentElement !== chatSlot) chatSlot.appendChild(settings);
     document.getElementById('chat-container').classList.remove('hidden');
     document.body.classList.add('chat-visible');
 }
@@ -285,6 +312,9 @@ function hideChat() {
     toggleChatHistory(false);
     document.getElementById('chat-container').classList.add('hidden');
     document.body.classList.remove('chat-visible');
+    const settings = document.getElementById('btn-settings');
+    const dock = document.getElementById('player-utility-dock');
+    if (settings && dock && settings.parentElement !== dock) dock.appendChild(settings);
 }
 
 function fmtChatTime(value = null) {
@@ -293,7 +323,7 @@ function fmtChatTime(value = null) {
     return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 }
 
-function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue = null, showBubble = true) {
+function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue = null, showBubble = true, senderIsSpectator = false) {
     const timestamp = fmtChatTime(timestampValue);
     const playerColor = presenceTable.colorForName(name, colorIndex);
 
@@ -304,7 +334,7 @@ function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue 
     if (histList) {
         const entry = document.createElement('div');
         entry.className = 'chat-history-entry';
-        entry.innerHTML = `<span class="chat-name">${escapeHtml(name)}</span>${escapeHtml(message)}<span class="chat-time">${timestamp}</span>`;
+        entry.innerHTML = `<span class="chat-name">${escapeHtml(name)}${senderIsSpectator ? ' <em>spectator</em>' : ''}</span>${escapeHtml(message)}<span class="chat-time">${timestamp}</span>`;
         entry.querySelector('.chat-name').style.color = playerColor;
         histList.appendChild(entry);
         while (histList.children.length > MAX_CHAT_HISTORY) {
@@ -331,7 +361,7 @@ function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue 
 
     const bubble = document.createElement('div');
     bubble.className = 'chat-bubble' + (isSelf ? ' self' : '');
-    bubble.innerHTML = `<span class="chat-name">${escapeHtml(name)}</span>${escapeHtml(message)}`;
+    bubble.innerHTML = `<span class="chat-name">${escapeHtml(name)}${senderIsSpectator ? ' <em>spectator</em>' : ''}</span>${escapeHtml(message)}`;
     bubble.querySelector('.chat-name').style.color = playerColor;
     container.appendChild(bubble);
     chatBubbleEls.push(bubble);
@@ -357,7 +387,8 @@ function restoreRecentChat(messages) {
             item.name === myName,
             item.color_index,
             item.timestamp,
-            false
+            false,
+            Boolean(item.is_spectator)
         );
     });
 }
@@ -714,8 +745,10 @@ function showVoteScreen(data) {
         chip.textContent = name;
         teamList.appendChild(chip);
     });
-    document.getElementById('vote-buttons').classList.remove('hidden');
-    document.getElementById('vote-cast-waiting').classList.add('hidden');
+    document.getElementById('vote-buttons').classList.toggle('hidden', isSpectator);
+    document.getElementById('vote-cast-waiting').classList.toggle('hidden', !isSpectator);
+    const waitingText = document.querySelector('#vote-cast-waiting .waiting-text');
+    if (waitingText) waitingText.textContent = isSpectator ? 'Watching the fellowship vote…' : 'Vote cast. Awaiting others...';
     document.getElementById('btn-approve').disabled = false;
     document.getElementById('btn-reject').disabled = false;
     showScreen('screen-vote');
@@ -881,6 +914,7 @@ function showGameOver(summary) {
 // State snapshot (reconnect)
 // ---------------------------------------------------------------------------
 function applyStateSnapshot(snap) {
+    applySpectatorMode(snap.is_spectator);
     myPlayerId = snap.my_player_id;
     myName = snap.my_name;
     isHost = snap.is_host || false;
@@ -892,6 +926,7 @@ function applyStateSnapshot(snap) {
     presenceTable.setRoomCode(gameCode);
     renderLobbyPlayers(snap.players || []);
     presenceTable.setPublicPositions(snap.public_spectrum || {});
+    presenceTable.setRoleManifest(snap.role_manifest || []);
     renderPhoneBotControls(snap.settings || {});
 
     if (snap.my_role) {
@@ -900,7 +935,6 @@ function applyStateSnapshot(snap) {
         nightInfo = snap.night_info || null;
         window._nightInfoPending = snap.night_info || null;
         populateRoleOverlay();
-        document.getElementById('btn-role-reminder').classList.remove('hidden');
     }
 
     document.getElementById('lobby-code-display').textContent = gameCode;
@@ -935,7 +969,9 @@ function applyStateSnapshot(snap) {
             showScreen('screen-lobby'); break;
         case 'ROLE_ASSIGNMENT':
         case 'NIGHT_PHASE':
-            if (snap.my_role) {
+            if (isSpectator) {
+                showSpectatorNight();
+            } else if (snap.my_role) {
                 if (snap.night_info) showNightInfo(snap.night_info);
                 else showScreen('screen-role');
                 if (snap.night_acknowledged) {
@@ -974,7 +1010,7 @@ function applyStateSnapshot(snap) {
                 team_ids: snap.proposed_team_ids || [],
                 leader_name: snap.current_leader,
             });
-            if (snap.my_vote) {
+            if (isSpectator || snap.my_vote) {
                 document.getElementById('vote-buttons').classList.add('hidden');
                 document.getElementById('vote-cast-waiting').classList.remove('hidden');
                 presenceTable.show(document.getElementById('screen-vote'), 'Awaiting the Court');
@@ -1014,6 +1050,7 @@ function applyStateSnapshot(snap) {
 // ---------------------------------------------------------------------------
 
 socket.on('join_success', data => {
+    applySpectatorMode(false);
     const joinButton = document.getElementById('btn-join');
     const createButton = document.getElementById('btn-create-player-game');
     joinButton.disabled = false;
@@ -1034,8 +1071,18 @@ socket.on('join_success', data => {
     document.getElementById('settings-game-actions').classList.toggle('hidden', !isHost);
     renderLobbyPlayers(data.players || []);
     presenceTable.setPublicPositions(data.public_spectrum || {});
+    presenceTable.setRoleManifest(data.role_manifest || []);
     renderPhoneBotControls(data.settings || {});
     showScreen('screen-lobby');
+});
+
+socket.on('spectator_join_success', data => {
+    const joinButton = document.getElementById('btn-join');
+    joinButton.disabled = false;
+    joinButton.textContent = 'Join Game';
+    saveReconnectSession(data.session_token, data.snapshot.spectator_id);
+    hideConnectionStatus();
+    applyStateSnapshot(data.snapshot);
 });
 
 socket.on('state_snapshot', data => {
@@ -1064,7 +1111,6 @@ socket.on('reconnect_failed', data => {
     hidePlayerBoard();
     hideChat();
     presenceTable.hide();
-    document.getElementById('btn-role-reminder').classList.add('hidden');
     document.getElementById('btn-settings').classList.add('hidden');
     if (gameCode) document.getElementById('input-room-code').value = gameCode;
     document.getElementById('join-error').textContent =
@@ -1075,6 +1121,7 @@ socket.on('reconnect_failed', data => {
 
 socket.on('player_joined', data => {
     renderLobbyPlayers(data.players || []);
+    presenceTable.setRoleManifest(data.role_manifest || []);
     updateHostStartButton(data.player_count);
 });
 
@@ -1089,6 +1136,7 @@ socket.on('player_reconnected', data => {
 socket.on('lobby_update', data => {
     renderLobbyPlayers(data.players || []);
     presenceTable.setPublicPositions(data.public_spectrum || {});
+    presenceTable.setRoleManifest(data.role_manifest || []);
     renderPhoneBotControls(data.settings || {});
 });
 
@@ -1110,6 +1158,7 @@ socket.on('game_starting', data => {
     startGameClock(data.game_started_at);
     acquireWakeLock();
     flash('white', 400);
+    showChat();
 });
 
 socket.on('role_assigned', data => {
@@ -1119,7 +1168,7 @@ socket.on('role_assigned', data => {
 });
 
 socket.on('night_phase_start', () => {
-    // Handled by role_assigned flow
+    if (isSpectator) showSpectatorNight();
 });
 
 socket.on('night_phase_progress', data => {
@@ -1206,7 +1255,7 @@ socket.on('team_proposed', data => {
 
 socket.on('vote_start', data => {
     showVoteScreen(data);
-    requestAttention('Vote now');
+    if (!isSpectator) requestAttention('Vote now');
 });
 
 socket.on('vote_cast_ack', () => {
@@ -1247,7 +1296,7 @@ socket.on('mission_start', data => {
     updatePlayerProposalTrack();
     showMissionScreen(data);
     const onTeam = (data.team_ids || []).includes(myPlayerId) || (data.team || []).includes(myName);
-    if (onTeam) requestAttention('Play your quest card');
+    if (onTeam && !isSpectator) requestAttention('Play your quest card');
 });
 
 socket.on('mission_card_ack', () => {
@@ -1291,7 +1340,6 @@ socket.on('return_to_lobby', data => {
     nightInfo = null;
     pbMissionHistory = [];
     pbConsecutiveRejections = 0;
-    document.getElementById('btn-role-reminder').classList.add('hidden');
     document.getElementById('role-overlay').classList.add('hidden');
     document.getElementById('settings-overlay').classList.add('hidden');
     document.getElementById('settings-game-actions').classList.add('hidden');
@@ -1308,6 +1356,7 @@ socket.on('return_to_lobby', data => {
     document.getElementById('chat-history-panel').classList.add('hidden');
     document.getElementById('btn-history-toggle').classList.remove('active');
     renderLobbyPlayers(data.players || []);
+    presenceTable.setRoleManifest(data.role_manifest || []);
     showScreen('screen-lobby');
 });
 
@@ -1317,6 +1366,7 @@ socket.on('game_ended', () => {
     releaseWakeLock();
     clearAttention();
     myPlayerId = null; myName = null; myRole = null; myTeam = null;
+    applySpectatorMode(false);
     gameCode = null;
     pbConsecutiveRejections = 0;
     presenceTable.hide();
@@ -1371,7 +1421,13 @@ document.getElementById('btn-join').addEventListener('click', () => {
     const joinButton = document.getElementById('btn-join');
     joinButton.disabled = true;
     joinButton.textContent = 'Joining…';
-    socket.emit('join_game', { room_code: code, player_name: name });
+    const spectator = document.getElementById('join-as-spectator').checked;
+    socket.emit(
+        spectator ? 'join_spectator' : 'join_game',
+        spectator
+            ? { room_code: code, spectator_name: name }
+            : { room_code: code, player_name: name },
+    );
 });
 
 document.getElementById('btn-create-player-game').addEventListener('click', event => {
@@ -1477,9 +1533,7 @@ document.getElementById('btn-player-next-round').addEventListener('click', event
 
 document.getElementById('btn-confirm-role').addEventListener('click', () => {
     clearAttention();
-    // Show persistent role reminder button
     populateRoleOverlay();
-    document.getElementById('btn-role-reminder').classList.remove('hidden');
     // Move to night info screen
     const pending = window._nightInfoPending;
     if (pending) {
@@ -1508,9 +1562,19 @@ function populateRoleOverlay() {
     }
 }
 
-document.getElementById('btn-role-reminder').addEventListener('click', () => {
+function openRoleTooltip() {
+    if (!myRole || isSpectator) return;
     populateRoleOverlay();
     document.getElementById('role-overlay').classList.remove('hidden');
+}
+
+document.querySelectorAll('.role-reminder-trigger').forEach(trigger => {
+    trigger.addEventListener('click', openRoleTooltip);
+    trigger.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        openRoleTooltip();
+    });
 });
 
 document.getElementById('btn-close-overlay').addEventListener('click', () => {
@@ -1612,7 +1676,7 @@ socket.on('player_joined', data => {
 
 // Chat
 socket.on('chat_message', data => {
-    addChatBubble(data.name, data.message, data.name === myName, data.color_index, data.timestamp);
+    addChatBubble(data.name, data.message, data.name === myName, data.color_index, data.timestamp, true, Boolean(data.is_spectator));
 });
 
 document.getElementById('btn-chat-send').addEventListener('click', sendChat);
