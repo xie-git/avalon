@@ -26,6 +26,11 @@ accounts, app installation, or Tailscale access are required for players.
   current actionable phase, timers, and recent chat using a private browser
   token that survives tab closure. The host can issue a five-minute recovery
   code when a player must move to another phone.
+- Every lobby and game is durably saved. When the last real player disconnects,
+  timers freeze and the room remains resumable for 24 hours; resuming starts a
+  fresh 24-hour inactivity window the next time everyone leaves.
+- One phone-first dashboard handles joining, hosting, resuming, seat recovery,
+  and optional shared-display pairing with a one-use six-digit code.
 - Lobby ready indicators, phone action vibration,
   screen wake lock where supported, and action-needed page titles.
 - A same-origin QR code plus copy/share controls for joining a room.
@@ -43,9 +48,11 @@ from that person's phone. The host display does not consume a player seat.
 
 ## Playing
 
-1. Open `https://YOUR-PUBLIC-HOST/host` on the shared display and create a game.
-2. Players open `https://YOUR-PUBLIC-HOST`, enter the four-letter room code and
-   a name, then optionally choose a knight.
+1. Open `https://YOUR-PUBLIC-HOST`, enter your name, and choose **Host a New
+   Game**. Use `/new` to explicitly bypass a saved room.
+2. Other players enter the four-letter room code and a name, then optionally
+   choose a knight. The phone host can generate a six-digit code if the group
+   wants to pair a TV or laptop as the shared display.
 3. Players choose a knight and may mark themselves ready. Start once 6–10
    players have joined. The host can reorder seating and adjust the discussion
    timer or disable the advisory proposal timer.
@@ -76,9 +83,11 @@ not implemented.
 
 ## State, chat, and game history
 
-Live rooms and reconnect tokens are intentionally memory-only. A container or
-server restart ends active games, so deploy between games. Inactive rooms are
-reclaimed after 12 hours by default.
+Live rooms and hashed reconnect capabilities are stored in the same SQLite
+volume as chat and history. A container restart restores saved rooms in a
+suspended state. Raw reconnect, host, recovery, and display-pairing secrets are
+never written to disk. Rooms expire 24 hours after the last real player
+disconnects unless a player resumes first.
 
 The `avalon_chat_data` Docker volume contains `/data/avalon-chats.sqlite3`.
 It persists across container recreation and stores:
@@ -87,6 +96,8 @@ It persists across container recreation and stores:
 - Game events: roster and roles, settings, leaders, proposals, individual
   votes, mission parties and individual cards, mission results, assassination,
   and final result.
+- Active-room snapshots: the latest authoritative room state and hashed
+  capabilities needed for restart-safe resumption.
 
 No cookies, reconnect tokens, authorization values, environment variables, or
 IP addresses are written to this database. Game logs intentionally contain
@@ -166,7 +177,7 @@ intended network boundary.
 | `MAX_CONNECTIONS_PER_IP` | Per-source limit; default `30`. |
 | `MAX_GAMES` | Active in-memory room limit; default `50`. |
 | `MAX_RATE_KEYS` | Bound for rate-limit bookkeeping; default `5000`. |
-| `GAME_TTL_SECONDS` | Inactive-room lifetime; default `43200` (12 hours). |
+| `GAME_TTL_SECONDS` | Suspended-room lifetime; default `86400` (24 hours). |
 | `CHAT_DB_PATH` | SQLite path; Compose uses `/data/avalon-chats.sqlite3`. |
 | `CHAT_DB_MAX_BYTES` | Requested DB cap, hard-limited to 900 MiB. |
 

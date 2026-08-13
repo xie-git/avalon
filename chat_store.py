@@ -70,6 +70,22 @@ class ChatStore:
             "CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at "
             "ON chat_messages(created_at)"
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS active_rooms (
+                room_code TEXT PRIMARY KEY,
+                schema_version INTEGER NOT NULL,
+                state_json TEXT NOT NULL,
+                saved_at REAL NOT NULL,
+                inactive_since REAL,
+                expires_at REAL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_active_rooms_expires_at "
+            "ON active_rooms(expires_at)"
+        )
         connection.commit()
         self._initialized = True
 
@@ -198,6 +214,69 @@ class ChatStore:
                     (timestamp_text, room_code.upper(), game_started_at, event_type, payload_json),
                 )
                 connection.commit()
+
+    def save_room_snapshot(
+        self,
+        *,
+        room_code: str,
+        schema_version: int,
+        state: dict,
+        saved_at: float,
+        inactive_since: float | None,
+        expires_at: float | None,
+    ) -> None:
+        """Atomically upsert the latest resumable state for one live room."""
+        state_json = json.dumps(state, separators=(",", ":"), sort_keys=True)
+        with self._lock, self._connect() as connection:
+            self._initialize(connection)
+            if self._database_bytes(connection) >= self.prune_at_bytes:
+                self._prune(connection)
+            connection.execute(
+                """
+                INSERT INTO active_rooms (
+                    room_code, schema_version, state_json, saved_at,
+                    inactive_since, expires_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(room_code) DO UPDATE SET
+                    schema_version = excluded.schema_version,
+                    state_json = excluded.state_json,
+                    saved_at = excluded.saved_at,
+                    inactive_since = excluded.inactive_since,
+                    expires_at = excluded.expires_at
+                """,
+                (
+                    room_code.upper(),
+                    int(schema_version),
+                    state_json,
+                    float(saved_at),
+                    inactive_since,
+                    expires_at,
+                ),
+            )
+            connection.commit()
+
+    def room_snapshots(self) -> list[sqlite3.Row]:
+        with self._lock, self._connect() as connection:
+            self._initialize(connection)
+            return list(
+                connection.execute(
+                    """
+                    SELECT room_code, schema_version, state_json, saved_at,
+                           inactive_since, expires_at
+                    FROM active_rooms
+                    ORDER BY saved_at
+                    """
+                )
+            )
+
+    def delete_room_snapshot(self, room_code: str) -> None:
+        with self._lock, self._connect() as connection:
+            self._initialize(connection)
+            connection.execute(
+                "DELETE FROM active_rooms WHERE room_code = ?",
+                (room_code.upper(),),
+            )
+            connection.commit()
 
     def saved_games(self, limit: int = 1000) -> list[sqlite3.Row]:
         with self._lock, self._connect() as connection:

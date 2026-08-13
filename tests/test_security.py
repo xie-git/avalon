@@ -27,7 +27,8 @@ def test_security_headers_and_development_routes_are_closed():
     assert b'maxlength="4"' in response.data
     host_response = client.get("/host")
     assert b"host-admin-password" not in host_response.data
-    assert b"Create Game" in host_response.data
+    assert b"Open Game Dashboard" in host_response.data
+    assert b"Host a New Game" in response.data
 
 
 def test_party_pages_do_not_reference_portrait_or_audio_assets():
@@ -811,16 +812,15 @@ def test_stale_games_are_reclaimed_when_a_new_game_is_created(
 ):
     stale = create_game(socket_client)
     stale_code = stale["room_code"]
-    server.game_activity[stale_code] = (
-        server.time.monotonic() - server.GAME_TTL_SECONDS - 1
-    )
+    server.games[stale_code].suspended = True
+    server.games[stale_code].expires_at = server.time.time() - 1
     socket_client.emit("create_game")
     new_game = packets_for(socket_client, "game_created")[0]
     assert stale_code not in server.games
     assert new_game["room_code"] in server.games
 
 
-def test_disconnected_lobby_seat_is_pruned_before_start(socket_client, create_game):
+def test_disconnected_lobby_seat_is_preserved_and_blocks_start(socket_client, create_game):
     created, clients, _ = join_players(socket_client, create_game)
     game = server.games[created["room_code"]]
     clients[0].disconnect()
@@ -828,8 +828,9 @@ def test_disconnected_lobby_seat_is_pruned_before_start(socket_client, create_ga
     socket_client.emit("start_game")
 
     assert game.phase == server.GamePhase.LOBBY
-    assert game.player_count() == 5
-    assert "Need 6-10 players" in packets_for(socket_client, "error")[-1]["message"]
+    assert game.player_count() == 6
+    assert any(not player.connected for player in game.players.values())
+    assert "must reconnect" in packets_for(socket_client, "error")[-1]["message"]
     for client in clients[1:]:
         client.disconnect()
 

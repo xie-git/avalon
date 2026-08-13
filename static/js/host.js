@@ -258,9 +258,11 @@ function updateHostProposalTrack() {
         token.classList.toggle('active', index < attempt);
     });
 }
-function startGameClock(epochSeconds) {
-    if (!epochSeconds) return;
-    gameStartedAt = Number(epochSeconds) * 1000;
+function startGameClock(epochSeconds, elapsedSeconds = null) {
+    if (!epochSeconds && elapsedSeconds == null) return;
+    gameStartedAt = elapsedSeconds == null
+        ? Number(epochSeconds) * 1000
+        : Date.now() - Number(elapsedSeconds) * 1000;
     clearInterval(gameClockInterval);
     updateGameStats();
     gameClockInterval = setInterval(updateGameStats, 1000);
@@ -600,7 +602,7 @@ socket.on('host_registered', data => {
     currentLeaderName = data.current_leader || '';
     betaTestMode = Boolean(data.beta_test_mode);
     betaTestPlayerCount = Number(data.beta_test_player_count) || 6;
-    if (data.game_started_at) startGameClock(data.game_started_at);
+    if (data.game_started_at) startGameClock(data.game_started_at, data.game_elapsed_seconds);
     updateHostProposalTrack();
     if (data.discussion_time) discussionDuration = data.discussion_time;
     renderProposalSetting(data.proposal_time);
@@ -694,7 +696,16 @@ socket.on('host_registered', data => {
             renderGameOver(data.summary);
         }
     }
+    if (data.suspended) {
+        showConnectionStatus('Game saved — waiting for a player to resume within 24 hours');
+    }
 });
+
+socket.on('room_suspended', () => {
+    showConnectionStatus('Game saved — waiting for a player to resume within 24 hours');
+});
+
+socket.on('room_resumed', () => hideConnectionStatus());
 
 socket.on('player_joined', data => {
     players = data.players || [];
@@ -1071,9 +1082,7 @@ socket.on('error', data => {
 // ---------------------------------------------------------------------------
 
 document.getElementById('btn-create-game').addEventListener('click', () => {
-    document.getElementById('host-create-error').textContent = '';
-    document.getElementById('btn-create-game').disabled = true;
-    socket.emit('create_game');
+    window.location.assign('/');
 });
 
 document.getElementById('btn-start-game').addEventListener('click', () => {

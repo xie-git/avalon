@@ -13,6 +13,9 @@ const presenceTable = new AvalonPresenceTable({
 });
 const RECONNECT_TOKEN_KEY = 'avalon-player-session-token';
 const RECONNECT_PLAYER_KEY = 'avalon-player-id';
+const HOST_CODE_KEY = 'avalon-host-game-code';
+const HOST_TOKEN_KEY = 'avalon-host-token';
+const FORCE_NEW = document.body.dataset.forceNew === 'true';
 const LARGE_TEXT_KEY = 'avalon-large-text-mode';
 const EXTRA_LARGE_TEXT_KEY = 'avalon-extra-large-text-mode';
 const DEFAULT_TITLE = document.title;
@@ -94,6 +97,7 @@ let chatHistoryOpen = false;
 const MAX_CHAT_HISTORY = 200;
 let presencePlayers = [];
 let wakeLock = null;
+let joinedThisPage = false;
 
 function applySpectatorMode(enabled) {
     isSpectator = Boolean(enabled);
@@ -218,9 +222,11 @@ function updateGameClock() {
     const el = document.getElementById('pb-game-time');
     if (el && gameStartedAt) el.textContent = formatElapsed(Math.max(0, Math.floor((Date.now() - gameStartedAt) / 1000)));
 }
-function startGameClock(epochSeconds) {
-    if (!epochSeconds) return;
-    gameStartedAt = Number(epochSeconds) * 1000;
+function startGameClock(epochSeconds, elapsedSeconds = null) {
+    if (!epochSeconds && elapsedSeconds == null) return;
+    gameStartedAt = elapsedSeconds == null
+        ? Number(epochSeconds) * 1000
+        : Date.now() - Number(elapsedSeconds) * 1000;
     clearInterval(gameClockInterval);
     updateGameClock();
     gameClockInterval = setInterval(updateGameClock, 1000);
@@ -431,19 +437,21 @@ const ROLE_DESCRIPTIONS = {
 };
 
 // ---------------------------------------------------------------------------
-// Auto-join via URL param (for dev panel)
+// Dashboard session discovery and development auto-join
 // ---------------------------------------------------------------------------
 (function checkAutoJoin() {
     const params = new URLSearchParams(window.location.search);
     const devName = params.get('dev_name');
     const devCode = params.get('room_code');
     const token = reconnectToken();
-    if (token) {
+    if (token && !FORCE_NEW) {
         socket.on('connect', () => {
             const currentToken = reconnectToken();
-            if (currentToken) socket.emit('reconnect_game', { session_token: currentToken });
+            if (currentToken && !joinedThisPage) {
+                socket.emit('session_status', { session_token: currentToken });
+            }
         });
-    } else if (devName && devCode) {
+    } else if (!token && devName && devCode) {
         // Wait for socket connect
         socket.on('connect', () => {
             socket.emit('join_game', { room_code: devCode, player_name: devName });
@@ -955,7 +963,7 @@ function applyStateSnapshot(snap) {
 
     const inGame = snap.phase !== 'LOBBY';
     if (inGame) {
-        startGameClock(snap.game_started_at);
+        startGameClock(snap.game_started_at, snap.game_elapsed_seconds);
         acquireWakeLock();
         showPlayerBoard();
         renderPlayerBoard();
@@ -1050,6 +1058,7 @@ function applyStateSnapshot(snap) {
 // ---------------------------------------------------------------------------
 
 socket.on('join_success', data => {
+    joinedThisPage = true;
     applySpectatorMode(false);
     const joinButton = document.getElementById('btn-join');
     const createButton = document.getElementById('btn-create-player-game');
@@ -1077,6 +1086,7 @@ socket.on('join_success', data => {
 });
 
 socket.on('spectator_join_success', data => {
+    joinedThisPage = true;
     const joinButton = document.getElementById('btn-join');
     joinButton.disabled = false;
     joinButton.textContent = 'Join Game';
@@ -1086,11 +1096,13 @@ socket.on('spectator_join_success', data => {
 });
 
 socket.on('state_snapshot', data => {
+    joinedThisPage = true;
     hideConnectionStatus();
     applyStateSnapshot(data);
 });
 
 socket.on('seat_recovered', data => {
+    joinedThisPage = true;
     saveReconnectSession(data.session_token, data.snapshot.my_player_id);
     document.getElementById('recovery-error').textContent = '';
     document.getElementById('join-recovery').classList.add('hidden');
@@ -1106,6 +1118,7 @@ socket.on('seat_recovery_failed', data => {
 });
 
 socket.on('reconnect_failed', data => {
+    joinedThisPage = false;
     clearReconnectSession();
     stopGameClock();
     hidePlayerBoard();
@@ -1117,6 +1130,40 @@ socket.on('reconnect_failed', data => {
         `We could not restore this seat: ${data.message}`;
     showScreen('screen-join');
     hideConnectionStatus();
+});
+
+socket.on('session_status', data => {
+    const card = document.getElementById('resume-card');
+    if (!data.available || FORCE_NEW) {
+        card.classList.add('hidden');
+        if (!data.available) clearReconnectSession();
+        return;
+    }
+    card.classList.remove('hidden');
+    document.getElementById('resume-title').textContent = `Room ${data.room_code}`;
+    const role = data.is_spectator ? 'spectator' : data.is_host ? 'host' : 'player';
+    document.getElementById('resume-detail').textContent =
+        `Resume as ${data.name} · ${role} · ${String(data.phase).replaceAll('_', ' ').toLowerCase()}`;
+});
+
+socket.on('display_pairing_code', data => {
+    const result = document.getElementById('display-pairing-result');
+    result.textContent = `${data.room_code} · ${data.code}`;
+    result.classList.remove('hidden');
+    document.getElementById('btn-request-display-pairing').disabled = false;
+});
+
+socket.on('display_paired', data => {
+    localStorage.setItem(HOST_CODE_KEY, data.room_code);
+    localStorage.setItem(HOST_TOKEN_KEY, data.host_token);
+    window.location.assign('/host');
+});
+
+socket.on('display_pairing_failed', data => {
+    const button = document.getElementById('btn-pair-display');
+    button.disabled = false;
+    button.textContent = 'Pair This Display';
+    document.getElementById('display-pairing-error').textContent = data.message;
 });
 
 socket.on('player_joined', data => {
@@ -1396,8 +1443,10 @@ socket.on('error', data => {
 });
 
 socket.on('connect', () => {
-    if (reconnectToken()) showConnectionStatus('Connected — restoring your seat…');
-    else hideConnectionStatus();
+    if (joinedThisPage && reconnectToken()) {
+        showConnectionStatus('Connected — restoring your seat…');
+        socket.emit('reconnect_game', { session_token: reconnectToken() });
+    } else hideConnectionStatus();
 });
 socket.on('disconnect', () => showConnectionStatus('Connection lost — reconnecting…'));
 socket.on('connect_error', () => showConnectionStatus('Unable to reach the game server — retrying…'));
@@ -1431,15 +1480,63 @@ document.getElementById('btn-join').addEventListener('click', () => {
 });
 
 document.getElementById('btn-create-player-game').addEventListener('click', event => {
+    if (!FORCE_NEW) {
+        const name = document.getElementById('input-name').value.trim();
+        const next = name ? `/new?name=${encodeURIComponent(name)}` : '/new';
+        window.location.assign(next);
+        return;
+    }
     const name = document.getElementById('input-name').value.trim();
     document.getElementById('join-error').textContent = '';
     if (!name) {
         document.getElementById('join-error').textContent = 'Enter your name first.';
         return;
     }
+    if (reconnectToken() && !window.confirm(
+        'Start a new room? This browser will remember the new game instead of its previous saved room.'
+    )) return;
     event.currentTarget.disabled = true;
     event.currentTarget.textContent = 'Creating…';
     socket.emit('create_player_game', { player_name: name });
+});
+
+document.getElementById('btn-resume-game').addEventListener('click', event => {
+    const token = reconnectToken();
+    if (!token) return;
+    event.currentTarget.disabled = true;
+    showConnectionStatus('Restoring your saved seat…');
+    socket.emit('reconnect_game', { session_token: token });
+});
+
+document.getElementById('btn-show-display-pairing').addEventListener('click', () => {
+    document.getElementById('display-pairing').classList.toggle('hidden');
+});
+
+document.getElementById('input-display-room').addEventListener('input', event => {
+    event.target.value = event.target.value.toUpperCase().replace(/[^A-Z]/g, '');
+});
+
+document.getElementById('input-display-code').addEventListener('input', event => {
+    event.target.value = event.target.value.replace(/\D/g, '');
+});
+
+document.getElementById('btn-pair-display').addEventListener('click', event => {
+    const room = document.getElementById('input-display-room').value.trim().toUpperCase();
+    const code = document.getElementById('input-display-code').value.trim();
+    document.getElementById('display-pairing-error').textContent = '';
+    if (room.length !== 4 || code.length !== 6) {
+        document.getElementById('display-pairing-error').textContent =
+            'Enter the four-letter room and six-digit display code.';
+        return;
+    }
+    event.currentTarget.disabled = true;
+    event.currentTarget.textContent = 'Pairing…';
+    socket.emit('pair_host_display', { room_code: room, pairing_code: code });
+});
+
+document.getElementById('btn-request-display-pairing').addEventListener('click', event => {
+    event.currentTarget.disabled = true;
+    socket.emit('request_display_pairing');
 });
 
 document.getElementById('input-room-code').addEventListener('input', e => {
@@ -1692,7 +1789,13 @@ document.addEventListener('pointerdown', event => {
 });
 
 const invitedRoom = new URLSearchParams(window.location.search).get('room');
+const suggestedName = new URLSearchParams(window.location.search).get('name');
 if (invitedRoom && /^[A-Za-z]{4}$/.test(invitedRoom)) {
     document.getElementById('input-room-code').value = invitedRoom.toUpperCase();
     document.getElementById('input-name').focus();
+}
+if (suggestedName) document.getElementById('input-name').value = suggestedName.slice(0, 12);
+if (FORCE_NEW) {
+    document.getElementById('dashboard-heading').textContent = 'Create a fresh room';
+    document.getElementById('btn-create-player-game').textContent = 'Create New Game';
 }

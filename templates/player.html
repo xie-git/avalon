@@ -6,9 +6,9 @@
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/css/common.css?v=20260813-polish3">
-<link rel="stylesheet" href="/static/css/player.css?v=20260813-polish7">
+<link rel="stylesheet" href="/static/css/player.css?v=20260813-resume1">
 </head>
-<body>
+<body data-force-new="{{ 'true' if force_new else 'false' }}">
 
 <div id="connection-status" class="connection-status hidden" role="status" aria-live="polite"></div>
 <div id="page-transition"></div>
@@ -56,6 +56,13 @@
     <div class="screen active" id="screen-join">
         <div class="join-logo">AVALON</div>
         <p class="join-tagline">The Resistance Awaits</p>
+        <div id="resume-card" class="dashboard-resume hidden">
+            <span>Saved adventure</span>
+            <strong id="resume-title">Room ----</strong>
+            <small id="resume-detail"></small>
+            <button type="button" class="btn btn-primary" id="btn-resume-game">Resume Game</button>
+        </div>
+        <p class="dashboard-heading" id="dashboard-heading">Join, host, or restore a game</p>
         <div class="join-form">
             <div class="form-group">
                 <label for="input-room-code">Room Code</label>
@@ -74,6 +81,15 @@
             </label>
             <button class="btn btn-primary" id="btn-join">Join Game</button>
             <button type="button" class="btn" id="btn-create-player-game">Host a New Game</button>
+            <button type="button" class="join-recovery-toggle" id="btn-show-display-pairing">Pair a shared display</button>
+            <div class="join-recovery hidden" id="display-pairing">
+                <label for="input-display-room">Display room code</label>
+                <input type="text" id="input-display-room" maxlength="4" autocapitalize="characters" placeholder="ABCD">
+                <label for="input-display-code">Six-digit pairing code</label>
+                <input type="text" id="input-display-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
+                <button type="button" class="btn" id="btn-pair-display">Pair This Display</button>
+                <div class="error-message" id="display-pairing-error"></div>
+            </div>
             <button type="button" class="join-recovery-toggle" id="btn-show-recovery">Recover a disconnected seat</button>
             <div class="join-recovery hidden" id="join-recovery">
                 <label for="input-recovery-code">Host recovery code</label>
@@ -92,6 +108,12 @@
         </div>
         <div id="spectator-banner" class="spectator-banner hidden">◈ Spectator · watching only</div>
         <div id="lobby-host-controls" class="hidden" style="width:100%;text-align:center;margin-bottom:1rem">
+            <div class="display-pair-card">
+                <strong>Optional shared display</strong>
+                <span>Pair a TV or laptop without exposing player roles.</span>
+                <button type="button" class="btn" id="btn-request-display-pairing">Get Display Code</button>
+                <div id="display-pairing-result" class="hidden" aria-live="polite"></div>
+            </div>
             <div class="phone-bot-controls">
                 <div class="phone-bot-copy">
                     <strong>Fill with bots</strong>
@@ -439,6 +461,6 @@
 
 <script src="/static/js/socket.io.min.js"></script>
 <script src="/static/js/presence.js?v=20260813-polish3"></script>
-<script src="/static/js/player.js?v=20260813-polish6"></script>
+<script src="/static/js/player.js?v=20260813-resume1"></script>
 </body>
 </html>

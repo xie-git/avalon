@@ -125,6 +125,7 @@ class PlayerInfo:
         self.team: Team | None = None
         self.connected = True
         self.session_token = None
+        self.session_token_hash: str | None = None
         self.is_bot = is_bot
         self.color_index = color_index
         self.avatar_index = avatar_index
@@ -155,6 +156,7 @@ class SpectatorInfo:
         self.sid = None
         self.connected = True
         self.session_token = None
+        self.session_token_hash: str | None = None
         self.color_index = color_index
 
 
@@ -167,6 +169,7 @@ class GameState:
         self.player_order: list[str] = []  # ordered list of player_ids
         self.host_sid: str | None = None  # host display screen sid
         self.host_token: str | None = None  # unguessable host-screen capability
+        self.host_token_hash: str | None = None
         self.host_player_id: str | None = None  # creator when a phone hosts and plays
         self.lock = threading.RLock()  # serialize events for this game only
 
@@ -206,9 +209,19 @@ class GameState:
         self.timer_phase_key: str | None = None
         self.timer_deadline: float | None = None
         self.timer_kind: str | None = None
+        self.timer_remaining: int | None = None
+
+        # Durable room lifecycle. Only real player connections reactivate a
+        # suspended room; TV displays and spectators do not keep it alive.
+        self.suspended = False
+        self.inactive_since: float | None = None
+        self.expires_at: float | None = None
+        self.active_elapsed_seconds = 0.0
+        self.active_since: float | None = None
 
         # Host-issued, short-lived recovery codes for disconnected seats.
         self.seat_recovery_codes: dict[str, tuple[str, float]] = {}
+        self.display_pair_codes: dict[str, float] = {}
 
         # Each seated player's private suspicion layout, submitted as normalized
         # coordinates. The shared board is computed from these ratings and never
@@ -268,9 +281,13 @@ class GameState:
         self.timer_phase_key = None
         self.timer_deadline = None
         self.timer_kind = None
+        self.timer_remaining = None
         self.seat_recovery_codes = {}
+        self.display_pair_codes = {}
         self.pending_mission_outcome = None
         self.started_at = None
+        self.active_elapsed_seconds = 0.0
+        self.active_since = None
 
 
 # ---------------------------------------------------------------------------
@@ -633,6 +650,12 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
         "consecutive_rejections": game.consecutive_rejections,
         "pending_mission_outcome": game.pending_mission_outcome,
         "game_started_at": game.started_at,
+        "game_elapsed_seconds": int(
+            game.active_elapsed_seconds
+            + (time.time() - game.active_since if game.active_since else 0)
+        ),
+        "suspended": game.suspended,
+        "expires_at": game.expires_at,
         "mission_sizes": MISSION_SIZES.get(game.player_count(), []),
         "team_counts": {
             "good": sum(player.team == Team.GOOD for player in game.players.values()),
@@ -648,7 +671,9 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
         "role_manifest": role_manifest(game),
         "timer_kind": game.timer_kind,
         "timer_remaining": (
-            max(0, int(game.timer_deadline - time.time() + 0.999))
+            game.timer_remaining
+            if game.suspended
+            else max(0, int(game.timer_deadline - time.time() + 0.999))
             if game.timer_deadline
             else None
         ),
