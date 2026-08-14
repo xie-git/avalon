@@ -375,6 +375,8 @@ def serialize_game(game: GameState) -> dict:
         "winner": game.winner,
         "win_reason": game.win_reason,
         "pending_mission_outcome": game.pending_mission_outcome,
+        "spotlight_player_id": game.spotlight_player_id,
+        "rematch_ready": sorted(game.rematch_ready),
         "timer_kind": game.timer_kind,
         "timer_remaining": timer_remaining,
         "seat_recovery_codes": [
@@ -447,6 +449,15 @@ def deserialize_game(state: dict, *, saved_at: float) -> GameState:
     game.winner = state.get("winner")
     game.win_reason = state.get("win_reason")
     game.pending_mission_outcome = state.get("pending_mission_outcome")
+    spotlight_player_id = state.get("spotlight_player_id")
+    game.spotlight_player_id = (
+        spotlight_player_id if spotlight_player_id in game.players else None
+    )
+    game.rematch_ready = {
+        player_id
+        for player_id in state.get("rematch_ready", [])
+        if player_id in game.players and not game.players[player_id].is_bot
+    }
     game.timer_kind = state.get("timer_kind")
     remaining = state.get("timer_remaining")
     game.timer_remaining = max(0, int(remaining)) if remaining is not None else None
@@ -1018,10 +1029,11 @@ def start_round(game: GameState):
     )
     # Immediately go to discussion
     game.phase = GamePhase.DISCUSSION
-    phase_key = str(uuid.uuid4())
+    game.spotlight_player_id = None
+    phase_key = str(uuid.uuid4()) if game.discussion_time else None
     game.timer_phase_key = phase_key
-    game.timer_kind = "discussion"
-    game.timer_deadline = time.time() + game.discussion_time
+    game.timer_kind = "discussion" if phase_key else None
+    game.timer_deadline = time.time() + game.discussion_time if phase_key else None
     game.timer_remaining = None
     emit_to_game(
         game.code,
@@ -1034,9 +1046,10 @@ def start_round(game: GameState):
             "leader_id": leader.player_id if leader else None,
         },
     )
-    socketio.start_background_task(
-        run_discussion_timer, game.code, phase_key, game.discussion_time
-    )
+    if phase_key:
+        socketio.start_background_task(
+            run_discussion_timer, game.code, phase_key, game.discussion_time
+        )
     if leader and leader.is_bot:
         if app.config.get("TESTING"):
             run_bot_discussion(game.code, phase_key, game.discussion_time)
@@ -1049,6 +1062,7 @@ def start_round(game: GameState):
 
 def transition_to_team_proposal(game: GameState):
     game.phase = GamePhase.TEAM_PROPOSAL
+    game.spotlight_player_id = None
     game.proposed_team = []
     game.votes = {}
     game.mission_cards = {}
@@ -1621,6 +1635,8 @@ def on_register_host_screen(data):
                 "night_confirmed": len(game.night_acks),
                 "night_total": game.player_count(),
                 "pending_mission_outcome": game.pending_mission_outcome,
+                "spotlight_player_id": game.spotlight_player_id,
+                "rematch_ready_ids": sorted(game.rematch_ready),
                 "vote_reveal_pending": game.pending_vote_result is not None,
                 "proposed_team": [
                     game.players[pid].name
@@ -2214,9 +2230,12 @@ def on_update_settings(data):
         game = validate_host(request.sid, require_phase=GamePhase.LOBBY)
         data = require_object(data)
         if "discussion_time" in data:
-            game.discussion_time = require_integer(
-                data, "discussion_time", minimum=10, maximum=600
+            discussion_time = require_integer(
+                data, "discussion_time", minimum=0, maximum=900
             )
+            if discussion_time != 0 and discussion_time < 60:
+                raise ValueError("discussion_time must be Unlimited or at least 60 seconds")
+            game.discussion_time = discussion_time
         if "proposal_time" in data:
             game.proposal_time = require_integer(
                 data, "proposal_time", minimum=0, maximum=120
@@ -2362,6 +2381,36 @@ def on_night_phase_ack():
 
 
 # --- Discussion ---
+
+
+@socketio.on("set_discussion_spotlight")
+@rate_limited()
+def on_set_discussion_spotlight(data):
+    try:
+        game, leader = validate_caller(
+            request.sid,
+            require_phase=GamePhase.DISCUSSION,
+            require_leader=True,
+        )
+        data = require_object(data)
+        player_id = data.get("player_id")
+        if player_id is not None and not isinstance(player_id, str):
+            raise ValueError("player_id must be text or null")
+        if player_id is not None and player_id not in game.players:
+            raise ValueError("Player not found")
+        game.spotlight_player_id = player_id
+        target = game.players.get(player_id) if player_id else None
+        emit_to_game(
+            game.code,
+            "discussion_spotlight",
+            {
+                "player_id": player_id,
+                "player_name": target.name if target else None,
+                "leader_name": leader.name,
+            },
+        )
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 @socketio.on("skip_discussion")
@@ -2573,26 +2622,68 @@ def on_assassinate(data):
 # --- Return to lobby ---
 
 
+def return_game_to_lobby(game: GameState) -> None:
+    game.reset()
+    emit_to_game(
+        game.code,
+        "return_to_lobby",
+        {
+            "players": game.public_players(),
+            "public_spectrum": public_spectrum_payload(game),
+            "role_manifest": role_manifest(game),
+            "settings": {
+                "discussion_time": game.discussion_time,
+                "proposal_time": game.proposal_time,
+                "beta_test_mode": game.beta_test_mode,
+                "beta_test_player_count": game.beta_test_player_count,
+            },
+        },
+    )
+
+
+def rematch_status_payload(game: GameState) -> dict:
+    eligible = [player for player in game.player_order_list() if not player.is_bot]
+    return {
+        "ready_ids": sorted(game.rematch_ready),
+        "ready_names": [
+            player.name for player in eligible if player.player_id in game.rematch_ready
+        ],
+        "ready_count": sum(
+            player.player_id in game.rematch_ready for player in eligible
+        ),
+        "total_count": len(eligible),
+    }
+
+
+@socketio.on("set_rematch_ready")
+@rate_limited()
+def on_set_rematch_ready(data):
+    try:
+        game, player = validate_caller(request.sid, require_phase=GamePhase.GAME_OVER)
+        if player.is_bot:
+            raise ValueError("Bot players cannot request a rematch")
+        data = require_object(data)
+        ready = data.get("ready")
+        if not isinstance(ready, bool):
+            raise ValueError("ready must be true or false")
+        if ready:
+            game.rematch_ready.add(player.player_id)
+        else:
+            game.rematch_ready.discard(player.player_id)
+        status = rematch_status_payload(game)
+        emit_to_game(game.code, "rematch_status", status)
+        if status["total_count"] and status["ready_count"] == status["total_count"]:
+            return_game_to_lobby(game)
+    except ValueError as error:
+        emit_validation_error(error)
+
+
 @socketio.on("return_to_lobby")
 @rate_limited()
 def on_return_to_lobby():
     try:
         game = validate_host(request.sid)
-        game.reset()
-        emit_to_game(
-            game.code,
-            "return_to_lobby",
-            {
-                "players": game.public_players(),
-                "role_manifest": role_manifest(game),
-                "settings": {
-                    "discussion_time": game.discussion_time,
-                    "proposal_time": game.proposal_time,
-                    "beta_test_mode": game.beta_test_mode,
-                    "beta_test_player_count": game.beta_test_player_count,
-                },
-            },
-        )
+        return_game_to_lobby(game)
     except ValueError as error:
         emit_validation_error(error)
 

@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon — Host</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260813-cleansettings1">
-<link rel="stylesheet" href="/static/css/host.css?v=20260813-cleansettings1">
+<link rel="stylesheet" href="/static/css/common.css?v=20260813-social3">
+<link rel="stylesheet" href="/static/css/host.css?v=20260813-social3">
 <style>
 /* In-game confirmation modal */
 #confirm-modal {
@@ -186,7 +186,7 @@
                 <h3>Settings</h3>
                 <div class="setting-row">
                     <label>Discussion Time <span class="value-display" id="discussion-time-display">60 sec</span></label>
-                    <input type="range" id="discussion-slider" min="10" max="600" step="5" value="60">
+                    <input type="range" id="discussion-slider" min="1" max="16" step="1" value="1" aria-label="Discussion time in minutes; final position is unlimited">
                 </div>
                 <div class="setting-row proposal-setting-row">
                     <label><input type="checkbox" id="proposal-timer-enabled" checked> Advisory proposal timer</label>
@@ -237,6 +237,7 @@
                 <div class="timer-text" id="timer-text">—</div>
             </div>
         </div>
+        <div id="host-discussion-spotlight" class="discussion-spotlight hidden" aria-live="polite"></div>
     </div>
 
     <!-- ============ TEAM PROPOSAL ============ -->
@@ -292,6 +293,14 @@
     <div class="screen" id="screen-game-over">
         <div class="game-over-banner" id="game-over-banner"></div>
         <p class="win-reason" id="win-reason-text"></p>
+        <section class="victory-group-card" id="victory-group-card-host" aria-label="Victory group portrait">
+            <div class="victory-card-kicker">THE CHRONICLE RECORDS</div>
+            <div class="victory-card-crest" aria-hidden="true">♜</div>
+            <h2 class="victory-card-title"></h2>
+            <p class="victory-card-subtitle"></p>
+            <div class="victory-card-party"></div>
+            <div class="victory-card-footer">AVALON · <span class="victory-card-room"></span></div>
+        </section>
         <div class="roles-reveal-grid" id="roles-reveal-grid"></div>
         <div class="game-chronicle host-chronicle">
             <h3>Chronicle of Avalon</h3>
@@ -300,6 +309,7 @@
         <div class="game-over-actions">
             <button class="btn btn-primary" id="btn-return-lobby">Return to Lobby</button>
         </div>
+        <div class="rematch-status" id="rematch-status-host" aria-live="polite">Waiting for players to choose “Run It Back”…</div>
     </div>
 
 </div>
@@ -308,6 +318,6 @@
 
 <script src="/static/js/socket.io.min.js"></script>
 <script src="/static/js/presence.js?v=20260813-polish3"></script>
-<script src="/static/js/host.js?v=20260813-cleansettings1"></script>
+<script src="/static/js/host.js?v=20260813-social3"></script>
 </body>
 </html>

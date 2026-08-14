@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260813-cleansettings1">
-<link rel="stylesheet" href="/static/css/player.css?v=20260813-cleansettings1">
+<link rel="stylesheet" href="/static/css/common.css?v=20260813-social3">
+<link rel="stylesheet" href="/static/css/player.css?v=20260813-social3">
 </head>
 <body data-force-new="{{ 'true' if force_new else 'false' }}">
 
@@ -129,6 +129,11 @@
                 </select>
                 <button type="button" class="btn" id="btn-phone-beta-mode" aria-pressed="false">Add Bots</button>
             </div>
+            <div class="phone-discussion-setting">
+                <label for="phone-discussion-slider"><strong>Discussion time</strong><span id="phone-discussion-time-display">1 minute</span></label>
+                <input type="range" id="phone-discussion-slider" min="1" max="16" step="1" value="1" aria-label="Discussion time in minutes; final position is unlimited">
+                <small>Choose 1–15 minutes, or slide all the way right for Unlimited.</small>
+            </div>
             <button class="btn btn-primary" id="btn-host-start" style="width:100%">Begin the Quest</button>
             <div id="host-start-hint" class="dim-text" style="font-size:0.75rem;margin-top:0.4rem;font-family:var(--font-heading)">Need 6–10 players</div>
         </div>
@@ -197,7 +202,16 @@
             <span>Time remaining</span>
             <div class="timer-small" id="discussion-timer-player">—</div>
         </div>
+        <div id="player-discussion-spotlight" class="discussion-spotlight hidden" aria-live="polite"></div>
         <p class="waiting-text" style="font-size:0.9rem">Deliberate. Argue. Trust wisely.</p>
+        <div class="spotlight-leader-controls hidden" id="spotlight-leader-controls">
+            <label for="spotlight-player-select">Accusation Spotlight</label>
+            <div class="spotlight-control-row">
+                <select id="spotlight-player-select" aria-label="Choose a player to address the court"></select>
+                <button type="button" class="btn" id="btn-set-spotlight">Call On Them</button>
+            </div>
+            <button type="button" class="spotlight-clear" id="btn-clear-spotlight">Clear spotlight</button>
+        </div>
         <button class="btn hidden" id="btn-end-discussion" style="width:100%">End Discussion &amp; Pick a Team</button>
     </div>
 
@@ -304,6 +318,17 @@
         <div class="game-over-result" id="game-over-result-player"></div>
         <div class="my-role-reveal" id="my-role-reveal-display"></div>
         <p class="waiting-text" id="win-reason-player" style="font-size:0.9rem"></p>
+        <section class="victory-group-card" id="victory-group-card-player" aria-label="Victory group portrait">
+            <div class="victory-card-kicker">THE CHRONICLE RECORDS</div>
+            <div class="victory-card-crest" aria-hidden="true">♜</div>
+            <h2 class="victory-card-title"></h2>
+            <p class="victory-card-subtitle"></p>
+            <div class="victory-card-party"></div>
+            <div class="victory-card-footer">AVALON · <span class="victory-card-room"></span></div>
+        </section>
+        <p class="victory-card-hint">Frame this card on screen and take a screenshot to remember the game.</p>
+        <button type="button" class="btn btn-primary" id="btn-run-it-back" aria-pressed="false">↻ Run It Back</button>
+        <div class="rematch-status" id="rematch-status-player" aria-live="polite">0 players ready for another game</div>
         <div class="game-over-roles">
             <h3>Full Role Reveal</h3>
             <div class="roles-list" id="roles-list-player"></div>
@@ -452,6 +477,6 @@
 
 <script src="/static/js/socket.io.min.js"></script>
 <script src="/static/js/presence.js?v=20260813-polish3"></script>
-<script src="/static/js/player.js?v=20260813-cleansettings1"></script>
+<script src="/static/js/player.js?v=20260813-social3"></script>
 </body>
 </html>

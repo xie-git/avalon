@@ -375,6 +375,155 @@ body::after {
 .chronicle-entry.rejected { border-left-color: var(--red-glow); }
 .chronicle-entry strong { color: var(--text-primary); font-family: var(--font-heading); }
 .chronicle-entry small { color: var(--text-dim); }
+
+/* Additive social moments: discussion spotlight and screenshot-ready finale. */
+.discussion-spotlight {
+    width: min(100%, 720px);
+    margin-inline: auto;
+    padding: 0.7rem 1rem;
+    border: 1px solid rgba(224, 194, 110, 0.75);
+    border-radius: var(--radius-pill);
+    background: linear-gradient(90deg, rgba(201, 168, 76, 0.08), rgba(201, 168, 76, 0.2), rgba(201, 168, 76, 0.08));
+    color: var(--gold-light);
+    text-align: center;
+    font: 700 clamp(0.75rem, 1.5vw, 1rem)/1.3 var(--font-heading);
+    letter-spacing: 0.06em;
+    box-shadow: 0 0 24px rgba(201, 168, 76, 0.12);
+    animation: fade-in-scale 0.25s ease-out;
+}
+
+.victory-group-card {
+    --victory-accent: #d5b85a;
+    position: relative;
+    isolation: isolate;
+    width: min(100%, 820px);
+    aspect-ratio: 16 / 9;
+    min-height: 310px;
+    margin-inline: auto;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(0.3rem, 1.3vw, 0.8rem);
+    padding: clamp(1.1rem, 3.5vw, 2.4rem);
+    border: 2px solid var(--victory-accent);
+    border-radius: clamp(0.8rem, 2vw, 1.4rem);
+    background:
+        radial-gradient(circle at 50% 38%, rgba(213, 184, 90, 0.18), transparent 43%),
+        linear-gradient(145deg, #101a28 0%, #070a11 58%, #161008 100%);
+    box-shadow: 0 20px 70px rgba(0, 0, 0, 0.45), inset 0 0 55px rgba(213, 184, 90, 0.06);
+    color: #f4ecd5;
+    text-align: center;
+}
+.victory-group-card::before,
+.victory-group-card::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--victory-accent) 48%, transparent);
+    border-radius: calc(clamp(0.8rem, 2vw, 1.4rem) - 0.25rem);
+    pointer-events: none;
+}
+.victory-group-card::after {
+    inset: auto -8% -48% -8%;
+    height: 70%;
+    border: 0;
+    border-radius: 50%;
+    background: radial-gradient(ellipse, color-mix(in srgb, var(--victory-accent) 16%, transparent), transparent 68%);
+}
+.victory-group-card.evil {
+    --victory-accent: #d95b52;
+    background:
+        radial-gradient(circle at 50% 38%, rgba(192, 57, 43, 0.2), transparent 43%),
+        linear-gradient(145deg, #241014 0%, #09080c 60%, #180809 100%);
+}
+.victory-card-kicker,
+.victory-card-footer {
+    font: 700 clamp(0.5rem, 1.2vw, 0.72rem)/1.2 var(--font-heading);
+    letter-spacing: 0.24em;
+    color: var(--victory-accent);
+}
+.victory-card-crest {
+    position: absolute;
+    top: clamp(0.8rem, 2vw, 1.3rem);
+    right: clamp(1rem, 2.5vw, 1.6rem);
+    color: var(--victory-accent);
+    font-size: clamp(1.2rem, 3vw, 2rem);
+    opacity: 0.75;
+}
+.victory-card-title {
+    margin: 0;
+    color: #fff8dc;
+    font: 800 clamp(1.25rem, 3.8vw, 2.5rem)/1 var(--font-title);
+    text-shadow: 0 0 26px color-mix(in srgb, var(--victory-accent) 40%, transparent);
+}
+.victory-card-subtitle {
+    margin: 0;
+    color: #c9c0aa;
+    font: italic clamp(0.68rem, 1.6vw, 0.95rem)/1.3 var(--font-body);
+}
+.victory-card-party {
+    width: 100%;
+    min-height: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: clamp(0.35rem, 2vw, 1.2rem);
+    flex: 0 0 auto;
+}
+.victory-person {
+    width: min(17%, 112px);
+    min-width: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.28rem;
+}
+.victory-person-portrait {
+    width: 100%;
+    max-width: 88px;
+    aspect-ratio: 1;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    border: 2px solid var(--victory-accent);
+    border-radius: 50%;
+    background: #121722;
+    box-shadow: 0 0 22px color-mix(in srgb, var(--victory-accent) 22%, transparent);
+}
+.victory-person-portrait img,
+.victory-person-portrait svg { width: 100%; height: 100%; object-fit: cover; }
+.victory-person strong {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #fff8e5;
+    font: 700 clamp(0.55rem, 1.4vw, 0.82rem)/1.2 var(--font-heading);
+    white-space: nowrap;
+}
+.victory-person small {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--victory-accent);
+    font: 600 clamp(0.46rem, 1vw, 0.66rem)/1.2 var(--font-heading);
+    white-space: nowrap;
+}
+.victory-card-footer { margin-top: 0.65rem; opacity: 0.8; }
+.victory-card-hint,
+.rematch-status {
+    margin: 0;
+    color: var(--text-dim);
+    text-align: center;
+    font: 600 0.72rem/1.4 var(--font-heading);
+}
+
+@media (max-width: 520px) {
+    .victory-group-card { min-height: 360px; aspect-ratio: auto; }
+    .victory-person { width: min(19%, 80px); }
+}
 .connection-status {
     position: fixed;
     top: max(0.5rem, env(safe-area-inset-top));

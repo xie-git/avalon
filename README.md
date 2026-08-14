@@ -36,6 +36,10 @@ accounts, app installation, or Tailscale access are required for players.
 - A same-origin QR code plus copy/share controls for joining a room.
 - A post-game Chronicle summarizes leaders, parties, public vote totals, and
   aggregate quest results without revealing who submitted individual cards.
+- The final reveal includes a screenshot-friendly portrait of the winning
+  fellowship and a voluntary **Run It Back** ready-up for the seated players.
+- During discussion, the current leader may place any player in the optional
+  Accusation Spotlight as a theatrical invitation to defend their case.
 - Multiple independent rooms can run concurrently.
 - Optional beta-test mode fills a lobby with legal bot players.
 - Persistent, timestamped chat and replay-oriented game event logs in one
@@ -55,7 +59,8 @@ from that person's phone. The host display does not consume a player seat.
    wants to pair a TV or laptop as the shared display.
 3. Players choose a knight and may mark themselves ready. Start once 6–10
    players have joined. The host can reorder seating and adjust the discussion
-   timer or disable the advisory proposal timer.
+   timer from 1–15 minutes (or Unlimited) and disable the advisory proposal
+   timer.
 4. During play, tap a completed mission shield to inspect that mission. Tap
    elsewhere to dismiss the tooltip.
 

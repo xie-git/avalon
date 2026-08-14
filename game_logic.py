@@ -205,6 +205,11 @@ class GameState:
             None  # "next_mission" | "assassin_phase" | "evil_wins"
         )
 
+        # Additive social state. A spotlight is only a public discussion cue;
+        # it never affects proposals, votes, missions, or scoring.
+        self.spotlight_player_id: str | None = None
+        self.rematch_ready: set[str] = set()
+
         # Timer cancellation flag
         self.timer_phase_key: str | None = None
         self.timer_deadline: float | None = None
@@ -285,6 +290,8 @@ class GameState:
         self.seat_recovery_codes = {}
         self.display_pair_codes = {}
         self.pending_mission_outcome = None
+        self.spotlight_player_id = None
+        self.rematch_ready = set()
         self.started_at = None
         self.active_elapsed_seconds = 0.0
         self.active_since = None
@@ -590,6 +597,19 @@ def get_game_summary(game: GameState) -> dict:
         "mission_history": game.mission_history,
         "proposal_history": game.proposal_history,
         "player_order": [game.players[pid].name for pid in game.player_order],
+        "players": [
+            {
+                "player_id": player.player_id,
+                "name": player.name,
+                "role": player.role,
+                "team": player.team,
+                "color_index": player.color_index,
+                "avatar_index": player.avatar_index,
+                "avatar_image": player.avatar_image,
+                "is_bot": player.is_bot,
+            }
+            for player in game.player_order_list()
+        ],
     }
 
 
@@ -677,6 +697,8 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
             if game.timer_deadline
             else None
         ),
+        "spotlight_player_id": game.spotlight_player_id,
+        "rematch_ready_ids": sorted(game.rematch_ready),
     }
     if game.player_count() in MISSION_SIZES:
         snap["mission_size"] = game.mission_size()

@@ -19,7 +19,6 @@ const presenceScreenLabels = {
     'screen-mission': 'The Quest Begins',
     'screen-mission-reveal': 'The Quest Returns',
     'screen-assassin': 'The Final Choice',
-    'screen-game-over': 'Roles Revealed',
 };
 
 function showConnectionStatus(message) {
@@ -380,6 +379,22 @@ function renderProposalSetting(seconds) {
     document.getElementById('proposal-time-display').textContent = proposalDuration > 0 ? fmtTime(proposalDuration) : 'Off';
 }
 
+function discussionSliderValue(seconds) {
+    const numeric = Number(seconds);
+    return numeric === 0 ? 16 : Math.min(15, Math.max(1, Math.round(numeric / 60)));
+}
+
+function renderDiscussionSetting(seconds) {
+    discussionDuration = Number(seconds);
+    if (!Number.isFinite(discussionDuration)) discussionDuration = 60;
+    const slider = document.getElementById('discussion-slider');
+    const display = document.getElementById('discussion-time-display');
+    slider.value = String(discussionSliderValue(discussionDuration));
+    display.textContent = discussionDuration === 0
+        ? 'Unlimited'
+        : `${discussionDuration / 60} minute${discussionDuration === 60 ? '' : 's'}`;
+}
+
 // ---------------------------------------------------------------------------
 // Discussion timer
 // ---------------------------------------------------------------------------
@@ -390,6 +405,15 @@ function updateTimerRing(ringId, remaining, max) {
     const textEl = document.getElementById(ringId.replace('-ring', '-text'));
     if (!ring) return;
     const circ = 2 * Math.PI * 90; // r=90
+    if (!max) {
+        ring.style.strokeDashoffset = 0;
+        ring.classList.remove('warning');
+        if (textEl) {
+            textEl.classList.remove('warning');
+            textEl.textContent = '∞';
+        }
+        return;
+    }
     const fraction = Math.max(0, remaining / max);
     ring.style.strokeDashoffset = circ * (1 - fraction);
     const warning = remaining <= 10;
@@ -518,6 +542,7 @@ function renderGameOver(summary) {
     banner.className = `game-over-banner ${summary.winner === 'good' ? 'good-wins' : 'evil-wins'}`;
     banner.textContent = summary.winner === 'good' ? 'GOOD WINS' : 'EVIL WINS';
     flash(summary.winner === 'good' ? 'blue' : 'red', 800);
+    hideGameHeader();
 
     const reasons = {
         missions: 'by completing 3 quests',
@@ -530,7 +555,70 @@ function renderGameOver(summary) {
     grid.replaceChildren();
     grid.classList.add('hidden');
     presenceTable.setRoleReveal(summary.roles || {});
+    renderVictoryCard(document.getElementById('victory-group-card-host'), summary);
+    renderRematchStatus(document.getElementById('rematch-status-host'), {
+        ready_count: 0,
+        total_count: (summary.players || []).filter(player => !player.is_bot).length,
+        ready_names: [],
+    });
     renderChronicle(document.getElementById('chronicle-host'), summary);
+}
+
+function renderVictoryCard(card, summary) {
+    if (!card) return;
+    const winner = summary.winner === 'evil' ? 'evil' : 'good';
+    const winningPlayers = (summary.players || []).filter(player => player.team === winner);
+    card.classList.toggle('evil', winner === 'evil');
+    card.querySelector('.victory-card-title').textContent = winner === 'good'
+        ? 'Defenders of Avalon'
+        : 'Conquerors of Camelot';
+    card.querySelector('.victory-card-subtitle').textContent = winner === 'good'
+        ? 'The loyal fellowship preserved the realm.'
+        : 'The servants of Mordred claimed the realm.';
+    card.querySelector('.victory-card-room').textContent = `ROOM ${gameCode || '----'}`;
+    const party = card.querySelector('.victory-card-party');
+    party.replaceChildren();
+    winningPlayers.forEach(player => {
+        const person = document.createElement('div');
+        person.className = 'victory-person';
+        const portrait = document.createElement('div');
+        portrait.className = 'victory-person-portrait';
+        if (player.avatar_image) {
+            const image = document.createElement('img');
+            image.src = player.avatar_image;
+            image.alt = '';
+            portrait.appendChild(image);
+        } else {
+            portrait.appendChild(presenceTable.createPortraitElement(player.avatar_index, player.color_index));
+        }
+        const name = document.createElement('strong');
+        name.textContent = player.name;
+        const role = document.createElement('small');
+        role.textContent = player.role;
+        person.append(portrait, name, role);
+        party.appendChild(person);
+    });
+}
+
+function renderRematchStatus(element, data) {
+    if (!element) return;
+    const total = Number(data.total_count) || 0;
+    const ready = Number(data.ready_count) || 0;
+    const names = data.ready_names || [];
+    element.textContent = total
+        ? `${ready} of ${total} ready${names.length ? ` · ${names.join(', ')}` : ''}`
+        : 'Waiting for players to choose “Run It Back”…';
+}
+
+function renderDiscussionSpotlight(data = {}) {
+    const banner = document.getElementById('host-discussion-spotlight');
+    if (!data.player_name) {
+        banner.classList.add('hidden');
+        banner.textContent = '';
+        return;
+    }
+    banner.textContent = `♜ THE COURT CALLS ON ${data.player_name.toUpperCase()} · DEFEND YOUR CASE`;
+    banner.classList.remove('hidden');
 }
 
 // ---------------------------------------------------------------------------
@@ -618,7 +706,7 @@ socket.on('host_registered', data => {
     betaTestPlayerCount = Number(data.beta_test_player_count) || 6;
     if (data.game_started_at) startGameClock(data.game_started_at, data.game_elapsed_seconds);
     updateHostProposalTrack();
-    if (data.discussion_time) discussionDuration = data.discussion_time;
+    renderDiscussionSetting(data.discussion_time);
     renderProposalSetting(data.proposal_time);
     timerMax = discussionDuration;
     syncPresencePlayers(players);
@@ -664,6 +752,11 @@ socket.on('host_registered', data => {
                 `Select ${missionSizes[currentMission] || '?'} members for the quest`;
             document.getElementById('proposal-timer-host').textContent =
                 data.timer_remaining === null ? 'Take the time you need' : fmtTime(data.timer_remaining);
+        } else if (data.phase === 'DISCUSSION') {
+            timerMax = Number(data.timer_remaining ?? data.discussion_time);
+            updateTimerRing('timer-ring', timerMax, data.discussion_time);
+            const spotlightPlayer = players.find(player => player.player_id === data.spotlight_player_id);
+            renderDiscussionSpotlight({ player_name: spotlightPlayer?.name });
         } else if (data.phase === 'TEAM_VOTE' || data.phase === 'VOTE_REVEAL') {
             proposedTeam = data.proposed_team || [];
             document.getElementById('vote-team-names').textContent =
@@ -708,6 +801,13 @@ socket.on('host_registered', data => {
                 `${data.assassin_name} deliberates...`;
         } else if (data.phase === 'GAME_OVER' && data.summary) {
             renderGameOver(data.summary);
+            const readyIds = data.rematch_ready_ids || [];
+            const eligible = (data.summary.players || []).filter(player => !player.is_bot);
+            renderRematchStatus(document.getElementById('rematch-status-host'), {
+                ready_count: readyIds.length,
+                total_count: eligible.length,
+                ready_names: eligible.filter(player => readyIds.includes(player.player_id)).map(player => player.name),
+            });
         }
     }
     if (data.suspended) {
@@ -750,11 +850,7 @@ socket.on('lobby_update', data => {
     presenceTable.setPublicPositions(data.public_spectrum || {});
     presenceTable.setRoleManifest(data.role_manifest || []);
     if (data.settings) {
-        discussionDuration = data.settings.discussion_time;
-        const dispEl = document.getElementById('discussion-time-display');
-        const sliderEl = document.getElementById('discussion-slider');
-        if (dispEl) dispEl.textContent = fmtTime(discussionDuration);
-        if (sliderEl) sliderEl.value = discussionDuration;
+        renderDiscussionSetting(data.settings.discussion_time);
         renderProposalSetting(data.settings.proposal_time);
         renderBetaTestMode(data.settings.beta_test_mode, data.settings.beta_test_player_count);
     }
@@ -805,11 +901,13 @@ socket.on('round_start', data => {
     updateLeaderDisplay(data.leader_name);
     showGameHeader();
     transition('screen-round');
+    renderDiscussionSpotlight();
 });
 
 socket.on('discussion_start', data => {
     timerMax = data.duration_seconds;
     updateTimerRing('timer-ring', timerMax, timerMax);
+    renderDiscussionSpotlight();
     showScreen('screen-round');
 });
 
@@ -822,6 +920,10 @@ socket.on('discussion_tick', data => {
 });
 
 socket.on('discussion_end', () => {});
+
+socket.on('discussion_spotlight', data => {
+    renderDiscussionSpotlight(data);
+});
 
 socket.on('proposal_start', data => {
     currentLeaderName = data.leader_name;
@@ -1001,6 +1103,10 @@ socket.on('game_over', data => {
     transition('screen-game-over');
 });
 
+socket.on('rematch_status', data => {
+    renderRematchStatus(document.getElementById('rematch-status-host'), data);
+});
+
 socket.on('chat_message', data => {
     tvChatMessages.push(data);
     if (tvChatMessages.length > 20) tvChatMessages.shift();
@@ -1034,6 +1140,11 @@ socket.on('return_to_lobby', data => {
     renderTvChat();
     hideGameHeader();
     presenceTable.setRoleReveal(null);
+    renderDiscussionSpotlight();
+    if (data.settings) {
+        renderDiscussionSetting(data.settings.discussion_time);
+        renderProposalSetting(data.settings.proposal_time);
+    }
     renderLobbyPlayers(players);
     transition('screen-lobby');
 });
@@ -1145,8 +1256,9 @@ document.getElementById('btn-host-end-game').addEventListener('click', async () 
 
 // Lobby settings are host-authorized server events.
 document.getElementById('discussion-slider').addEventListener('input', e => {
-    discussionDuration = parseInt(e.target.value);
-    document.getElementById('discussion-time-display').textContent = fmtTime(discussionDuration);
+    const minutes = parseInt(e.target.value, 10);
+    discussionDuration = minutes === 16 ? 0 : minutes * 60;
+    renderDiscussionSetting(discussionDuration);
 });
 document.getElementById('discussion-slider').addEventListener('change', () => {
     socket.emit('update_settings', { discussion_time: discussionDuration });

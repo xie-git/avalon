@@ -107,6 +107,82 @@ def test_phone_creator_can_fill_lobby_to_selected_count_with_bots(socket_client)
     assert update["settings"]["beta_test_player_count"] == 8
 
 
+def test_discussion_setting_accepts_one_to_fifteen_minutes_and_unlimited(socket_client):
+    socket_client.emit("create_player_game", {"player_name": "Arthur"})
+    joined = packets_for(socket_client, "join_success")[0]
+    game = server.games[joined["room_code"]]
+
+    for seconds in (60, 900, 0):
+        socket_client.emit("update_settings", {"discussion_time": seconds})
+        assert game.discussion_time == seconds
+        update = packets_for(socket_client, "lobby_update")[-1]
+        assert update["settings"]["discussion_time"] == seconds
+
+    socket_client.emit("update_settings", {"discussion_time": 59})
+    assert packets_for(socket_client, "error")[-1]["message"] == (
+        "discussion_time must be Unlimited or at least 60 seconds"
+    )
+    assert game.discussion_time == 0
+
+
+def test_leader_can_spotlight_a_player_without_changing_gameplay(socket_client):
+    socket_client.emit("create_player_game", {"player_name": "Arthur"})
+    joined = packets_for(socket_client, "join_success")[0]
+    socket_client.emit("set_beta_test_mode", {"enabled": True, "target_count": 6})
+    game = server.games[joined["room_code"]]
+    game.phase = server.GamePhase.DISCUSSION
+    game.current_leader_index = game.player_order.index(joined["player_id"])
+    target_id = next(player_id for player_id in game.player_order if player_id != joined["player_id"])
+    target_name = game.players[target_id].name
+
+    socket_client.emit("set_discussion_spotlight", {"player_id": target_id})
+
+    assert game.spotlight_player_id == target_id
+    spotlight = packets_for(socket_client, "discussion_spotlight")[-1]
+    assert spotlight == {
+        "player_id": target_id,
+        "player_name": target_name,
+        "leader_name": "Arthur",
+    }
+    assert game.phase == server.GamePhase.DISCUSSION
+    assert game.proposed_team == []
+
+
+def test_all_human_players_can_run_it_back_without_waiting_for_bots(socket_client):
+    socket_client.emit("create_player_game", {"player_name": "Arthur"})
+    joined = packets_for(socket_client, "join_success")[0]
+    second = server.socketio.test_client(server.app)
+    second.emit(
+        "join_game",
+        {"room_code": joined["room_code"], "player_name": "Guinevere"},
+    )
+    second_joined = packets_for(second, "join_success")[0]
+    socket_client.emit("set_beta_test_mode", {"enabled": True, "target_count": 6})
+    game = server.games[joined["room_code"]]
+    server.assign_roles(game)
+    game.phase = server.GamePhase.GAME_OVER
+    game.winner = "good"
+    game.win_reason = "missions"
+    socket_client.get_received()
+    second.get_received()
+
+    socket_client.emit("set_rematch_ready", {"ready": True})
+    status = packets_for(socket_client, "rematch_status")[-1]
+    assert status["ready_count"] == 1
+    assert status["total_count"] == 2
+    assert game.phase == server.GamePhase.GAME_OVER
+
+    second.emit("set_rematch_ready", {"ready": True})
+
+    assert game.phase == server.GamePhase.LOBBY
+    assert game.rematch_ready == set()
+    lobby = packets_for(second, "return_to_lobby")[-1]
+    assert len(lobby["players"]) == 6
+    assert all(player.role is None for player in game.players.values())
+    assert second_joined["player_id"] in game.players
+    second.disconnect()
+
+
 def test_phone_bot_leader_starts_timer_then_proposes_without_tv(socket_client):
     socket_client.emit("create_player_game", {"player_name": "Arthur"})
     joined = packets_for(socket_client, "join_success")[0]

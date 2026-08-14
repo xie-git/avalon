@@ -554,6 +554,54 @@ body.spectator-mode #lobby-host-controls { display: none !important; }
     text-transform: uppercase;
 }
 .discussion-clock-player .timer-small { font-size: 1.5rem; line-height: 1; }
+.spotlight-leader-controls {
+    width: 100%;
+    padding: 0.8rem;
+    border: 1px solid var(--border-gold);
+    border-radius: var(--radius-md);
+    background: rgba(201, 168, 76, 0.06);
+}
+.spotlight-leader-controls > label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--gold);
+    font: 700 0.7rem/1.2 var(--font-heading);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+.spotlight-control-row { display: flex; gap: 0.45rem; }
+.spotlight-control-row select {
+    min-width: 0;
+    flex: 1;
+    padding: 0.7rem;
+    border: 1px solid var(--border-gold);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-family: var(--font-heading);
+}
+.spotlight-control-row .btn { flex: 0 0 auto; padding-inline: 0.8rem; font-size: 0.68rem; }
+.spotlight-clear {
+    margin-top: 0.5rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-dim);
+    font-family: var(--font-heading);
+    cursor: pointer;
+}
+.phone-discussion-setting {
+    padding: 0.75rem;
+    border: 1px solid var(--border-gold);
+    border-radius: var(--radius-md);
+    background: rgba(201, 168, 76, 0.05);
+    text-align: left;
+}
+.phone-discussion-setting label { display: flex; justify-content: space-between; gap: 1rem; color: var(--text-secondary); }
+.phone-discussion-setting label span { color: var(--gold-light); }
+.phone-discussion-setting input { width: 100%; margin: 0.65rem 0 0.35rem; }
+.phone-discussion-setting small { display: block; color: var(--text-dim); line-height: 1.35; }
+#btn-run-it-back { width: min(100%, 360px); }
 
 .phone-bot-controls {
     width: 100%;

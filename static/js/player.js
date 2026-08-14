@@ -27,7 +27,6 @@ const presenceScreenLabels = {
     'screen-mission': 'The Quest Begins',
     'screen-mission-reveal-player': 'The Quest Returns',
     'screen-assassin': 'The Final Choice',
-    'screen-game-over': 'Roles Revealed',
 };
 
 function showConnectionStatus(message) {
@@ -58,6 +57,8 @@ let discussionTimerMax = 300;
 let latestMissionReveal = null;
 let phoneBetaTestMode = false;
 let phoneBetaPlayerCount = 6;
+let phoneDiscussionDuration = 60;
+let rematchReady = false;
 
 // Mission board state
 let pbMissionSizes = [];
@@ -524,6 +525,23 @@ function renderPhoneBotControls(settings = {}) {
     button.textContent = phoneBetaTestMode ? 'Remove Bots' : 'Add Bots';
 }
 
+function discussionSliderValue(seconds) {
+    const numeric = Number(seconds);
+    return numeric === 0 ? 16 : Math.min(15, Math.max(1, Math.round(numeric / 60)));
+}
+
+function renderPhoneDiscussionSetting(seconds) {
+    phoneDiscussionDuration = Number(seconds);
+    if (!Number.isFinite(phoneDiscussionDuration)) phoneDiscussionDuration = 60;
+    const slider = document.getElementById('phone-discussion-slider');
+    const display = document.getElementById('phone-discussion-time-display');
+    if (!slider || !display) return;
+    slider.value = String(discussionSliderValue(phoneDiscussionDuration));
+    display.textContent = phoneDiscussionDuration === 0
+        ? 'Unlimited'
+        : `${phoneDiscussionDuration / 60} minute${phoneDiscussionDuration === 60 ? '' : 's'}`;
+}
+
 function renderAvatarPicker() {
     const options = document.getElementById('avatar-options');
     if (!options) return;
@@ -662,11 +680,43 @@ function showDiscussion(data) {
     const endDiscussion = document.getElementById('btn-end-discussion');
     endDiscussion.disabled = false;
     endDiscussion.classList.toggle('hidden', !amLeader);
-    discussionTimerMax = data.duration_seconds || discussionTimerMax;
-    document.getElementById('discussion-timer-player').textContent = fmtTime(discussionTimerMax);
+    configureSpotlightControls(amLeader);
+    discussionTimerMax = Number(data.duration_seconds);
+    document.getElementById('discussion-timer-player').textContent = discussionTimerMax
+        ? fmtTime(discussionTimerMax)
+        : 'Unlimited';
     const screen = document.getElementById('screen-discussion');
     presenceTable.show(screen, 'Mission Discussion', document.querySelector('#screen-discussion .discussion-info'));
     showScreen('screen-discussion');
+}
+
+function configureSpotlightControls(amLeader) {
+    const controls = document.getElementById('spotlight-leader-controls');
+    controls.classList.toggle('hidden', !amLeader);
+    if (!amLeader) return;
+    const select = document.getElementById('spotlight-player-select');
+    const previous = select.value;
+    select.replaceChildren();
+    (window._playerOrder || []).forEach(name => {
+        const option = document.createElement('option');
+        option.value = (window._playerNameToId || {})[name] || '';
+        option.textContent = name;
+        select.appendChild(option);
+    });
+    if ([...select.options].some(option => option.value === previous)) select.value = previous;
+}
+
+function renderDiscussionSpotlight(data = {}) {
+    const banner = document.getElementById('player-discussion-spotlight');
+    if (!data.player_name) {
+        banner.classList.add('hidden');
+        banner.textContent = '';
+        return;
+    }
+    banner.textContent = data.player_id === myPlayerId
+        ? '♜ THE COURT CALLS ON YOU · DEFEND YOUR CASE'
+        : `♜ THE COURT CALLS ON ${data.player_name.toUpperCase()} · DEFEND YOUR CASE`;
+    banner.classList.remove('hidden');
 }
 
 function showVoteReveal(data) {
@@ -936,6 +986,18 @@ function showGameOver(summary) {
         rejections: '5 consecutive team rejections',
     };
     document.getElementById('win-reason-player').textContent = reasons[summary.win_reason] || summary.win_reason;
+    renderVictoryCard(document.getElementById('victory-group-card-player'), summary);
+    rematchReady = false;
+    const rematchButton = document.getElementById('btn-run-it-back');
+    rematchButton.classList.toggle('hidden', isSpectator);
+    rematchButton.classList.remove('ready');
+    rematchButton.setAttribute('aria-pressed', 'false');
+    rematchButton.textContent = '↻ Run It Back';
+    renderRematchStatus({
+        ready_count: 0,
+        total_count: (summary.players || []).filter(player => !player.is_bot).length,
+        ready_names: [],
+    });
 
     const rolesList = document.getElementById('roles-list-player');
     rolesList.innerHTML = '';
@@ -950,6 +1012,54 @@ function showGameOver(summary) {
     clearAttention();
 
     showScreen('screen-game-over');
+    presenceTable.hide();
+    hidePlayerBoard();
+    hideChat();
+}
+
+function renderVictoryCard(card, summary) {
+    if (!card) return;
+    const winner = summary.winner === 'evil' ? 'evil' : 'good';
+    const winningPlayers = (summary.players || []).filter(player => player.team === winner);
+    card.classList.toggle('evil', winner === 'evil');
+    card.querySelector('.victory-card-title').textContent = winner === 'good'
+        ? 'Defenders of Avalon'
+        : 'Conquerors of Camelot';
+    card.querySelector('.victory-card-subtitle').textContent = winner === 'good'
+        ? 'The loyal fellowship preserved the realm.'
+        : 'The servants of Mordred claimed the realm.';
+    card.querySelector('.victory-card-room').textContent = `ROOM ${gameCode || '----'}`;
+    const party = card.querySelector('.victory-card-party');
+    party.replaceChildren();
+    winningPlayers.forEach(player => {
+        const person = document.createElement('div');
+        person.className = 'victory-person';
+        const portrait = document.createElement('div');
+        portrait.className = 'victory-person-portrait';
+        if (player.avatar_image) {
+            const image = document.createElement('img');
+            image.src = player.avatar_image;
+            image.alt = '';
+            portrait.appendChild(image);
+        } else {
+            portrait.appendChild(presenceTable.createPortraitElement(player.avatar_index, player.color_index));
+        }
+        const name = document.createElement('strong');
+        name.textContent = player.name;
+        const role = document.createElement('small');
+        role.textContent = player.role;
+        person.append(portrait, name, role);
+        party.appendChild(person);
+    });
+}
+
+function renderRematchStatus(data) {
+    const total = Number(data.total_count) || 0;
+    const ready = Number(data.ready_count) || 0;
+    const names = data.ready_names || [];
+    document.getElementById('rematch-status-player').textContent = total
+        ? `${ready} of ${total} ready${names.length ? ` · ${names.join(', ')}` : ''}`
+        : 'Waiting for players to choose “Run It Back”…';
 }
 
 // ---------------------------------------------------------------------------
@@ -970,6 +1080,7 @@ function applyStateSnapshot(snap) {
     presenceTable.setPublicPositions(snap.public_spectrum || {});
     presenceTable.setRoleManifest(snap.role_manifest || []);
     renderPhoneBotControls(snap.settings || {});
+    renderPhoneDiscussionSetting(snap.settings?.discussion_time);
 
     if (snap.my_role) {
         myRole = snap.my_role;
@@ -1031,6 +1142,13 @@ function applyStateSnapshot(snap) {
                 leader_name: snap.current_leader,
                 duration_seconds: snap.timer_remaining ?? snap.settings.discussion_time,
             });
+            if (snap.spotlight_player_id) {
+                const spotlightPlayer = (snap.players || []).find(player => player.player_id === snap.spotlight_player_id);
+                renderDiscussionSpotlight({
+                    player_id: snap.spotlight_player_id,
+                    player_name: spotlightPlayer?.name,
+                });
+            }
             break;
         case 'TEAM_PROPOSAL':
             showProposalScreen({
@@ -1080,7 +1198,20 @@ function applyStateSnapshot(snap) {
             if (snap.assassin_id === myPlayerId) requestAttention('Choose Merlin');
             break;
         case 'GAME_OVER':
-            if (snap.summary) showGameOver(snap.summary);
+            if (snap.summary) {
+                showGameOver(snap.summary);
+                const readyIds = snap.rematch_ready_ids || [];
+                rematchReady = readyIds.includes(myPlayerId);
+                const eligible = (snap.summary.players || []).filter(player => !player.is_bot);
+                renderRematchStatus({
+                    ready_count: readyIds.length,
+                    total_count: eligible.length,
+                    ready_names: eligible.filter(player => readyIds.includes(player.player_id)).map(player => player.name),
+                });
+                const button = document.getElementById('btn-run-it-back');
+                button.setAttribute('aria-pressed', String(rematchReady));
+                button.textContent = rematchReady ? '✓ Ready for Another' : '↻ Run It Back';
+            }
             break;
         default:
             showScreen('screen-lobby');
@@ -1116,6 +1247,7 @@ socket.on('join_success', data => {
     presenceTable.setPublicPositions(data.public_spectrum || {});
     presenceTable.setRoleManifest(data.role_manifest || []);
     renderPhoneBotControls(data.settings || {});
+    renderPhoneDiscussionSetting(data.settings?.discussion_time);
     showScreen('screen-lobby');
 });
 
@@ -1219,6 +1351,7 @@ socket.on('lobby_update', data => {
     presenceTable.setPublicPositions(data.public_spectrum || {});
     presenceTable.setRoleManifest(data.role_manifest || []);
     renderPhoneBotControls(data.settings || {});
+    renderPhoneDiscussionSetting(data.settings?.discussion_time);
 });
 
 socket.on('public_spectrum_updated', data => {
@@ -1279,19 +1412,24 @@ socket.on('round_start', data => {
     showPlayerBoard();
     renderPlayerBoard();
     showChat();
+    renderDiscussionSpotlight();
 });
 
 socket.on('discussion_start', data => {
     window._currentLeaderName = data.leader_name || window._currentLeaderName;
     currentLeaderId = data.leader_id || currentLeaderId;
-    discussionTimerMax = data.duration_seconds;
-    document.getElementById('discussion-timer-player').textContent = fmtTime(discussionTimerMax);
+    discussionTimerMax = Number(data.duration_seconds);
+    document.getElementById('discussion-timer-player').textContent = discussionTimerMax
+        ? fmtTime(discussionTimerMax)
+        : 'Unlimited';
     const missionInfo = document.getElementById('discussion-mission-info');
     missionInfo.textContent = `Mission ${data.mission_num || ''} — ${missionRequiredSize} member${missionRequiredSize !== 1 ? 's' : ''} needed`;
     document.getElementById('discussion-leader-name').textContent = data.leader_name || window._currentLeaderName || 'Unknown';
     const leaderBanner = document.getElementById('leader-banner');
     leaderBanner.classList.toggle('hidden', myPlayerId !== currentLeaderId);
     document.getElementById('btn-end-discussion').classList.toggle('hidden', myPlayerId !== currentLeaderId);
+    configureSpotlightControls(myPlayerId === currentLeaderId);
+    renderDiscussionSpotlight();
     presenceTable.show(
         document.getElementById('screen-discussion'),
         'Mission Discussion',
@@ -1307,6 +1445,10 @@ socket.on('discussion_tick', data => {
     const timerEl = document.getElementById('discussion-timer-player');
     timerEl.textContent = fmtTime(data.remaining_seconds);
     timerEl.className = 'timer-small' + (data.remaining_seconds <= 10 ? ' warning' : '');
+});
+
+socket.on('discussion_spotlight', data => {
+    renderDiscussionSpotlight(data);
 });
 
 socket.on('proposal_start', data => {
@@ -1414,6 +1556,15 @@ socket.on('game_over', data => {
     showGameOver(data);
 });
 
+socket.on('rematch_status', data => {
+    rematchReady = (data.ready_ids || []).includes(myPlayerId);
+    const button = document.getElementById('btn-run-it-back');
+    button.setAttribute('aria-pressed', String(rematchReady));
+    button.classList.toggle('ready', rematchReady);
+    button.textContent = rematchReady ? '✓ Ready for Another' : '↻ Run It Back';
+    renderRematchStatus(data);
+});
+
 socket.on('return_to_lobby', data => {
     stopGameClock();
     myRole = null;
@@ -1429,6 +1580,8 @@ socket.on('return_to_lobby', data => {
     releaseWakeLock();
     clearAttention();
     presenceTable.setRoleReveal(null);
+    renderDiscussionSpotlight();
+    rematchReady = false;
     chatBubbleEls = [];
     chatHistory = [];
     chatHistoryOpen = false;
@@ -1438,6 +1591,8 @@ socket.on('return_to_lobby', data => {
     document.getElementById('btn-history-toggle').classList.remove('active');
     renderLobbyPlayers(data.players || []);
     presenceTable.setRoleManifest(data.role_manifest || []);
+    renderPhoneBotControls(data.settings || {});
+    renderPhoneDiscussionSetting(data.settings?.discussion_time);
     showScreen('screen-lobby');
 });
 
@@ -1647,9 +1802,33 @@ document.getElementById('phone-beta-player-count').addEventListener('change', ev
     }
 });
 
+document.getElementById('phone-discussion-slider').addEventListener('input', event => {
+    const minutes = Number(event.target.value);
+    phoneDiscussionDuration = minutes === 16 ? 0 : minutes * 60;
+    renderPhoneDiscussionSetting(phoneDiscussionDuration);
+});
+
+document.getElementById('phone-discussion-slider').addEventListener('change', () => {
+    socket.emit('update_settings', { discussion_time: phoneDiscussionDuration });
+});
+
+document.getElementById('btn-set-spotlight').addEventListener('click', () => {
+    const playerId = document.getElementById('spotlight-player-select').value;
+    if (playerId) socket.emit('set_discussion_spotlight', { player_id: playerId });
+});
+
+document.getElementById('btn-clear-spotlight').addEventListener('click', () => {
+    socket.emit('set_discussion_spotlight', { player_id: null });
+});
+
 document.getElementById('btn-end-discussion').addEventListener('click', event => {
     event.currentTarget.disabled = true;
     socket.emit('skip_discussion', { confirmed: true });
+});
+
+document.getElementById('btn-run-it-back').addEventListener('click', () => {
+    if (isSpectator) return;
+    socket.emit('set_rematch_ready', { ready: !rematchReady });
 });
 
 document.getElementById('btn-player-confirm-vote').addEventListener('click', event => {
