@@ -6,7 +6,7 @@
 <title>Avalon — Host</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/css/common.css?v=20260824-round-table">
-<link rel="stylesheet" href="/static/css/host.css?v=20260824-tv-scale">
+<link rel="stylesheet" href="/static/css/host.css?v=20260824-pairing-ui">
 <style>
 .reorder-label {
     font-family: var(--font-heading);
@@ -85,10 +85,11 @@
     <!-- ============ TITLE SCREEN ============ -->
     <div class="screen active" id="screen-title">
         <header class="tv-entry-brand">
-            <div class="swords-divider"><span class="avalon-logo">AVALON</span></div>
+            <img class="tv-entry-title-art" src="/static/img/avalon-title.png?v=20260824" alt="Avalon — The Resistance Awaits">
             <p class="tagline">Shared Display</p>
         </header>
         <section class="tv-pair-card" aria-labelledby="tv-pair-title">
+            <a class="tv-entry-back" href="/" aria-label="Back to entry choices">← Back</a>
             <div class="tv-pair-heading">
                 <h1 id="tv-pair-title">Pair this screen</h1>
                 <p>On the host phone, open Game setup → Shared display, then generate a pairing code. Enter both codes below.</p>
