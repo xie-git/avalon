@@ -1652,6 +1652,7 @@ body.chat-visible .screen {
     gap: 0.2rem 0.55rem;
     margin: 0;
     padding: 0.65rem;
+    margin-bottom: 0.35rem;
 }
 .host-setup-card .display-pair-card > strong { grid-column: 1 / -1; }
 .host-setup-card .display-pair-card > span { grid-column: 1; }
