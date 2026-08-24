@@ -6,7 +6,8 @@
 <title>Avalon — Host</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/css/common.css?v=20260824-round-table">
-<link rel="stylesheet" href="/static/css/host.css?v=20260824-pairing-ui">
+<link rel="stylesheet" href="/static/css/host.css?v=20260824-uniform-entry">
+<link rel="stylesheet" href="/static/css/entry.css?v=20260824-uniform-entry-2">
 <style>
 .reorder-label {
     font-family: var(--font-heading);
@@ -83,22 +84,26 @@
 <div id="app">
 
     <!-- ============ TITLE SCREEN ============ -->
-    <div class="screen active" id="screen-title">
-        <header class="tv-entry-brand">
-            <img class="tv-entry-title-art" src="/static/img/avalon-title.png?v=20260824" alt="Avalon — The Resistance Awaits">
-            <p class="tagline">Shared Display</p>
+    <div class="screen entry-screen active" id="screen-title">
+        <header class="entry-brand">
+            <img class="entry-title-art" src="/static/img/avalon-title.png?v=20260824" alt="Avalon — The Resistance Awaits">
+            <p class="entry-context">Shared Display</p>
         </header>
-        <section class="tv-pair-card" aria-labelledby="tv-pair-title">
-            <a class="tv-entry-back" href="/" aria-label="Back to entry choices">← Back</a>
-            <div class="tv-pair-heading">
-                <h1 id="tv-pair-title">Pair this screen</h1>
-                <p>On the host phone, open Game setup → Shared display, then generate a pairing code. Enter both codes below.</p>
+        <section class="entry-panel" aria-labelledby="tv-pair-title">
+            <a class="entry-back" href="/" aria-label="Back to entry choices">← Back</a>
+            <div class="entry-flow-heading">
+                <strong id="tv-pair-title">Pair this screen</strong>
+                <small>On the host phone, open Game setup → Shared display, then generate a pairing code. Enter both codes below.</small>
             </div>
-            <div class="tv-pair-fields">
-                <label for="host-pair-room">Room code</label>
-                <input id="host-pair-room" type="text" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="ABCD">
-                <label for="host-pair-code">Six-digit display code</label>
-                <input id="host-pair-code" type="text" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
+            <div class="entry-pair-fields">
+                <div class="form-group">
+                    <label for="host-pair-room">Room code</label>
+                    <input id="host-pair-room" type="text" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="ABCD">
+                </div>
+                <div class="form-group">
+                    <label for="host-pair-code">Six-digit display code</label>
+                    <input id="host-pair-code" type="text" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
+                </div>
             </div>
             <button class="btn btn-primary" id="btn-pair-host-display">Pair Display</button>
             <div class="error-message" id="host-create-error" role="alert"></div>

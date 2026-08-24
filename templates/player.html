@@ -6,7 +6,8 @@
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/css/common.css?v=20260824-round-table">
-<link rel="stylesheet" href="/static/css/player.css?v=20260824-title-art">
+<link rel="stylesheet" href="/static/css/player.css?v=20260824-spectator-options">
+<link rel="stylesheet" href="/static/css/entry.css?v=20260824-uniform-entry-2">
 </head>
 <body data-force-new="{{ 'true' if force_new else 'false' }}">
 
@@ -53,7 +54,7 @@
 <div id="app">
 
     <!-- ============ JOIN SCREEN ============ -->
-    <div class="screen active" id="screen-join">
+    <div class="screen entry-screen active" id="screen-join">
         <header class="entry-brand">
             <img class="entry-title-art" src="/static/img/avalon-title.png?v=20260824" alt="Avalon — The Resistance Awaits">
         </header>
@@ -87,7 +88,7 @@
             </button>
             <button type="button" class="entry-utility-link" id="btn-show-recovery">Recover a disconnected seat</button>
         </section>
-        <div class="join-form hidden" id="entry-flow-panel">
+        <div class="join-form entry-panel hidden" id="entry-flow-panel">
             <button type="button" class="entry-back" id="btn-entry-back" aria-label="Back to entry choices">← Back</button>
             <div class="entry-flow-heading">
                 <strong id="entry-flow-title">Join a Game</strong>
