@@ -1538,15 +1538,51 @@ body.chat-visible .screen {
     gap: clamp(0.9rem, 2.6dvh, 1.4rem);
     padding-inline: clamp(1rem, 5vw, 1.5rem);
     scrollbar-gutter: auto;
+    isolation: isolate;
     background-color: #0a0a0a;
     background-image:
         linear-gradient(180deg, rgba(5, 6, 7, 0.34) 0%, rgba(7, 7, 7, 0.16) 32%, rgba(4, 4, 5, 0.78) 100%),
         radial-gradient(circle at 50% 35%, transparent 0%, rgba(4, 4, 5, 0.18) 62%, rgba(3, 3, 4, 0.6) 100%),
         url('/static/img/avalon-entry-background.png?v=20260824-2');
-    background-position: center, center, center top;
+    background-position: center, center, center -50px;
     background-repeat: no-repeat;
-    background-size: cover;
+    background-size: cover, cover, auto calc(100% + 50px);
     background-attachment: local;
+}
+#screen-join::before,
+#screen-join::after {
+    content: '';
+    position: absolute;
+    z-index: 0;
+    left: -22%;
+    bottom: -7%;
+    width: 144%;
+    height: 36%;
+    pointer-events: none;
+    background:
+        radial-gradient(ellipse at 18% 66%, rgba(213,205,185,0.26) 0%, rgba(181,176,164,0.1) 36%, transparent 68%),
+        radial-gradient(ellipse at 72% 72%, rgba(199,193,180,0.2) 0%, rgba(160,158,151,0.08) 34%, transparent 66%);
+    filter: blur(17px);
+    opacity: 0.42;
+    transform: translate3d(-3%, 2%, 0) scale(1.04);
+    animation: entry-mist-drift 18s ease-in-out infinite alternate;
+    transition: opacity 0.35s ease;
+}
+#screen-join::after {
+    bottom: 1%;
+    height: 27%;
+    opacity: 0.24;
+    transform: translate3d(4%, 0, 0) scale(1.08);
+    animation-duration: 24s;
+    animation-direction: alternate-reverse;
+}
+#screen-join:has(#entry-mode-chooser.hidden)::before,
+#screen-join:has(#entry-mode-chooser.hidden)::after { opacity: 0; }
+#screen-join > * { position: relative; z-index: 1; }
+@keyframes entry-mist-drift {
+    0% { transform: translate3d(-4%, 2%, 0) scale(1.03); }
+    55% { transform: translate3d(2%, -1%, 0) scale(1.08); }
+    100% { transform: translate3d(5%, 1%, 0) scale(1.04); }
 }
 .entry-brand { text-align: center; }
 .entry-brand .join-logo {
@@ -1579,8 +1615,16 @@ body.chat-visible .screen {
     color: var(--gold-light);
     text-align: left;
     cursor: pointer;
+    transition: transform 0.14s ease-out, filter 0.14s ease-out, border-color 0.14s ease-out, box-shadow 0.14s ease-out;
 }
 .entry-mode-card.entry-mode-primary { border-color: var(--gold); box-shadow: 0 12px 32px rgba(0,0,0,0.38), 0 0 18px rgba(201,168,76,0.1); }
+.entry-mode-card:active,
+.entry-mode-card.is-activating {
+    transform: scale(0.975);
+    filter: brightness(1.2);
+    border-color: var(--gold-light);
+    box-shadow: 0 7px 18px rgba(0,0,0,0.42), 0 0 24px rgba(201,168,76,0.22);
+}
 .entry-mode-card:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 3px; }
 .entry-mode-card > span:nth-child(2) { display: grid; gap: 0.2rem; }
 .entry-mode-card strong { font: 0.78rem var(--font-heading); letter-spacing: 0.06em; text-transform: uppercase; }
@@ -1691,5 +1735,5 @@ body.chat-visible .screen {
 .phone-turn-order button:disabled { opacity: 0.3; }
 
 @media (prefers-reduced-motion: reduce) {
-    .screen, .entry-mode-card { transition: none; animation: none; }
+    .screen, .entry-mode-card, #screen-join::before, #screen-join::after { transition: none; animation: none; }
 }

@@ -1893,12 +1893,31 @@ function showEntryChooser() {
     document.getElementById('btn-mode-join').focus();
 }
 
-document.getElementById('btn-mode-join').addEventListener('click', () => showEntryFlow('join'));
-document.getElementById('btn-mode-host').addEventListener('click', () => showEntryFlow('host'));
-document.getElementById('btn-mode-display').addEventListener('click', () => {
-    window.location.assign('/host');
-});
-document.getElementById('btn-mode-spectate').addEventListener('click', () => showEntryFlow('spectate'));
+let entryCardTransitionPending = false;
+
+function activateEntryCard(button, action) {
+    if (entryCardTransitionPending) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        action();
+        return;
+    }
+    entryCardTransitionPending = true;
+    button.classList.add('is-activating');
+    window.setTimeout(() => {
+        button.classList.remove('is-activating');
+        entryCardTransitionPending = false;
+        action();
+    }, 150);
+}
+
+const entryJoinButton = document.getElementById('btn-mode-join');
+const entryHostButton = document.getElementById('btn-mode-host');
+const entryDisplayButton = document.getElementById('btn-mode-display');
+const entrySpectateButton = document.getElementById('btn-mode-spectate');
+entryJoinButton.addEventListener('click', () => activateEntryCard(entryJoinButton, () => showEntryFlow('join')));
+entryHostButton.addEventListener('click', () => activateEntryCard(entryHostButton, () => showEntryFlow('host')));
+entryDisplayButton.addEventListener('click', () => activateEntryCard(entryDisplayButton, () => window.location.assign('/host')));
+entrySpectateButton.addEventListener('click', () => activateEntryCard(entrySpectateButton, () => showEntryFlow('spectate')));
 document.getElementById('btn-show-recovery').addEventListener('click', () => showEntryFlow('recovery'));
 document.getElementById('btn-entry-back').addEventListener('click', showEntryChooser);
 
