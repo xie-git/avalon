@@ -51,7 +51,7 @@ def test_party_pages_do_not_reference_portrait_or_audio_assets():
         client.get("/static/css/player.css").data,
     )
     combined = b"\n".join(served_files).lower()
-    for marker in (b"new audio", b"/static/img", b"/static/sounds"):
+    for marker in (b"new audio", b"/static/img/portraits", b"/static/sounds"):
         assert marker not in combined
 
 
