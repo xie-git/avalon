@@ -1535,7 +1535,7 @@ body.chat-visible .screen {
 /* Production entry and lobby hierarchy */
 #screen-join {
     justify-content: flex-start;
-    gap: clamp(0.9rem, 2.6dvh, 1.4rem);
+    gap: clamp(0.55rem, 1.7dvh, 1.15rem);
     padding-inline: clamp(1rem, 5vw, 1.5rem);
     scrollbar-gutter: auto;
     isolation: isolate;
@@ -1548,6 +1548,11 @@ body.chat-visible .screen {
     background-repeat: no-repeat;
     background-size: cover, cover, auto calc(100% + 50px);
     background-attachment: local;
+}
+#screen-join:has(#entry-mode-chooser:not(.hidden)) {
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: pan-x;
 }
 #screen-join::before,
 #screen-join::after {
@@ -1584,28 +1589,26 @@ body.chat-visible .screen {
     55% { transform: translate3d(2%, -1%, 0) scale(1.08); }
     100% { transform: translate3d(5%, 1%, 0) scale(1.04); }
 }
-.entry-brand { text-align: center; }
-.entry-brand .join-logo {
-    margin: 0;
-    font-size: clamp(2.6rem, 13vw, 3.5rem);
-    line-height: 1;
-    text-shadow: 0 2px 2px rgba(0,0,0,0.9), 0 0 28px rgba(201,168,76,0.55);
+.entry-brand { width: 100%; flex: 0 1 auto; text-align: center; }
+.entry-title-art {
+    display: block;
+    width: min(100%, 420px);
+    height: auto;
+    max-height: clamp(92px, 18dvh, 150px);
+    margin: 0 auto;
+    object-fit: contain;
+    filter: drop-shadow(0 3px 2px rgba(0,0,0,0.82)) drop-shadow(0 0 18px rgba(201,168,76,0.34));
 }
-.entry-brand .join-tagline {
-    margin: 0.45rem 0 0;
-    color: #d8ccb3;
-    text-shadow: 0 2px 8px rgba(0,0,0,0.95);
-}
-.entry-mode-chooser { width: 100%; display: grid; gap: 0.65rem; }
+.entry-mode-chooser { width: 100%; min-height: 0; display: grid; gap: clamp(0.35rem, 1.15dvh, 0.65rem); }
 .entry-mode-chooser.hidden { display: none; }
 .entry-mode-card {
     width: 100%;
-    min-height: 76px;
+    min-height: clamp(56px, 9.2dvh, 76px);
     display: grid;
     grid-template-columns: 2.4rem minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.8rem 0.9rem;
+    padding: clamp(0.55rem, 1.5dvh, 0.8rem) 0.9rem;
     border: 1px solid rgba(201,168,76,0.36);
     border-radius: var(--radius-md);
     background: linear-gradient(135deg, rgba(27,23,16,0.89), rgba(12,12,14,0.91));
@@ -1648,6 +1651,18 @@ body.chat-visible .screen {
 .join-form .error-message:empty { min-height: 0; }
 .dashboard-heading { margin: 0 0 0.35rem; color: #e0d6c1; text-align: center; text-shadow: 0 2px 8px rgba(0,0,0,0.95); }
 .dashboard-resume { margin: 0; padding: 0.8rem; background: rgba(17,15,12,0.9); backdrop-filter: blur(9px); }
+
+@media (max-height: 620px) {
+    #screen-join {
+        padding-block: max(0.4rem, env(safe-area-inset-top)) max(0.4rem, env(safe-area-inset-bottom));
+        gap: 0.35rem;
+    }
+    .entry-title-art { max-height: 15dvh; }
+    .dashboard-heading { margin-bottom: 0.1rem; font-size: 0.82rem; }
+    .entry-mode-card { min-height: 52px; padding-block: 0.42rem; }
+    .entry-mode-card small { font-size: 0.7rem; }
+    .entry-utility-link { min-height: 34px; }
+}
 
 #screen-lobby { gap: 0.75rem; padding-top: max(0.8rem, env(safe-area-inset-top)); }
 .phone-lobby-header {
