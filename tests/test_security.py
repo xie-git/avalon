@@ -28,6 +28,10 @@ def test_security_headers_and_development_routes_are_closed():
     host_response = client.get("/host")
     assert b"host-admin-password" not in host_response.data
     assert b"Pair this screen" in host_response.data
+    assert b"Display only" in host_response.data
+    assert b'id="btn-start-game"' not in host_response.data
+    assert b'id="btn-host-settings"' not in host_response.data
+    assert b'id="discussion-slider"' not in host_response.data
     assert b"Host a Game" in response.data
     assert b"Pair a Shared Display" in response.data
 
@@ -150,6 +154,42 @@ def test_only_host_can_manage_practice_bots(socket_client):
     assert update["settings"]["beta_test_player_count"] == 8
     assert all(candidate.ready for candidate in game.players.values() if candidate.is_bot)
     player.disconnect()
+
+
+def test_paired_shared_display_is_read_only(socket_client):
+    socket_client.emit("create_player_game", {"player_name": "Arthur"})
+    joined = packets_for(socket_client, "join_success")[0]
+    game = server.games[joined["room_code"]]
+    original_order = list(game.player_order)
+
+    socket_client.emit("request_display_pairing")
+    pairing = packets_for(socket_client, "display_pairing_code")[0]
+    display = server.socketio.test_client(server.app)
+    display.emit(
+        "pair_host_display",
+        {"room_code": game.code, "pairing_code": pairing["code"]},
+    )
+    assert packets_for(display, "display_paired")
+
+    attempts = (
+        ("update_settings", {"discussion_time": 300}),
+        ("reorder_players", {"order": ["Arthur"]}),
+        ("start_game", None),
+        ("return_to_lobby", None),
+        ("end_game", None),
+    )
+    for event, payload in attempts:
+        if payload is None:
+            display.emit(event)
+        else:
+            display.emit(event, payload)
+        assert "Host authorization required" in packets_for(display, "error")[-1]["message"]
+
+    assert game.code in server.games
+    assert game.phase == server.GamePhase.LOBBY
+    assert game.discussion_time == 60
+    assert game.player_order == original_order
+    display.disconnect()
 
 
 def test_bot_leader_automatically_reaches_team_vote(socket_client):

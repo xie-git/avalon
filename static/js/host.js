@@ -10,7 +10,6 @@ const presenceTable = new AvalonPresenceTable({
 const HOST_CODE_KEY = 'avalon-host-game-code';
 const HOST_TOKEN_KEY = 'avalon-host-token';
 const PAIRED_DISPLAY_KEY = 'avalon-host-is-paired-display';
-const TV_CHAT_KEY = 'avalon-tv-chat-enabled';
 const ANALYTICS_ID_KEY = 'avalon-analytics-id';
 
 function analyticsId() {
@@ -76,7 +75,7 @@ let timerMax = 0;
 let gameStartedAt = null;
 let gameClockInterval = null;
 let tvChatMessages = [];
-let tvChatEnabled = localStorage.getItem(TV_CHAT_KEY) !== 'false';
+const tvChatEnabled = true;
 let isPairedDisplay = localStorage.getItem(PAIRED_DISPLAY_KEY) === 'true';
 let chatAudioContext = null;
 
@@ -100,11 +99,6 @@ function clearHostSession() {
     localStorage.removeItem(HOST_TOKEN_KEY);
     sessionStorage.removeItem('host_game_code');
     sessionStorage.removeItem('host_token');
-}
-
-function joinLink() {
-    if (!gameCode) return window.location.origin;
-    return `${window.location.origin}/?room=${encodeURIComponent(gameCode)}`;
 }
 
 function updateJoinTools() {
@@ -166,31 +160,6 @@ function renderTvChat() {
         appendLinkifiedText(message, item.message);
         line.append(name, message);
         strip.appendChild(line);
-    });
-}
-
-function renderRecoveryList() {
-    const list = document.getElementById('seat-recovery-list');
-    list.replaceChildren();
-    const disconnected = players.filter(player => !player.connected);
-    if (!disconnected.length) {
-        document.getElementById('seat-recovery-result').classList.add('hidden');
-        return;
-    }
-    const label = document.createElement('div');
-    label.className = 'seat-recovery-label';
-    label.textContent = 'Disconnected players';
-    list.appendChild(label);
-    disconnected.forEach(player => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'btn seat-recovery-button';
-        button.textContent = `Recover ${player.name}’s seat`;
-        button.addEventListener('click', () => {
-            button.disabled = true;
-            socket.emit('request_seat_recovery', { player_id: player.player_id });
-        });
-        list.appendChild(button);
     });
 }
 
@@ -441,8 +410,6 @@ function renderRoundTable(playerList) {
     else presenceTable.hide();
 }
 
-let _dragSrcIndex = -1;
-
 function renderReorderList(playerList) {
     const list = document.getElementById('reorder-list');
     if (!list) return;
@@ -450,49 +417,7 @@ function renderReorderList(playerList) {
     playerList.forEach((p, i) => {
         const li = document.createElement('li');
         li.className = 'reorder-item';
-        li.draggable = true;
-        li.dataset.index = i;
         li.innerHTML = `<span class="reorder-num">${i + 1}</span>${escapeHtml(p.name)}${p.ready ? '<span class="ready-mark">✓ Ready</span>' : ''}`;
-        const actions = document.createElement('span');
-        actions.className = 'reorder-actions';
-        const up = document.createElement('button');
-        const down = document.createElement('button');
-        up.type = down.type = 'button';
-        up.textContent = '↑';
-        down.textContent = '↓';
-        up.disabled = i === 0;
-        down.disabled = i === playerList.length - 1;
-        up.setAttribute('aria-label', `Move ${p.name} earlier`);
-        down.setAttribute('aria-label', `Move ${p.name} later`);
-        const move = offset => {
-            const next = [...players];
-            [next[i], next[i + offset]] = [next[i + offset], next[i]];
-            socket.emit('reorder_players', { order: next.map(player => player.name) });
-        };
-        up.addEventListener('click', event => { event.stopPropagation(); move(-1); });
-        down.addEventListener('click', event => { event.stopPropagation(); move(1); });
-        actions.append(up, down);
-        li.append(actions);
-
-        li.addEventListener('dragstart', e => {
-            _dragSrcIndex = i;
-            li.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-        });
-        li.addEventListener('dragend', () => li.classList.remove('dragging'));
-        li.addEventListener('dragover', e => { e.preventDefault(); li.classList.add('drag-over'); });
-        li.addEventListener('dragleave', () => li.classList.remove('drag-over'));
-        li.addEventListener('drop', e => {
-            e.preventDefault();
-            li.classList.remove('drag-over');
-            const destIndex = parseInt(li.dataset.index);
-            if (_dragSrcIndex === destIndex) return;
-            const moved = players.splice(_dragSrcIndex, 1)[0];
-            players.splice(destIndex, 0, moved);
-            socket.emit('reorder_players', { order: players.map(p => p.name) });
-            renderRoundTable(players);
-            renderReorderList(players);
-        });
         list.appendChild(li);
     });
 }
@@ -519,38 +444,15 @@ function renderLobbyPlayers(playerList) {
         : notReadyNames.length
             ? `Not ready: ${notReadyNames.join(', ')}`
             : n ? 'Every player is ready' : 'Waiting for players to join';
-    const btn = document.getElementById('btn-start-game');
-    const hint = document.getElementById('start-game-hint');
-    btn.disabled = !valid;
-    btn.textContent = 'Begin the Quest';
-    hint.textContent = disconnected.length
-        ? `Waiting for ${disconnected.map(player => player.name).join(', ')} to reconnect`
-        : valid
-        ? (ready === n ? 'Everyone is ready' : `${ready} of ${n} ready · host can start anyway`)
-        : (n < 6 ? `Need ${6 - n} more player(s)` : 'Too many players (max 10)');
-    renderRecoveryList();
 }
 
 function renderProposalSetting(seconds) {
     proposalDuration = Number(seconds) || 0;
-    document.getElementById('proposal-timer-enabled').checked = proposalDuration > 0;
-    document.getElementById('proposal-time-display').textContent = proposalDuration > 0 ? fmtTime(proposalDuration) : 'Off';
-}
-
-function discussionSliderValue(seconds) {
-    const numeric = Number(seconds);
-    return numeric === 0 ? 16 : Math.min(15, Math.max(1, Math.round(numeric / 60)));
 }
 
 function renderDiscussionSetting(seconds) {
     discussionDuration = Number(seconds);
     if (!Number.isFinite(discussionDuration)) discussionDuration = 60;
-    const slider = document.getElementById('discussion-slider');
-    const display = document.getElementById('discussion-time-display');
-    slider.value = String(discussionSliderValue(discussionDuration));
-    display.textContent = discussionDuration === 0
-        ? 'Unlimited'
-        : `${discussionDuration / 60} minute${discussionDuration === 60 ? '' : 's'}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -792,30 +694,6 @@ function fmtTime(sec) {
 }
 
 // ---------------------------------------------------------------------------
-// In-game confirmation modal
-// ---------------------------------------------------------------------------
-let _confirmResolve = null;
-
-function showConfirm(title, body) {
-    return new Promise(resolve => {
-        _confirmResolve = resolve;
-        document.getElementById('confirm-title').textContent = title;
-        document.getElementById('confirm-body').textContent = body;
-        document.getElementById('confirm-modal').classList.add('open');
-    });
-}
-
-document.getElementById('confirm-yes').addEventListener('click', () => {
-    document.getElementById('confirm-modal').classList.remove('open');
-    if (_confirmResolve) { _confirmResolve(true); _confirmResolve = null; }
-});
-
-document.getElementById('confirm-no').addEventListener('click', () => {
-    document.getElementById('confirm-modal').classList.remove('open');
-    if (_confirmResolve) { _confirmResolve(false); _confirmResolve = null; }
-});
-
-// ---------------------------------------------------------------------------
 // SocketIO events
 // ---------------------------------------------------------------------------
 
@@ -885,7 +763,6 @@ socket.on('host_registered', data => {
     presenceTable.setPublicPositions(data.public_spectrum || {});
     presenceTable.setRoleManifest(data.role_manifest || []);
     renderTvChat();
-    renderRecoveryList();
 
     if (data.phase === 'LOBBY') {
         transition('screen-lobby');
@@ -1006,7 +883,6 @@ socket.on('player_disconnected', data => {
     syncPresencePlayers(players);
     if (currentPhase === 'lobby') renderLobbyPlayers(players);
     else renderRoundTable(players);
-    renderRecoveryList();
 });
 
 socket.on('player_reconnected', data => {
@@ -1014,7 +890,6 @@ socket.on('player_reconnected', data => {
     syncPresencePlayers(players);
     if (currentPhase === 'lobby') renderLobbyPlayers(players);
     else renderRoundTable(players);
-    renderRecoveryList();
 });
 
 socket.on('lobby_update', data => {
@@ -1300,20 +1175,6 @@ socket.on('chat_message', data => {
     playChatChime();
 });
 
-socket.on('seat_recovery_code', data => {
-    renderRecoveryList();
-    const result = document.getElementById('seat-recovery-result');
-    result.replaceChildren();
-    const title = document.createElement('strong');
-    title.textContent = `${data.player_name}’s recovery code`;
-    const code = document.createElement('span');
-    code.textContent = data.code;
-    const note = document.createElement('small');
-    note.textContent = 'Enter this on the replacement phone within five minutes.';
-    result.append(title, code, note);
-    result.classList.remove('hidden');
-});
-
 socket.on('return_to_lobby', data => {
     clearInterval(gameClockInterval); gameClockInterval = null; gameStartedAt = null;
     document.getElementById('host-game-time').textContent = '00:00';
@@ -1374,10 +1235,6 @@ socket.on('error', data => {
     if (errorEl && document.getElementById('screen-title').classList.contains('active')) {
         errorEl.textContent = data.message;
     }
-    if (currentPhase === 'lobby') {
-        document.getElementById('btn-start-game').disabled = false;
-        document.getElementById('start-game-hint').textContent = data.message || 'The game could not start.';
-    }
     if (/host authorization invalid|Game not found/i.test(data.message || '')) {
         clearHostSession();
         showHostRoomCode('');
@@ -1417,83 +1274,4 @@ document.getElementById('btn-pair-host-display').addEventListener('click', event
         pairing_code: pairingCode,
         analytics_id: ANALYTICS_ID,
     });
-});
-
-document.getElementById('btn-start-game').addEventListener('click', () => {
-    document.getElementById('btn-start-game').disabled = true;
-    socket.emit('start_game');
-});
-
-document.getElementById('btn-close-room').addEventListener('click', async () => {
-    const ok = await showConfirm(
-        'Close This Room?',
-        'All joined players will be disconnected and this room code will stop working.'
-    );
-    if (ok) socket.emit('end_game');
-});
-
-document.getElementById('btn-return-lobby').addEventListener('click', () => {
-    socket.emit('return_to_lobby');
-});
-
-// In-game settings
-document.getElementById('btn-host-settings').addEventListener('click', () => {
-    renderRecoveryList();
-    document.getElementById('host-settings-modal').style.display = 'flex';
-});
-document.getElementById('btn-host-settings-close').addEventListener('click', () => {
-    document.getElementById('host-settings-modal').style.display = 'none';
-});
-document.getElementById('btn-host-back-lobby').addEventListener('click', async () => {
-    document.getElementById('host-settings-modal').style.display = 'none';
-    const ok = await showConfirm('Back to Lobby?', 'The current game will be abandoned. All players will return to the lobby.');
-    if (ok) socket.emit('return_to_lobby');
-});
-document.getElementById('btn-host-end-game').addEventListener('click', async () => {
-    document.getElementById('host-settings-modal').style.display = 'none';
-    const ok = await showConfirm('End Game?', 'All players will be sent back to the join screen. The game will be deleted.');
-    if (ok) socket.emit('end_game');
-});
-
-// Lobby settings are host-authorized server events.
-document.getElementById('discussion-slider').addEventListener('input', e => {
-    const minutes = parseInt(e.target.value, 10);
-    discussionDuration = minutes === 16 ? 0 : minutes * 60;
-    renderDiscussionSetting(discussionDuration);
-});
-document.getElementById('discussion-slider').addEventListener('change', () => {
-    socket.emit('update_settings', { discussion_time: discussionDuration });
-});
-document.getElementById('proposal-timer-enabled').addEventListener('change', event => {
-    const seconds = event.target.checked ? 60 : 0;
-    renderProposalSetting(seconds);
-    socket.emit('update_settings', { proposal_time: seconds });
-});
-
-const tvChatToggle = document.getElementById('toggle-tv-chat');
-tvChatToggle.checked = tvChatEnabled;
-tvChatToggle.addEventListener('change', event => {
-    tvChatEnabled = event.target.checked;
-    localStorage.setItem(TV_CHAT_KEY, String(tvChatEnabled));
-    renderTvChat();
-});
-
-document.getElementById('btn-copy-join').addEventListener('click', async event => {
-    const text = `Join our Avalon game: ${joinLink()}`;
-    try {
-        await navigator.clipboard.writeText(text);
-        event.currentTarget.textContent = 'Copied!';
-    } catch (_) {
-        window.prompt('Copy this invite:', text);
-    }
-    setTimeout(() => { event.currentTarget.textContent = 'Copy Invite'; }, 1800);
-});
-
-document.getElementById('btn-share-join').addEventListener('click', async () => {
-    const url = joinLink();
-    if (navigator.share) {
-        try { await navigator.share({ title: 'Join Avalon', text: `Room ${gameCode}`, url }); } catch (_) { /* cancelled */ }
-    } else {
-        try { await navigator.clipboard.writeText(url); } catch (_) { window.prompt('Copy this invite:', url); }
-    }
 });

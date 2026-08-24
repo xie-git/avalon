@@ -905,7 +905,12 @@ def validate_host(sid: str, *, require_phase=None, allow_suspended: bool = False
         info.get("player_id")
         and info.get("player_id") == game.host_player_id
     )
-    if not is_display and not is_creator:
+    # Paired shared displays are deliberately read-only. The display-host
+    # capability remains accepted only for the legacy test-only room creator.
+    is_legacy_test_host = bool(
+        app.config.get("TESTING") and is_display and game.host_player_id is None
+    )
+    if not is_creator and not is_legacy_test_host:
         raise ValueError("Host authorization required")
     if game.suspended and not allow_suspended:
         raise ValueError("The room is suspended until a player resumes it")

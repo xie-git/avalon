@@ -6,47 +6,8 @@
 <title>Avalon — Host</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/css/common.css?v=20260824-round-table">
-<link rel="stylesheet" href="/static/css/host.css?v=20260824-round-table">
+<link rel="stylesheet" href="/static/css/host.css?v=20260824-tv-scale">
 <style>
-/* In-game confirmation modal */
-#confirm-modal {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.75);
-    z-index: 500;
-    align-items: center;
-    justify-content: center;
-}
-#confirm-modal.open { display: flex; }
-.confirm-box {
-    background: var(--bg-parchment);
-    border: 2px solid var(--gold);
-    border-radius: var(--radius-lg);
-    padding: clamp(1.25rem, 4vmin, 2.5rem) clamp(1rem, 5vmin, 3rem);
-    text-align: center;
-    width: min(460px, calc(100vw - 2rem));
-    max-width: 460px;
-    max-height: calc(100dvh - 2rem);
-    overflow-y: auto;
-    box-shadow: 0 0 60px rgba(201,168,76,0.25);
-    animation: fade-in-scale 0.25s ease-out;
-}
-.confirm-box h2 {
-    font-family: var(--font-title);
-    font-size: 1.5rem;
-    color: var(--gold);
-    margin-bottom: 0.75rem;
-}
-.confirm-box p {
-    font-family: var(--font-body);
-    font-style: italic;
-    color: var(--text-secondary);
-    font-size: 1.1rem;
-    margin-bottom: 2rem;
-}
-.confirm-actions { display: flex; gap: 1rem; justify-content: center; }
-
 .reorder-label {
     font-family: var(--font-heading);
     font-size: 0.65rem;
@@ -93,37 +54,10 @@
 <body>
 
 <div id="connection-status" class="connection-status hidden" role="status" aria-live="polite"></div>
-<!-- In-game confirmation modal (replaces browser confirm()) -->
-<div id="confirm-modal">
-    <div class="confirm-box">
-        <h2 id="confirm-title">Are you sure?</h2>
-        <p id="confirm-body"></p>
-        <div class="confirm-actions">
-            <button class="btn btn-primary" id="confirm-yes">Proceed</button>
-            <button class="btn" id="confirm-no">Cancel</button>
-        </div>
-    </div>
-</div>
-
-<!-- In-game settings menu -->
-<div id="host-settings-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:500;align-items:center;justify-content:center">
-    <div class="confirm-box">
-        <h2 style="font-family:var(--font-title);font-size:1.3rem;color:var(--gold);margin-bottom:1.5rem">⚙ Game Settings</h2>
-        <div class="confirm-actions" style="flex-direction:column;gap:0.75rem">
-            <label class="tv-chat-setting"><input type="checkbox" id="toggle-tv-chat" checked> Show recent chat on TV</label>
-            <div id="seat-recovery-list" class="seat-recovery-list"></div>
-            <div id="seat-recovery-result" class="seat-recovery-result hidden"></div>
-            <button class="btn btn-primary" id="btn-host-back-lobby" style="width:100%">↩ Back to Lobby</button>
-            <button class="btn" id="btn-host-end-game" style="width:100%;border-color:var(--red-glow);color:#ff8080">✕ End Game (New Game)</button>
-            <button class="btn" id="btn-host-settings-close" style="width:100%;margin-top:0.5rem">Cancel</button>
-        </div>
-    </div>
-</div>
 <div id="host-top-meta" class="host-top-meta hidden">
     <div class="leader-display" id="leader-display">Leader: <span>—</span></div>
     <div id="host-spectator-count" class="host-spectator-count hidden" aria-live="polite">◈ 0 spectators</div>
     <div id="host-room-code-badge" class="host-room-code-badge">Room <strong>----</strong></div>
-    <button id="btn-host-settings" class="host-settings-button" title="Game settings" aria-label="Game settings">⚙</button>
 </div>
 
 <div id="page-transition"></div>
@@ -179,15 +113,11 @@
                 <div class="room-join-url" id="join-url-display"></div>
                 <div class="join-tools">
                     <img id="join-qr" class="join-qr hidden" alt="QR code to join this room">
-                    <div class="join-tool-actions">
-                        <button type="button" class="btn" id="btn-copy-join">Copy Invite</button>
-                        <button type="button" class="btn" id="btn-share-join">Share</button>
-                    </div>
                 </div>
                 <div class="host-can-play-note">The host joins as a player from the same address on their phone.</div>
             </div>
             <div class="round-table-container suspicion-spectrum-container" id="lobby-spectrum"></div>
-            <p class="reorder-label">GAME TURN ORDER · DRAG BELOW TO CHANGE LEADER ROTATION</p>
+            <p class="reorder-label">GAME TURN ORDER</p>
             <ol id="reorder-list" class="reorder-list"></ol>
         </div>
         <div class="lobby-sidebar">
@@ -201,21 +131,9 @@
                 </div>
                 <div class="host-ready-detail" id="host-ready-detail">Waiting for players to join</div>
             </div>
-            <div class="panel settings-panel">
-                <h3>Settings</h3>
-                <div class="setting-row">
-                    <label>Discussion Time <span class="value-display" id="discussion-time-display">60 sec</span></label>
-                    <input type="range" id="discussion-slider" min="1" max="16" step="1" value="1" aria-label="Discussion time in minutes; final position is unlimited">
-                </div>
-                <div class="setting-row proposal-setting-row">
-                    <label><input type="checkbox" id="proposal-timer-enabled" checked> Advisory proposal timer</label>
-                    <span class="value-display" id="proposal-time-display">60 sec</span>
-                </div>
-            </div>
-            <div class="start-btn-wrapper">
-                <button class="btn btn-primary" id="btn-start-game" disabled>Begin the Quest</button>
-                <div class="dim-text" id="start-game-hint" style="font-size:0.75rem;margin-top:0.5rem;font-family:var(--font-heading);text-align:center">Need 6–10 players</div>
-                <button type="button" class="btn lobby-close-room" id="btn-close-room">Close Room</button>
+            <div class="panel shared-display-note">
+                <strong>Display only</strong>
+                <span>Game controls stay on the host’s phone. This screen updates automatically.</span>
             </div>
         </div>
     </div>
@@ -321,7 +239,7 @@
             <div id="chronicle-host"></div>
         </div>
         <div class="game-over-actions">
-            <button class="btn btn-primary" id="btn-return-lobby">Return to Lobby</button>
+            <p class="shared-display-finale-note">The host can start a rematch from their phone.</p>
         </div>
         <div class="rematch-status" id="rematch-status-host" aria-live="polite">Waiting for players to choose “Run It Back”…</div>
     </div>
@@ -332,6 +250,6 @@
 
 <script src="/static/js/socket.io.min.js"></script>
 <script src="/static/js/presence.js?v=20260824-round-table"></script>
-<script src="/static/js/host.js?v=20260824-round-table"></script>
+<script src="/static/js/host.js?v=20260824-display-only"></script>
 </body>
 </html>
