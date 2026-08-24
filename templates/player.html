@@ -10,7 +10,7 @@
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/css/common.css?v=20260824-round-table">
-<link rel="stylesheet" href="/static/css/player.css?v=20260824-immersive-role">
+<link rel="stylesheet" href="/static/css/player.css?v=20260824-game-polish">
 <link rel="stylesheet" href="/static/css/entry.css?v=20260824-responsive-entry">
 </head>
 <body data-force-new="{{ 'true' if force_new else 'false' }}">
@@ -416,6 +416,18 @@
         <div class="role-overlay-name" style="font-size:1.2rem;margin-bottom:1.25rem">Settings</div>
         <div style="width:100%;text-align:left;display:flex;flex-direction:column;gap:0.75rem">
             <div id="settings-game-actions" class="hidden" style="display:flex;flex-direction:column;gap:0.5rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border-gold)">
+                <section class="settings-session-card" aria-label="Room and shared display pairing">
+                    <div class="settings-code-row">
+                        <span>Room code</span>
+                        <strong id="settings-room-code">----</strong>
+                    </div>
+                    <div class="settings-code-row">
+                        <span>Display pairing code</span>
+                        <strong id="settings-display-code">------</strong>
+                    </div>
+                    <small id="settings-display-code-status">A fresh code will be created when needed.</small>
+                    <button type="button" class="settings-pair-refresh" id="btn-settings-refresh-pairing">Refresh Display Code</button>
+                </section>
                 <button class="btn" id="btn-back-to-lobby" style="width:100%;font-size:0.8rem">↩ Back to Lobby</button>
                 <button class="btn" id="btn-new-game" style="width:100%;font-size:0.8rem;border-color:var(--red-glow);color:#ff8080">✕ End Game</button>
             </div>
@@ -583,6 +595,6 @@
 
 <script src="/static/js/socket.io.min.js"></script>
 <script src="/static/js/presence.js?v=20260824-round-table"></script>
-<script src="/static/js/player.js?v=20260824-immersive-role"></script>
+<script src="/static/js/player.js?v=20260824-game-polish"></script>
 </body>
 </html>

@@ -94,6 +94,7 @@ let phoneBetaMode = false;
 let phoneBetaPlayerCount = 6;
 let rematchReady = false;
 let resumeAvailable = false;
+let latestDisplayPairingCode = null;
 
 // Mission board state
 let pbMissionSizes = [];
@@ -150,10 +151,33 @@ function renderSpectatorRoles(players = []) {
 }
 
 function resetDisplayPairingCode() {
+    latestDisplayPairingCode = null;
     const result = document.getElementById('display-pairing-result');
     result.textContent = '';
     result.classList.add('hidden');
     document.getElementById('btn-request-display-pairing').disabled = false;
+    renderSettingsSessionCodes();
+}
+
+function renderSettingsSessionCodes() {
+    const room = document.getElementById('settings-room-code');
+    const display = document.getElementById('settings-display-code');
+    const status = document.getElementById('settings-display-code-status');
+    if (!room || !display || !status) return;
+    room.textContent = gameCode || '----';
+    display.textContent = latestDisplayPairingCode || '------';
+    status.textContent = latestDisplayPairingCode
+        ? 'Valid for five minutes · one use'
+        : 'A fresh code will be created when needed.';
+}
+
+function requestSettingsDisplayCode() {
+    if (!isHost || !gameCode) return;
+    latestDisplayPairingCode = null;
+    renderSettingsSessionCodes();
+    document.getElementById('settings-display-code-status').textContent = 'Creating a fresh display code…';
+    document.getElementById('btn-settings-refresh-pairing').disabled = true;
+    socket.emit('request_display_pairing');
 }
 
 function showSpectatorNight() {
@@ -746,7 +770,7 @@ function compressSelfie(file) {
         }
         const image = new Image();
         image.onload = () => {
-            const size = 128;
+            const size = 256;
             const canvas = document.createElement('canvas');
             canvas.width = size;
             canvas.height = size;
@@ -756,7 +780,7 @@ function compressSelfie(file) {
             const sy = (image.naturalHeight - side) / 2;
             context.drawImage(image, sx, sy, side, side, 0, 0, size, size);
             const result = canvas.toDataURL('image/jpeg', 0.72);
-            if (result.length > 50_000) reject(new Error('Could not make that photo small enough.'));
+            if (result.length > 200_000) reject(new Error('Could not make that photo small enough.'));
             else resolve(result);
         };
         image.onerror = () => reject(new Error('That image could not be opened.'));
@@ -994,10 +1018,27 @@ function showProposalScreen(data) {
         // Emit to get current player list from server? Or use what we have.
         // We store playerOrder from round_start
         (window._playerOrder || []).forEach(name => {
+            const player = presencePlayers.find(candidate => candidate.name === name) || {};
             const btn = document.createElement('button');
-            btn.className = 'player-select-btn';
+            btn.type = 'button';
+            btn.className = 'party-avatar-option';
             btn.dataset.playerId = name; // Using name as key here; server maps names to IDs
-            btn.innerHTML = `${escapeHtml(name)}<span class="check-icon">✓</span>`;
+            btn.setAttribute('aria-label', `Choose ${name} for the quest party`);
+            btn.setAttribute('aria-pressed', 'false');
+            const portrait = document.createElement('span');
+            portrait.className = 'party-avatar-portrait';
+            portrait.appendChild(presenceTable.createPortraitElement(
+                player.avatar_index,
+                player.color_index,
+                player.avatar_image
+            ));
+            const label = document.createElement('span');
+            label.className = 'party-avatar-name';
+            label.textContent = name;
+            const check = document.createElement('span');
+            check.className = 'party-avatar-check';
+            check.textContent = '✓';
+            btn.append(portrait, label, check);
             btn.addEventListener('click', () => {
                 if (btn.classList.contains('selected')) {
                     btn.classList.remove('selected');
@@ -1006,6 +1047,7 @@ function showProposalScreen(data) {
                     btn.classList.add('selected');
                     selectedTeamIds.push(name);
                 }
+                btn.setAttribute('aria-pressed', String(btn.classList.contains('selected')));
                 document.getElementById('proposal-selected-count').textContent = selectedTeamIds.length;
                 lockBtn.disabled = selectedTeamIds.length !== missionRequiredSize;
                 // Emit preview so host can show live selection
@@ -1170,6 +1212,9 @@ function showGameOver(summary) {
     updatePlayerProposalTrack();
     presenceTable.setRoleReveal(summary.roles || {});
     const resultEl = document.getElementById('game-over-result-player');
+    const gameOverScreen = document.getElementById('screen-game-over');
+    gameOverScreen.classList.remove('winner-good', 'winner-evil');
+    gameOverScreen.classList.add(`winner-${summary.winner}`);
     resultEl.textContent = summary.winner === 'good' ? 'GOOD WINS' : 'EVIL WINS';
     resultEl.className = `game-over-result ${summary.winner}`;
     flash(summary.winner === 'good' ? 'blue' : 'red', 600);
@@ -1533,10 +1578,13 @@ socket.on('session_status', data => {
 });
 
 socket.on('display_pairing_code', data => {
+    latestDisplayPairingCode = data.code;
     const result = document.getElementById('display-pairing-result');
     result.textContent = `${data.room_code} · ${data.code}`;
     result.classList.remove('hidden');
     document.getElementById('btn-request-display-pairing').disabled = false;
+    document.getElementById('btn-settings-refresh-pairing').disabled = false;
+    renderSettingsSessionCodes();
 });
 
 socket.on('player_joined', data => {
@@ -2034,6 +2082,8 @@ document.getElementById('btn-request-display-pairing').addEventListener('click',
     socket.emit('request_display_pairing');
 });
 
+document.getElementById('btn-settings-refresh-pairing').addEventListener('click', requestSettingsDisplayCode);
+
 document.getElementById('input-room-code').addEventListener('input', e => {
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '');
 });
@@ -2239,6 +2289,8 @@ document.getElementById('btn-close-overlay').addEventListener('click', () => {
 document.getElementById('btn-settings').addEventListener('click', () => {
     document.getElementById('phone-lobby-settings').classList.add('hidden');
     document.getElementById('btn-back-to-lobby').classList.remove('hidden');
+    renderSettingsSessionCodes();
+    requestSettingsDisplayCode();
     document.getElementById('settings-overlay').classList.remove('hidden');
 });
 document.getElementById('btn-close-settings').addEventListener('click', () => {
