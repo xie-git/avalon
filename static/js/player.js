@@ -76,6 +76,8 @@ let myPlayerId = null;
 let myName = null;
 let myRole = null;
 let myTeam = null;
+let myRoleArt = null;
+let roleConfirmTimer = null;
 let isHost = false;
 let gameCode = null;
 let currentLeaderId = null;
@@ -227,6 +229,7 @@ function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const target = document.getElementById(id);
     if (target) target.classList.add('active');
+    document.body.classList.toggle('role-reveal-active', id === 'screen-role');
     const label = presenceScreenLabels[id];
     if (label && gameCode && presencePlayers.length) presenceTable.show(target, label);
     else presenceTable.hide();
@@ -560,8 +563,24 @@ const ROLE_FLAVOR = {
 
 const ROLE_ART = {
     'Merlin': '/static/assets/roles/merlin.png?v=20260824',
-    'Loyal Servant': '/static/assets/roles/loyal-servant.png?v=20260824',
+    'Percival': '/static/assets/roles/percival.png?v=20260824',
+    'Assassin': '/static/assets/roles/assassin.png?v=20260824',
+    'Morgana': '/static/assets/roles/morgana.png?v=20260824',
+    'Mordred': '/static/assets/roles/mordred.png?v=20260824',
+    'Oberon': '/static/assets/roles/oberon.png?v=20260824',
 };
+
+const LOYAL_SERVANT_ART = [
+    '/static/assets/roles/loyal-servant.png?v=20260824',
+    '/static/assets/roles/loyal-servant-female.png?v=20260824',
+];
+
+function chooseRoleArt(role) {
+    if (role === 'Loyal Servant') {
+        return LOYAL_SERVANT_ART[Math.floor(Math.random() * LOYAL_SERVANT_ART.length)];
+    }
+    return ROLE_ART[role] || null;
+}
 
 // ---------------------------------------------------------------------------
 // Dashboard session discovery and development auto-join
@@ -752,8 +771,10 @@ function compressSelfie(file) {
 // Role card
 // ---------------------------------------------------------------------------
 function showRoleCard(role, team) {
+    const roleChanged = myRole !== role;
     myRole = role;
     myTeam = team;
+    if (roleChanged || !myRoleArt) myRoleArt = chooseRoleArt(role);
     const reveal = document.getElementById('role-reveal-product');
     const visual = document.getElementById('role-reveal-visual');
     const art = document.getElementById('role-reveal-art');
@@ -762,7 +783,7 @@ function showRoleCard(role, team) {
     const nameEl = document.getElementById('role-name-display');
     const flavorEl = document.getElementById('role-flavor-display');
     const descEl = document.getElementById('role-desc-display');
-    const artPath = ROLE_ART[role];
+    const artPath = myRoleArt;
 
     reveal.className = `role-reveal-product ${team}`;
     visual.classList.toggle('has-art', Boolean(artPath));
@@ -787,7 +808,8 @@ function showRoleCard(role, team) {
     if (artPath && art.complete) requestAnimationFrame(() => art.classList.add('is-loaded'));
     const confirmButton = document.getElementById('btn-confirm-role');
     confirmButton.disabled = true;
-    setTimeout(() => { confirmButton.disabled = false; }, 950);
+    clearTimeout(roleConfirmTimer);
+    roleConfirmTimer = setTimeout(() => { confirmButton.disabled = false; }, 2000);
 }
 
 // ---------------------------------------------------------------------------
@@ -1311,7 +1333,7 @@ function applyStateSnapshot(snap) {
                 showSpectatorNight();
             } else if (snap.my_role) {
                 if (snap.night_info) showNightInfo(snap.night_info);
-                else showScreen('screen-role');
+                else showRoleCard(snap.my_role, snap.my_team);
                 if (snap.night_acknowledged) {
                     document.getElementById('btn-confirm-night').disabled = true;
                     document.getElementById('btn-confirm-night').classList.add('hidden');
@@ -1787,6 +1809,7 @@ socket.on('return_to_lobby', data => {
     stopGameClock();
     myRole = null;
     myTeam = null;
+    myRoleArt = null;
     nightInfo = null;
     pbMissionHistory = [];
     pbConsecutiveRejections = 0;
@@ -1820,7 +1843,7 @@ socket.on('game_ended', () => {
     clearReconnectSession();
     releaseWakeLock();
     clearAttention();
-    myPlayerId = null; myName = null; myRole = null; myTeam = null;
+    myPlayerId = null; myName = null; myRole = null; myTeam = null; myRoleArt = null;
     applySpectatorMode(false);
     gameCode = null;
     spectatorRoles = [];
@@ -2170,6 +2193,14 @@ function populateRoleOverlay() {
     const roleName = document.getElementById('overlay-role-name');
     const roleDesc = document.getElementById('overlay-role-desc');
     const knowledge = document.getElementById('overlay-knowledge');
+    const art = document.getElementById('overlay-role-art');
+    const fallback = document.getElementById('overlay-role-art-fallback');
+    if (!myRoleArt && myRole) myRoleArt = chooseRoleArt(myRole);
+    art.hidden = !myRoleArt;
+    art.src = myRoleArt || '';
+    art.alt = myRoleArt ? `${myRole} role artwork` : '';
+    fallback.hidden = Boolean(myRoleArt);
+    fallback.textContent = (myRole || 'A').charAt(0).toUpperCase();
     teamBadge.className = `role-overlay-team ${myTeam}`;
     teamBadge.textContent = myTeam === 'good' ? 'Forces of Good' : 'Forces of Evil';
     roleName.textContent = myRole || '—';
@@ -2182,6 +2213,7 @@ function populateRoleOverlay() {
     } else {
         knowledge.textContent = '';
     }
+    knowledge.classList.toggle('hidden', !knowledge.textContent.trim());
 }
 
 function openRoleTooltip() {
