@@ -5,15 +5,15 @@ html:has(.entry-screen) {
 
 .entry-screen#screen-join,
 .entry-screen#screen-title {
-    left: 50%;
+    left: 0;
     right: auto;
-    width: min(100%, 480px);
-    max-width: 480px;
+    width: 100vw;
+    max-width: none;
     min-height: 100svh;
     min-height: 100dvh;
     height: 100svh;
     height: 100dvh;
-    transform: translateX(-50%);
+    transform: none;
     isolation: isolate;
     justify-content: flex-start;
     gap: clamp(0.55rem, 1.7dvh, 1.15rem);
@@ -29,14 +29,20 @@ html:has(.entry-screen) {
         linear-gradient(180deg, rgba(5, 6, 7, 0.34) 0%, rgba(7, 7, 7, 0.16) 32%, rgba(4, 4, 5, 0.78) 100%),
         radial-gradient(circle at 50% 35%, transparent 0%, rgba(4, 4, 5, 0.18) 62%, rgba(3, 3, 4, 0.6) 100%),
         url('/static/img/avalon-entry-background.png?v=20260824-2');
-    background-position: center, center, center -50px;
+    background-position: center, center, center;
     background-repeat: no-repeat;
-    background-size: cover, cover, auto calc(100svh + 50px);
+    background-size: cover, cover, cover;
 }
 
 .entry-screen > * {
     position: relative;
     z-index: 1;
+}
+
+.entry-screen#screen-join > *,
+.entry-screen#screen-title > * {
+    width: min(100%, 432px);
+    margin-inline: auto;
 }
 
 .entry-brand {
@@ -181,4 +187,62 @@ html:has(.entry-screen) {
     .entry-panel .spectator-mode-options label { padding: 0.34rem 0.45rem; }
     .entry-pair-fields { gap: 0.5rem; }
     .entry-panel > .btn { min-height: 46px; padding-block: 0.7rem; }
+}
+
+/* The entry dashboard becomes a true living-room layout on TV-shaped screens. */
+@media (min-width: 900px) and (min-aspect-ratio: 4 / 3) {
+    html:has(#screen-join.active),
+    body:has(#screen-join.active) {
+        max-width: none;
+        width: 100%;
+    }
+
+    .entry-screen#screen-join:has(#entry-mode-chooser:not(.hidden)) {
+        display: grid;
+        grid-template-columns: minmax(340px, 520px) minmax(420px, 600px);
+        grid-template-areas:
+            "brand chooser"
+            "resume chooser";
+        grid-template-rows: auto auto;
+        align-content: center;
+        align-items: center;
+        justify-content: center;
+        column-gap: clamp(3rem, 8vw, 9rem);
+        row-gap: 1rem;
+        padding: clamp(2rem, 5vh, 4rem) clamp(3rem, 7vw, 8rem);
+        background-position: center, center, center 58%;
+    }
+
+    .entry-screen#screen-join:has(#entry-mode-chooser:not(.hidden)) .entry-brand {
+        grid-area: brand;
+        align-self: end;
+        width: 100%;
+    }
+
+    .entry-screen#screen-join:has(#entry-mode-chooser:not(.hidden)) .entry-title-art {
+        width: 100%;
+        max-height: none;
+    }
+
+    .entry-screen#screen-join:has(#entry-mode-chooser:not(.hidden)) .dashboard-resume {
+        grid-area: resume;
+        align-self: start;
+        width: min(100%, 440px);
+    }
+
+    .entry-screen#screen-join:has(#entry-mode-chooser:not(.hidden)) .entry-mode-chooser {
+        grid-area: chooser;
+        width: 100%;
+        gap: clamp(0.7rem, 1.3vh, 1rem);
+    }
+
+    .entry-screen#screen-join:has(#entry-mode-chooser:not(.hidden)) .dashboard-heading {
+        font-size: clamp(1rem, 1.3vw, 1.25rem);
+        margin-bottom: 0.5rem;
+    }
+
+    .entry-screen#screen-join:has(#entry-mode-chooser:not(.hidden)) .entry-mode-card {
+        min-height: clamp(74px, 8.5vh, 92px);
+        padding: 0.9rem 1.1rem;
+    }
 }

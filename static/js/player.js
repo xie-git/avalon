@@ -547,6 +547,22 @@ const ROLE_DESCRIPTIONS = {
     'Minion of Mordred':"Serve evil. Help your allies fail quests without being discovered.",
 };
 
+const ROLE_FLAVOR = {
+    'Merlin':            'Ancient wisdom is your gift. Silence is your shield.',
+    'Percival':          'Two figures stand in the mist. Only one speaks true.',
+    'Loyal Servant':     'Steel your heart and stand beside the true king.',
+    'Assassin':          'Wait in shadow. One final strike may undo every noble deed.',
+    'Morgana':           'Wear the face of wisdom and make certainty feel like doubt.',
+    'Mordred':           'Even the greatest seer cannot pierce your darkness.',
+    'Oberon':            'You walk alone, unknown even to those who share your cause.',
+    'Minion of Mordred': 'Let trust become the weapon that breaks the Round Table.',
+};
+
+const ROLE_ART = {
+    'Merlin': '/static/assets/roles/merlin.png?v=20260824',
+    'Loyal Servant': '/static/assets/roles/loyal-servant.png?v=20260824',
+};
+
 // ---------------------------------------------------------------------------
 // Dashboard session discovery and development auto-join
 // ---------------------------------------------------------------------------
@@ -738,29 +754,40 @@ function compressSelfie(file) {
 function showRoleCard(role, team) {
     myRole = role;
     myTeam = team;
-    const card = document.getElementById('role-card');
-    const front = document.getElementById('role-card-front');
+    const reveal = document.getElementById('role-reveal-product');
+    const visual = document.getElementById('role-reveal-visual');
+    const art = document.getElementById('role-reveal-art');
+    const fallback = document.getElementById('role-reveal-art-fallback');
     const badge = document.getElementById('role-team-badge');
     const nameEl = document.getElementById('role-name-display');
+    const flavorEl = document.getElementById('role-flavor-display');
     const descEl = document.getElementById('role-desc-display');
+    const artPath = ROLE_ART[role];
 
-    front.className = `role-card-face role-card-front-face ${team}`;
+    reveal.className = `role-reveal-product ${team}`;
+    visual.classList.toggle('has-art', Boolean(artPath));
+    art.classList.remove('is-loaded');
+    art.onload = () => art.classList.add('is-loaded');
+    art.hidden = !artPath;
+    art.src = artPath || '';
+    art.alt = artPath ? `${role} role artwork` : '';
+    fallback.hidden = Boolean(artPath);
+    fallback.textContent = role.charAt(0).toUpperCase();
     badge.className = `role-team-badge ${team}`;
     badge.textContent = team === 'good' ? 'Forces of Good' : 'Forces of Evil';
     nameEl.textContent = role;
+    flavorEl.textContent = ROLE_FLAVOR[role] || 'Your allegiance is known. The fate of Avalon is now in your hands.';
     descEl.textContent = ROLE_DESCRIPTIONS[role] || '';
 
     showScreen('screen-role');
 
-    // Shuffle then flip
-    card.classList.remove('flipped', 'shuffling');
-    void card.offsetWidth; // reflow
-    card.classList.add('shuffling');
-    setTimeout(() => {
-        card.classList.remove('shuffling');
-        card.classList.add('flipped');
-        document.getElementById('btn-confirm-role').disabled = false;
-    }, 2500);
+    reveal.classList.remove('is-revealed');
+    void reveal.offsetWidth;
+    requestAnimationFrame(() => reveal.classList.add('is-revealed'));
+    if (artPath && art.complete) requestAnimationFrame(() => art.classList.add('is-loaded'));
+    const confirmButton = document.getElementById('btn-confirm-role');
+    confirmButton.disabled = true;
+    setTimeout(() => { confirmButton.disabled = false; }, 950);
 }
 
 // ---------------------------------------------------------------------------
