@@ -29,8 +29,8 @@ accounts, app installation, or Tailscale access are required for players.
 - Every lobby and game is durably saved. When the last real player disconnects,
   timers freeze and the room remains resumable for 24 hours; resuming starts a
   fresh 24-hour inactivity window the next time everyone leaves.
-- One phone-first dashboard handles joining, hosting, resuming, seat recovery,
-  and optional shared-display pairing with a one-use six-digit code.
+- A focused phone mode chooser handles joining, hosting, spectating, resuming,
+  and seat recovery. Optional displays pair at `/host` with a one-use code.
 - Lobby ready indicators, phone action vibration,
   screen wake lock where supported, and action-needed page titles.
 - A same-origin QR code plus copy/share controls for joining a room.
@@ -41,7 +41,6 @@ accounts, app installation, or Tailscale access are required for players.
 - During discussion, the current leader may place any player in the optional
   Accusation Spotlight as a theatrical invitation to defend their case.
 - Multiple independent rooms can run concurrently.
-- Optional beta-test mode fills a lobby with legal bot players.
 - Persistent, timestamped chat and replay-oriented game event logs in one
   bounded SQLite database.
 - Responsive layouts for iPhones, other phones, laptops, and cast/TV screens.
@@ -52,11 +51,11 @@ from that person's phone. The host display does not consume a player seat.
 
 ## Playing
 
-1. Open `https://YOUR-PUBLIC-HOST`, enter your name, and choose **Host a New
-   Game**. Use `/new` to explicitly bypass a saved room.
+1. Open `https://YOUR-PUBLIC-HOST`, choose **Host a Game**, and enter your
+   name. Use `/new` to explicitly bypass a saved room.
 2. Other players enter the four-letter room code and a name, then optionally
    choose a knight. The phone host can generate a six-digit code if the group
-   wants to pair a TV or laptop as the shared display.
+   wants to pair a TV or laptop at `/host` as the shared display.
 3. Players choose a knight and may mark themselves ready. Start once 6–10
    players have joined. The host can reorder seating and adjust the discussion
    timer from 1–15 minutes (or Unlimited) and disable the advisory proposal
@@ -105,6 +104,9 @@ It persists across container recreation and stores:
   capabilities needed for restart-safe resumption.
 - Selfie metadata: timestamp, room, player ID/name, content hash,
   private filename, and compressed byte count.
+- Product analytics: versioned room/lobby/phase/action/rematch/connectivity events
+  with resettable browser IDs and bounded metadata. IP addresses, tokens, and
+  free-form client text are not stored.
 
 Selfies are resized to 128 x 128 and JPEG-compressed in the player's browser.
 The server stores the bytes by SHA-256 content hash under
@@ -117,9 +119,11 @@ No cookies, reconnect tokens, authorization values, environment variables, or
 IP addresses are written to this database. Game logs intentionally contain
 player names and hidden game information for later replay and balance analysis.
 
-Chat, events, room snapshots, and selfie metadata share a hard 2.5 GiB SQLite
-limit. Near the limit, old chat and game-event records are pruned to
-approximately 2 GiB.
+Chat, events, room snapshots, selfie metadata, and product analytics share a
+hard 2.5 GiB SQLite limit. Near the limit, old chat, game-event, and product
+analytics records are pruned to approximately 2 GiB. The external selfie files
+are intentionally not auto-deleted; include the whole Docker volume in backups
+and monitor its disk usage.
 
 ```bash
 # List and read chat
@@ -133,7 +137,20 @@ sudo docker compose exec avalon python game_history.py --room ABCD --started-at 
 
 # List private selfie metadata and server-side file paths (no public endpoint)
 sudo docker compose exec avalon python selfie_history.py --limit 100
+
+# Export a private browsable copy (open index.html locally, then delete when done)
+sudo docker compose exec avalon python selfie_history.py --limit 1000 --export /data/private/gallery
+sudo docker compose cp avalon:/data/private/gallery ./avalon-selfie-gallery
+
+# Inspect product analytics
+sudo docker compose exec avalon python analytics_history.py --summary
+sudo docker compose exec avalon python analytics_history.py --party-id PARTY_ID
 ```
+
+Live victory cards still include player selfies. Durable game-event summaries
+store the selfie SHA-256 reference rather than a second base64 JPEG; the private
+archive remains the authoritative historical copy. Existing historical event
+rows are not rewritten.
 
 ## Production deployment
 
@@ -186,6 +203,7 @@ intended network boundary.
 | Variable | Production purpose / default |
 | --- | --- |
 | `APP_ENV` | Set to `production` to enforce production checks. |
+| `APP_VERSION` | Release/commit label written with every product event. |
 | `SECRET_KEY` | Required random secret of at least 32 characters. |
 | `PUBLIC_BASE_URL` | Public HTTPS URL used in join instructions. |
 | `PUBLIC_ORIGIN` | Exact allowed HTTP/WebSocket origin. |

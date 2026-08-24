@@ -5,6 +5,9 @@
 const socket = io();
 const connectionStatus = document.getElementById('connection-status');
 let isSpectator = false;
+let entryAsSpectator = false;
+let spectatorVisionMode = 'blind';
+let spectatorRoles = [];
 const presenceTable = new AvalonPresenceTable({
     mode: 'player',
     onPrivateChange: update => {
@@ -13,10 +16,38 @@ const presenceTable = new AvalonPresenceTable({
 });
 const RECONNECT_TOKEN_KEY = 'avalon-player-session-token';
 const RECONNECT_PLAYER_KEY = 'avalon-player-id';
-const HOST_CODE_KEY = 'avalon-host-game-code';
-const HOST_TOKEN_KEY = 'avalon-host-token';
+const ANALYTICS_ID_KEY = 'avalon-analytics-id';
 const FORCE_NEW = document.body.dataset.forceNew === 'true';
 const DEFAULT_TITLE = document.title;
+
+function analyticsId() {
+    let value = localStorage.getItem(ANALYTICS_ID_KEY);
+    if (!value) {
+        value = crypto.randomUUID ? crypto.randomUUID() :
+            'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, character => {
+                const random = Math.random() * 16 | 0;
+                return (character === 'x' ? random : (random & 0x3 | 0x8)).toString(16);
+            });
+        localStorage.setItem(ANALYTICS_ID_KEY, value);
+    }
+    return value;
+}
+
+const ANALYTICS_ID = analyticsId();
+
+function track(eventType, payload = {}) {
+    socket.emit('client_analytics', {
+        analytics_id: ANALYTICS_ID,
+        event_type: eventType,
+        payload,
+    });
+}
+
+function screenClass() {
+    if (window.innerWidth <= 430) return 'phone';
+    if (window.innerWidth <= 900) return 'tablet';
+    return 'desktop';
+}
 const presenceScreenLabels = {
     'screen-lobby': 'Drag anywhere · overlap avatars to cluster',
     'screen-night': 'Night Phase',
@@ -55,10 +86,12 @@ let nightInfo = null;
 let assassinTargetId = null;
 let discussionTimerMax = 300;
 let latestMissionReveal = null;
-let phoneBetaTestMode = false;
-let phoneBetaPlayerCount = 6;
 let phoneDiscussionDuration = 60;
+let phoneProposalDuration = 60;
+let phoneBetaMode = false;
+let phoneBetaPlayerCount = 6;
 let rematchReady = false;
+let resumeAvailable = false;
 
 // Mission board state
 let pbMissionSizes = [];
@@ -78,12 +111,47 @@ const MAX_CHAT_HISTORY = 200;
 let presencePlayers = [];
 let wakeLock = null;
 let joinedThisPage = false;
+let missionRevealSequence = 0;
 
-function applySpectatorMode(enabled) {
+function applySpectatorMode(enabled, visionMode = 'blind') {
     isSpectator = Boolean(enabled);
+    spectatorVisionMode = isSpectator ? visionMode : 'blind';
     document.body.classList.toggle('spectator-mode', isSpectator);
     document.getElementById('spectator-banner').classList.toggle('hidden', !isSpectator);
+    document.getElementById('spectator-banner').textContent = spectatorVisionMode === 'omniscient'
+        ? '◉ All-knowing spectator · keep roles secret'
+        : '◈ Blind spectator · watching only';
+    document.getElementById('btn-spectator-roles').classList.toggle(
+        'hidden',
+        !isSpectator || spectatorVisionMode !== 'omniscient',
+    );
     presenceTable.setContributionEnabled(!isSpectator);
+}
+
+function renderSpectatorRoles(players = []) {
+    spectatorRoles = Array.isArray(players) ? players : [];
+    const list = document.getElementById('spectator-roles-list');
+    list.replaceChildren();
+    spectatorRoles.forEach(player => {
+        const row = document.createElement('div');
+        row.className = `spectator-role-row ${player.team || ''}`;
+        const name = document.createElement('strong');
+        name.textContent = player.name;
+        const role = document.createElement('span');
+        role.textContent = player.role;
+        row.append(name, role);
+        list.appendChild(row);
+    });
+    if (!spectatorRoles.length) {
+        list.textContent = 'Roles will appear when the game begins.';
+    }
+}
+
+function resetDisplayPairingCode() {
+    const result = document.getElementById('display-pairing-result');
+    result.textContent = '';
+    result.classList.add('hidden');
+    document.getElementById('btn-request-display-pairing').disabled = false;
 }
 
 function showSpectatorNight() {
@@ -162,6 +230,10 @@ function showScreen(id) {
     const label = presenceScreenLabels[id];
     if (label && gameCode && presencePlayers.length) presenceTable.show(target, label);
     else presenceTable.hide();
+    const settingsButton = document.getElementById('btn-settings');
+    if (settingsButton) {
+        settingsButton.classList.toggle('hidden', !isHost || id === 'screen-join' || id === 'screen-lobby');
+    }
 }
 
 function transition(id, delay = 0) {
@@ -442,6 +514,10 @@ function toggleChatHistory(open) {
     panel.classList.toggle('hidden', !open);
     bubbles.classList.toggle('hidden', open);
     btn.classList.toggle('active', open);
+    track(open ? 'chat_opened' : 'chat_closed', {
+        context: document.querySelector('.screen.active')?.id || 'unknown',
+        unread_count: open ? chatHistory.length : 0,
+    });
     if (open) {
         // Clear lingering ephemeral bubbles and scroll history to bottom
         chatBubbleEls.forEach(b => { if (b.parentNode) b.parentNode.removeChild(b); });
@@ -489,7 +565,7 @@ const ROLE_DESCRIPTIONS = {
     } else if (!token && devName && devCode) {
         // Wait for socket connect
         socket.on('connect', () => {
-            socket.emit('join_game', { room_code: devCode, player_name: devName });
+            socket.emit('join_game', { room_code: devCode, player_name: devName, analytics_id: ANALYTICS_ID });
         });
     }
 })();
@@ -508,21 +584,52 @@ function renderLobbyPlayers(playerList) {
         readyButton.setAttribute('aria-pressed', String(ready));
         readyButton.textContent = ready ? '✓ Ready' : 'I’m Ready';
     }
-    if (isHost) updateHostStartButton(playerList.length);
+    const readyCount = presencePlayers.filter(player => player.ready).length;
+    const notReadyCount = Math.max(0, presencePlayers.length - readyCount);
+    const summary = document.getElementById('lobby-ready-summary');
+    if (summary) {
+        summary.querySelector('strong').textContent = `${readyCount} ready`;
+        summary.querySelector('span').textContent = `${notReadyCount} not ready`;
+    }
+    const nameInput = document.getElementById('lobby-name-input');
+    if (nameInput && document.activeElement !== nameInput && myName) nameInput.value = myName;
+    if (isHost) updateHostStartButton(playerList);
+    renderPhoneReorderList();
     renderAvatarPicker();
 }
 
-function renderPhoneBotControls(settings = {}) {
-    if ('beta_test_mode' in settings) phoneBetaTestMode = Boolean(settings.beta_test_mode);
-    if (Number(settings.beta_test_player_count)) {
-        phoneBetaPlayerCount = Number(settings.beta_test_player_count);
-    }
-    const select = document.getElementById('phone-beta-player-count');
-    const button = document.getElementById('btn-phone-beta-mode');
-    if (!select || !button) return;
-    select.value = String(phoneBetaPlayerCount);
-    button.setAttribute('aria-pressed', String(phoneBetaTestMode));
-    button.textContent = phoneBetaTestMode ? 'Remove Bots' : 'Add Bots';
+function renderPhoneReorderList() {
+    const list = document.getElementById('phone-reorder-list');
+    if (!list) return;
+    const orderedNames = window._playerOrder?.length
+        ? window._playerOrder
+        : presencePlayers.map(player => player.name);
+    list.replaceChildren();
+    orderedNames.forEach((name, index) => {
+        const item = document.createElement('li');
+        const label = document.createElement('span');
+        label.textContent = `${index + 1}. ${name}`;
+        const actions = document.createElement('span');
+        const up = document.createElement('button');
+        const down = document.createElement('button');
+        up.type = down.type = 'button';
+        up.textContent = '↑';
+        down.textContent = '↓';
+        up.setAttribute('aria-label', `Move ${name} earlier`);
+        down.setAttribute('aria-label', `Move ${name} later`);
+        up.disabled = index === 0;
+        down.disabled = index === orderedNames.length - 1;
+        const move = offset => {
+            const next = [...orderedNames];
+            [next[index], next[index + offset]] = [next[index + offset], next[index]];
+            socket.emit('reorder_players', { order: next });
+        };
+        up.addEventListener('click', () => move(-1));
+        down.addEventListener('click', () => move(1));
+        actions.append(up, down);
+        item.append(label, actions);
+        list.append(item);
+    });
 }
 
 function discussionSliderValue(seconds) {
@@ -540,6 +647,24 @@ function renderPhoneDiscussionSetting(seconds) {
     display.textContent = phoneDiscussionDuration === 0
         ? 'Unlimited'
         : `${phoneDiscussionDuration / 60} minute${phoneDiscussionDuration === 60 ? '' : 's'}`;
+}
+
+function renderPhoneProposalSetting(seconds) {
+    phoneProposalDuration = Number(seconds) === 0 ? 0 : 60;
+    const toggle = document.getElementById('phone-proposal-timer-enabled');
+    if (toggle) toggle.checked = phoneProposalDuration > 0;
+}
+
+function renderPhoneBetaSetting(enabled, targetCount = phoneBetaPlayerCount) {
+    phoneBetaMode = Boolean(enabled);
+    phoneBetaPlayerCount = Number(targetCount) || 6;
+    const select = document.getElementById('phone-beta-player-count');
+    const button = document.getElementById('btn-phone-beta-mode');
+    if (!select || !button) return;
+    select.value = String(phoneBetaPlayerCount);
+    button.classList.toggle('enabled', phoneBetaMode);
+    button.setAttribute('aria-pressed', String(phoneBetaMode));
+    button.textContent = phoneBetaMode ? 'Remove Bots' : 'Add Bots';
 }
 
 function renderAvatarPicker() {
@@ -724,6 +849,14 @@ function showVoteReveal(data) {
     const entries = Object.entries(votes);
     const cards = document.getElementById('player-vote-reveal-cards');
     cards.replaceChildren();
+    const teamList = document.getElementById('player-vote-reveal-team');
+    teamList.replaceChildren();
+    (data.team || []).forEach(name => {
+        const chip = document.createElement('div');
+        chip.className = 'vote-name-chip';
+        chip.textContent = name;
+        teamList.appendChild(chip);
+    });
     entries.forEach(([name, vote]) => {
         const card = document.createElement('div');
         card.className = `player-reveal-card ${vote}`;
@@ -744,22 +877,41 @@ function showVoteReveal(data) {
 }
 
 function showMissionReveal(data, canContinue = false) {
+    const existingReveal = latestMissionReveal === data && document.getElementById('player-mission-reveal-cards').children.length > 0;
     latestMissionReveal = data;
+    if (existingReveal) {
+        const leaderCanContinue = canContinue && myPlayerId === currentLeaderId;
+        document.getElementById('btn-player-next-round').classList.toggle('hidden', !leaderCanContinue);
+        document.getElementById('player-mission-reveal-waiting').classList.toggle('hidden', leaderCanContinue);
+        return;
+    }
+    const sequence = ++missionRevealSequence;
     const cards = document.getElementById('player-mission-reveal-cards');
     cards.replaceChildren();
     const revealedCards = data.cards_shuffled || [
         ...Array(data.success_count || 0).fill('success'),
         ...Array(data.fail_count || 0).fill('fail'),
     ];
-    revealedCards.forEach(value => {
+    const result = document.getElementById('player-mission-reveal-result');
+    result.textContent = '';
+    result.classList.add('hidden');
+    revealedCards.forEach((value, index) => {
         const card = document.createElement('div');
-        card.className = `player-reveal-card ${value}`;
-        card.innerHTML = `<span><strong>${value === 'success' ? '☀ SUCCESS' : '☠ FAIL'}</strong></span>`;
+        card.className = 'player-reveal-card quest-card-hidden';
+        card.innerHTML = '<span><strong>?</strong></span>';
         cards.appendChild(card);
+        window.setTimeout(() => {
+            if (sequence !== missionRevealSequence || !card.isConnected) return;
+            card.className = `player-reveal-card ${value} quest-card-revealed`;
+            card.innerHTML = `<span><strong>${value === 'success' ? '☀ SUCCESS' : '☠ FAIL'}</strong></span>`;
+            flash(value === 'success' ? 'blue' : 'red', 180);
+        }, 550 + index * 480);
     });
-    document.getElementById('player-mission-reveal-result').textContent = data.passed
-        ? 'The Quest Succeeds!'
-        : 'The Quest Has Failed';
+    window.setTimeout(() => {
+        if (sequence !== missionRevealSequence) return;
+        result.textContent = data.passed ? 'The Quest Succeeds!' : 'The Quest Has Failed';
+        result.classList.remove('hidden');
+    }, 650 + revealedCards.length * 480);
     const leaderCanContinue = canContinue && myPlayerId === currentLeaderId;
     const continueButton = document.getElementById('btn-player-next-round');
     continueButton.disabled = false;
@@ -995,7 +1147,7 @@ function showGameOver(summary) {
     rematchButton.textContent = '↻ Run It Back';
     renderRematchStatus({
         ready_count: 0,
-        total_count: (summary.players || []).filter(player => !player.is_bot).length,
+        total_count: (summary.players || []).length,
         ready_names: [],
     });
 
@@ -1066,11 +1218,15 @@ function renderRematchStatus(data) {
 // State snapshot (reconnect)
 // ---------------------------------------------------------------------------
 function applyStateSnapshot(snap) {
-    applySpectatorMode(snap.is_spectator);
+    snap.phase = String(snap.phase || 'LOBBY').replace('GamePhase.', '').toUpperCase();
+    const previousCode = gameCode;
+    applySpectatorMode(snap.is_spectator, snap.spectator_vision_mode);
     myPlayerId = snap.my_player_id;
     myName = snap.my_name;
     isHost = snap.is_host || false;
     gameCode = snap.code;
+    if (previousCode !== gameCode) resetDisplayPairingCode();
+    renderSpectatorRoles(snap.spectator_roles || []);
     window._playerOrder = snap.player_order || [];
     window._playerNameToId = snap.player_name_to_id || {};
     window._currentLeaderName = snap.current_leader;
@@ -1079,8 +1235,9 @@ function applyStateSnapshot(snap) {
     renderLobbyPlayers(snap.players || []);
     presenceTable.setPublicPositions(snap.public_spectrum || {});
     presenceTable.setRoleManifest(snap.role_manifest || []);
-    renderPhoneBotControls(snap.settings || {});
     renderPhoneDiscussionSetting(snap.settings?.discussion_time);
+    renderPhoneProposalSetting(snap.settings?.proposal_time);
+    renderPhoneBetaSetting(snap.settings?.beta_test_mode, snap.settings?.beta_test_player_count);
 
     if (snap.my_role) {
         myRole = snap.my_role;
@@ -1092,8 +1249,9 @@ function applyStateSnapshot(snap) {
 
     document.getElementById('lobby-code-display').textContent = gameCode;
     document.getElementById('lobby-host-controls').classList.toggle('hidden', !isHost);
+    document.getElementById('phone-lobby-settings').classList.toggle('hidden', !isHost);
     document.getElementById('settings-game-actions').classList.toggle('hidden', !isHost);
-    document.getElementById('btn-settings').classList.toggle('hidden', !isHost);
+    document.getElementById('btn-settings').classList.toggle('hidden', !isHost || snap.phase === 'LOBBY');
 
     // Restore mission board state
     if (snap.mission_sizes && snap.mission_sizes.length) {
@@ -1177,7 +1335,7 @@ function applyStateSnapshot(snap) {
             } else requestAttention('Vote now');
             break;
         case 'VOTE_REVEAL':
-            showVoteReveal({ votes: snap.revealed_votes || {} });
+            showVoteReveal({ votes: snap.revealed_votes || {}, team: snap.proposed_team || [] });
             break;
         case 'MISSION':
             showMissionScreen({
@@ -1202,7 +1360,7 @@ function applyStateSnapshot(snap) {
                 showGameOver(snap.summary);
                 const readyIds = snap.rematch_ready_ids || [];
                 rematchReady = readyIds.includes(myPlayerId);
-                const eligible = (snap.summary.players || []).filter(player => !player.is_bot);
+                const eligible = snap.summary.players || [];
                 renderRematchStatus({
                     ready_count: readyIds.length,
                     total_count: eligible.length,
@@ -1234,6 +1392,7 @@ socket.on('join_success', data => {
     myPlayerId = data.player_id;
     myName = data.player_name;
     isHost = data.is_host;
+    if (gameCode !== data.room_code) resetDisplayPairingCode();
     gameCode = data.room_code;
     presenceTable.setRoomCode(gameCode);
     hideConnectionStatus();
@@ -1241,14 +1400,17 @@ socket.on('join_success', data => {
 
     document.getElementById('lobby-code-display').textContent = gameCode;
     document.getElementById('lobby-host-controls').classList.toggle('hidden', !isHost);
-    document.getElementById('btn-settings').classList.toggle('hidden', !isHost);
+    document.getElementById('phone-lobby-settings').classList.toggle('hidden', !isHost);
+    document.getElementById('btn-settings').classList.add('hidden');
     document.getElementById('settings-game-actions').classList.toggle('hidden', !isHost);
     renderLobbyPlayers(data.players || []);
     presenceTable.setPublicPositions(data.public_spectrum || {});
     presenceTable.setRoleManifest(data.role_manifest || []);
-    renderPhoneBotControls(data.settings || {});
     renderPhoneDiscussionSetting(data.settings?.discussion_time);
+    renderPhoneProposalSetting(data.settings?.proposal_time);
+    renderPhoneBetaSetting(data.settings?.beta_test_mode, data.settings?.beta_test_player_count);
     showScreen('screen-lobby');
+    track('selfie_prompt_shown', { context: 'player_lobby' });
 });
 
 socket.on('spectator_join_success', data => {
@@ -1259,6 +1421,13 @@ socket.on('spectator_join_success', data => {
     saveReconnectSession(data.session_token, data.snapshot.spectator_id);
     hideConnectionStatus();
     applyStateSnapshot(data.snapshot);
+});
+
+socket.on('spectator_roles_revealed', data => {
+    renderSpectatorRoles(data.players || []);
+    if (spectatorVisionMode === 'omniscient') {
+        document.getElementById('spectator-roles-overlay').classList.remove('hidden');
+    }
 });
 
 socket.on('state_snapshot', data => {
@@ -1301,10 +1470,12 @@ socket.on('reconnect_failed', data => {
 socket.on('session_status', data => {
     const card = document.getElementById('resume-card');
     if (!data.available || FORCE_NEW) {
+        resumeAvailable = false;
         card.classList.add('hidden');
         if (!data.available) clearReconnectSession();
         return;
     }
+    resumeAvailable = true;
     card.classList.remove('hidden');
     document.getElementById('resume-title').textContent = `Room ${data.room_code}`;
     const role = data.is_spectator ? 'spectator' : data.is_host ? 'host' : 'player';
@@ -1319,23 +1490,9 @@ socket.on('display_pairing_code', data => {
     document.getElementById('btn-request-display-pairing').disabled = false;
 });
 
-socket.on('display_paired', data => {
-    localStorage.setItem(HOST_CODE_KEY, data.room_code);
-    localStorage.setItem(HOST_TOKEN_KEY, data.host_token);
-    window.location.assign('/host');
-});
-
-socket.on('display_pairing_failed', data => {
-    const button = document.getElementById('btn-pair-display');
-    button.disabled = false;
-    button.textContent = 'Pair This Display';
-    document.getElementById('display-pairing-error').textContent = data.message;
-});
-
 socket.on('player_joined', data => {
     renderLobbyPlayers(data.players || []);
     presenceTable.setRoleManifest(data.role_manifest || []);
-    updateHostStartButton(data.player_count);
 });
 
 socket.on('player_disconnected', data => {
@@ -1347,24 +1504,56 @@ socket.on('player_reconnected', data => {
 });
 
 socket.on('lobby_update', data => {
+    if (data.player_order) window._playerOrder = data.player_order;
     renderLobbyPlayers(data.players || []);
     presenceTable.setPublicPositions(data.public_spectrum || {});
     presenceTable.setRoleManifest(data.role_manifest || []);
-    renderPhoneBotControls(data.settings || {});
     renderPhoneDiscussionSetting(data.settings?.discussion_time);
+    renderPhoneProposalSetting(data.settings?.proposal_time);
+    renderPhoneBetaSetting(data.settings?.beta_test_mode, data.settings?.beta_test_player_count);
+});
+
+socket.on('name_changed', data => {
+    myName = data.player_name;
+    const input = document.getElementById('lobby-name-input');
+    input.value = myName;
+    const status = document.getElementById('lobby-name-error');
+    status.textContent = 'Name updated.';
+    status.classList.add('is-success');
+    const button = document.getElementById('btn-change-name');
+    button.disabled = false;
+    button.textContent = 'Update';
+});
+
+socket.on('name_change_failed', data => {
+    const status = document.getElementById('lobby-name-error');
+    status.textContent = data.message;
+    status.classList.remove('is-success');
+    const button = document.getElementById('btn-change-name');
+    button.disabled = false;
+    button.textContent = 'Update';
 });
 
 socket.on('public_spectrum_updated', data => {
     presenceTable.setPublicPositions(data.positions || {});
 });
 
-function updateHostStartButton(count) {
+function updateHostStartButton(playerListOrCount) {
     const btn = document.getElementById('btn-host-start');
     const hint = document.getElementById('host-start-hint');
     if (!btn) return;
-    const valid = count >= 6 && count <= 10;
+    const playerList = Array.isArray(playerListOrCount) ? playerListOrCount : presencePlayers;
+    const count = Array.isArray(playerListOrCount) ? playerListOrCount.length : Number(playerListOrCount) || 0;
+    const ready = playerList.filter(player => player.ready).length;
+    const disconnected = playerList.filter(player => !player.is_bot && !player.connected);
+    const valid = count >= 6 && count <= 10 && disconnected.length === 0;
+    hint.classList.remove('error-message');
     btn.disabled = !valid;
-    hint.textContent = valid ? '' : (count < 6 ? `Need ${6 - count} more player(s)` : 'Too many players');
+    hint.textContent = disconnected.length
+        ? `Waiting for ${disconnected.map(player => player.name).join(', ')} to reconnect`
+        : valid
+        ? (ready === count ? 'Everyone is ready' : `${ready} of ${count} ready · you can start anyway`)
+        : (count < 6 ? `Need ${6 - count} more player(s)` : 'Too many players');
 }
 
 socket.on('game_starting', data => {
@@ -1373,6 +1562,9 @@ socket.on('game_starting', data => {
     acquireWakeLock();
     flash('white', 400);
     showChat();
+    document.getElementById('btn-settings').classList.toggle('hidden', !isHost);
+    document.getElementById('phone-lobby-settings').classList.add('hidden');
+    document.getElementById('btn-back-to-lobby').classList.remove('hidden');
 });
 
 socket.on('role_assigned', data => {
@@ -1435,9 +1627,6 @@ socket.on('discussion_start', data => {
         'Mission Discussion',
         document.querySelector('#screen-discussion .discussion-info')
     );
-    // Bot leaders can advance through proposal and into voting immediately.
-    // A delayed transition here would otherwise fire afterward and cover the
-    // actionable vote screen with a stale, frozen discussion screen.
     showScreen('screen-discussion');
 });
 
@@ -1554,6 +1743,8 @@ socket.on('assassination_result', () => {});
 
 socket.on('game_over', data => {
     showGameOver(data);
+    track('victory_screen_viewed', { context: data.win_reason || 'unknown' });
+    if (!isSpectator) track('rematch_prompt_viewed', { context: 'player' });
 });
 
 socket.on('rematch_status', data => {
@@ -1591,8 +1782,9 @@ socket.on('return_to_lobby', data => {
     document.getElementById('btn-history-toggle').classList.remove('active');
     renderLobbyPlayers(data.players || []);
     presenceTable.setRoleManifest(data.role_manifest || []);
-    renderPhoneBotControls(data.settings || {});
     renderPhoneDiscussionSetting(data.settings?.discussion_time);
+    renderPhoneProposalSetting(data.settings?.proposal_time);
+    document.getElementById('btn-settings').classList.add('hidden');
     showScreen('screen-lobby');
 });
 
@@ -1604,6 +1796,9 @@ socket.on('game_ended', () => {
     myPlayerId = null; myName = null; myRole = null; myTeam = null;
     applySpectatorMode(false);
     gameCode = null;
+    spectatorRoles = [];
+    renderSpectatorRoles([]);
+    resetDisplayPairingCode();
     pbConsecutiveRejections = 0;
     presenceTable.hide();
     presenceTable.setRoomCode('');
@@ -1625,16 +1820,26 @@ socket.on('error', data => {
         joinButton.disabled = false;
         joinButton.textContent = 'Join Game';
         createButton.disabled = false;
-        createButton.textContent = 'Host a New Game';
+        createButton.textContent = 'Create My Room';
+    } else if (isHost && document.getElementById('screen-lobby').classList.contains('active')) {
+        const hint = document.getElementById('host-start-hint');
+        hint.textContent = data.message || 'The game could not start.';
+        hint.classList.add('error-message');
+        document.getElementById('btn-host-start').disabled = false;
     } else {
         console.warn('[server error]', data.message);
     }
 });
 
 socket.on('connect', () => {
+    track('client_session_started', {
+        screen_class: screenClass(),
+        display_mode: window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser',
+        context: 'player_page',
+    });
     if (joinedThisPage && reconnectToken()) {
         showConnectionStatus('Connected — restoring your seat…');
-        socket.emit('reconnect_game', { session_token: reconnectToken() });
+        socket.emit('reconnect_game', { session_token: reconnectToken(), analytics_id: ANALYTICS_ID });
     } else hideConnectionStatus();
 });
 socket.on('disconnect', () => showConnectionStatus('Connection lost — reconnecting…'));
@@ -1643,6 +1848,59 @@ socket.on('connect_error', () => showConnectionStatus('Unable to reach the game 
 // ---------------------------------------------------------------------------
 // UI event listeners
 // ---------------------------------------------------------------------------
+
+function showEntryFlow(mode) {
+    const chooser = document.getElementById('entry-mode-chooser');
+    const panel = document.getElementById('entry-flow-panel');
+    const resume = document.getElementById('resume-card');
+    const roomGroup = document.getElementById('input-room-code').closest('.form-group');
+    const nameGroup = document.getElementById('input-name').closest('.form-group');
+    const join = document.getElementById('btn-join');
+    const create = document.getElementById('btn-create-player-game');
+    const recovery = document.getElementById('join-recovery');
+    const spectatorOptions = document.getElementById('spectator-mode-options');
+    const spectator = mode === 'spectate';
+    const copy = {
+        join: ['Join a Game', 'Enter the room code shown by your host.'],
+        host: ['Host a Game', 'Create a room and play from this phone. A shared display is optional.'],
+        spectate: ['Spectate a Game', 'Watch and chat without taking a player seat.'],
+        recovery: ['Recover Your Seat', 'Use the room code and one-use code supplied by the host.'],
+    }[mode];
+    chooser.classList.add('hidden');
+    resume.classList.add('hidden');
+    panel.classList.remove('hidden');
+    document.getElementById('entry-flow-title').textContent = copy[0];
+    document.getElementById('entry-flow-copy').textContent = copy[1];
+    document.getElementById('join-error').textContent = '';
+    entryAsSpectator = spectator;
+    roomGroup.classList.toggle('hidden', mode === 'host');
+    nameGroup.classList.toggle('hidden', mode === 'recovery');
+    join.classList.toggle('hidden', mode === 'host' || mode === 'recovery');
+    create.classList.toggle('hidden', mode !== 'host');
+    recovery.classList.toggle('hidden', mode !== 'recovery');
+    spectatorOptions.classList.toggle('hidden', !spectator);
+    join.textContent = spectator ? 'Join as Spectator' : 'Join Game';
+    const focusTarget = mode === 'host'
+        ? document.getElementById('input-name')
+        : document.getElementById('input-room-code');
+    requestAnimationFrame(() => focusTarget.focus());
+}
+
+function showEntryChooser() {
+    document.getElementById('entry-flow-panel').classList.add('hidden');
+    document.getElementById('entry-mode-chooser').classList.remove('hidden');
+    document.getElementById('resume-card').classList.toggle('hidden', !resumeAvailable);
+    document.getElementById('btn-mode-join').focus();
+}
+
+document.getElementById('btn-mode-join').addEventListener('click', () => showEntryFlow('join'));
+document.getElementById('btn-mode-host').addEventListener('click', () => showEntryFlow('host'));
+document.getElementById('btn-mode-display').addEventListener('click', () => {
+    window.location.assign('/host');
+});
+document.getElementById('btn-mode-spectate').addEventListener('click', () => showEntryFlow('spectate'));
+document.getElementById('btn-show-recovery').addEventListener('click', () => showEntryFlow('recovery'));
+document.getElementById('btn-entry-back').addEventListener('click', showEntryChooser);
 
 document.getElementById('btn-join').addEventListener('click', () => {
     const code = document.getElementById('input-room-code').value.trim().toUpperCase();
@@ -1659,34 +1917,39 @@ document.getElementById('btn-join').addEventListener('click', () => {
     const joinButton = document.getElementById('btn-join');
     joinButton.disabled = true;
     joinButton.textContent = 'Joining…';
-    const spectator = document.getElementById('join-as-spectator').checked;
+    const spectator = entryAsSpectator;
+    const visionMode = document.querySelector('input[name="spectator-vision"]:checked')?.value || 'blind';
     socket.emit(
         spectator ? 'join_spectator' : 'join_game',
         spectator
-            ? { room_code: code, spectator_name: name }
-            : { room_code: code, player_name: name },
+            ? { room_code: code, spectator_name: name, vision_mode: visionMode, analytics_id: ANALYTICS_ID }
+            : { room_code: code, player_name: name, analytics_id: ANALYTICS_ID },
     );
 });
 
+document.getElementById('btn-spectator-roles').addEventListener('click', () => {
+    track('spectator_mode_help_opened', { vision_mode: spectatorVisionMode });
+    renderSpectatorRoles(spectatorRoles);
+    document.getElementById('spectator-roles-overlay').classList.remove('hidden');
+});
+
+document.getElementById('btn-close-spectator-roles').addEventListener('click', () => {
+    document.getElementById('spectator-roles-overlay').classList.add('hidden');
+});
+
 document.getElementById('btn-create-player-game').addEventListener('click', event => {
-    if (!FORCE_NEW) {
-        const name = document.getElementById('input-name').value.trim();
-        const next = name ? `/new?name=${encodeURIComponent(name)}` : '/new';
-        window.location.assign(next);
-        return;
-    }
     const name = document.getElementById('input-name').value.trim();
     document.getElementById('join-error').textContent = '';
     if (!name) {
         document.getElementById('join-error').textContent = 'Enter your name first.';
         return;
     }
-    if (reconnectToken() && !window.confirm(
+    if (!FORCE_NEW && reconnectToken() && !window.confirm(
         'Start a new room? This browser will remember the new game instead of its previous saved room.'
     )) return;
     event.currentTarget.disabled = true;
     event.currentTarget.textContent = 'Creating…';
-    socket.emit('create_player_game', { player_name: name });
+    socket.emit('create_player_game', { player_name: name, analytics_id: ANALYTICS_ID });
 });
 
 document.getElementById('btn-resume-game').addEventListener('click', event => {
@@ -1694,33 +1957,7 @@ document.getElementById('btn-resume-game').addEventListener('click', event => {
     if (!token) return;
     event.currentTarget.disabled = true;
     showConnectionStatus('Restoring your saved seat…');
-    socket.emit('reconnect_game', { session_token: token });
-});
-
-document.getElementById('btn-show-display-pairing').addEventListener('click', () => {
-    document.getElementById('display-pairing').classList.toggle('hidden');
-});
-
-document.getElementById('input-display-room').addEventListener('input', event => {
-    event.target.value = event.target.value.toUpperCase().replace(/[^A-Z]/g, '');
-});
-
-document.getElementById('input-display-code').addEventListener('input', event => {
-    event.target.value = event.target.value.replace(/\D/g, '');
-});
-
-document.getElementById('btn-pair-display').addEventListener('click', event => {
-    const room = document.getElementById('input-display-room').value.trim().toUpperCase();
-    const code = document.getElementById('input-display-code').value.trim();
-    document.getElementById('display-pairing-error').textContent = '';
-    if (room.length !== 4 || code.length !== 6) {
-        document.getElementById('display-pairing-error').textContent =
-            'Enter the four-letter room and six-digit display code.';
-        return;
-    }
-    event.currentTarget.disabled = true;
-    event.currentTarget.textContent = 'Pairing…';
-    socket.emit('pair_host_display', { room_code: room, pairing_code: code });
+    socket.emit('reconnect_game', { session_token: token, analytics_id: ANALYTICS_ID });
 });
 
 document.getElementById('btn-request-display-pairing').addEventListener('click', event => {
@@ -1737,11 +1974,9 @@ document.getElementById('input-room-code').addEventListener('keydown', e => {
 });
 
 document.getElementById('input-name').addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('btn-join').click();
-});
-
-document.getElementById('btn-show-recovery').addEventListener('click', () => {
-    document.getElementById('join-recovery').classList.toggle('hidden');
+    if (e.key !== 'Enter') return;
+    const create = document.getElementById('btn-create-player-game');
+    (create.classList.contains('hidden') ? document.getElementById('btn-join') : create).click();
 });
 
 document.getElementById('input-recovery-code').addEventListener('input', event => {
@@ -1768,13 +2003,40 @@ document.getElementById('btn-ready').addEventListener('click', event => {
     socket.emit('set_ready', { ready: next });
 });
 
+function submitLobbyName() {
+    const input = document.getElementById('lobby-name-input');
+    const button = document.getElementById('btn-change-name');
+    const name = input.value.trim();
+    const status = document.getElementById('lobby-name-error');
+    status.textContent = '';
+    status.classList.remove('is-success');
+    if (!name) {
+        document.getElementById('lobby-name-error').textContent = 'Enter a name.';
+        return;
+    }
+    if (name === myName) return;
+    button.disabled = true;
+    button.textContent = 'Updating…';
+    socket.emit('change_name', { player_name: name });
+}
+
+document.getElementById('btn-change-name').addEventListener('click', submitLobbyName);
+document.getElementById('lobby-name-input').addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        submitLobbyName();
+    }
+});
+
 document.getElementById('input-selfie').addEventListener('change', async event => {
     const error = document.getElementById('selfie-error');
     error.textContent = '';
     try {
+        track('selfie_capture_started', { source: 'lobby_picker' });
         const image = await compressSelfie(event.target.files && event.target.files[0]);
         socket.emit('select_selfie', { image });
     } catch (failure) {
+        track('selfie_capture_failed', { error_category: failure.name || 'capture_error' });
         error.textContent = failure.message;
     } finally {
         event.target.value = '';
@@ -1785,23 +2047,6 @@ document.getElementById('btn-host-start').addEventListener('click', () => {
     socket.emit('start_game');
 });
 
-document.getElementById('btn-phone-beta-mode').addEventListener('click', () => {
-    socket.emit('set_beta_test_mode', {
-        enabled: !phoneBetaTestMode,
-        target_count: phoneBetaPlayerCount,
-    });
-});
-
-document.getElementById('phone-beta-player-count').addEventListener('change', event => {
-    phoneBetaPlayerCount = Number(event.target.value) || 6;
-    if (phoneBetaTestMode) {
-        socket.emit('set_beta_test_mode', {
-            enabled: true,
-            target_count: phoneBetaPlayerCount,
-        });
-    }
-});
-
 document.getElementById('phone-discussion-slider').addEventListener('input', event => {
     const minutes = Number(event.target.value);
     phoneDiscussionDuration = minutes === 16 ? 0 : minutes * 60;
@@ -1810,6 +2055,26 @@ document.getElementById('phone-discussion-slider').addEventListener('input', eve
 
 document.getElementById('phone-discussion-slider').addEventListener('change', () => {
     socket.emit('update_settings', { discussion_time: phoneDiscussionDuration });
+});
+
+document.getElementById('phone-proposal-timer-enabled').addEventListener('change', event => {
+    phoneProposalDuration = event.target.checked ? 60 : 0;
+    socket.emit('update_settings', { proposal_time: phoneProposalDuration });
+});
+
+document.getElementById('btn-phone-beta-mode').addEventListener('click', () => {
+    socket.emit('set_beta_test_mode', {
+        enabled: !phoneBetaMode,
+        target_count: phoneBetaPlayerCount,
+    });
+});
+
+document.getElementById('phone-beta-player-count').addEventListener('change', event => {
+    phoneBetaPlayerCount = Number(event.target.value) || 6;
+    socket.emit('set_beta_test_mode', {
+        enabled: phoneBetaMode,
+        target_count: phoneBetaPlayerCount,
+    });
 });
 
 document.getElementById('btn-set-spotlight').addEventListener('click', () => {
@@ -1842,6 +2107,7 @@ document.getElementById('btn-player-next-round').addEventListener('click', event
 });
 
 document.getElementById('btn-confirm-role').addEventListener('click', () => {
+    track('role_card_opened', { role: myRole || 'unknown', context: 'night_confirm' });
     clearAttention();
     populateRoleOverlay();
     // Move to night info screen
@@ -1893,6 +2159,8 @@ document.getElementById('btn-close-overlay').addEventListener('click', () => {
 
 // Settings button
 document.getElementById('btn-settings').addEventListener('click', () => {
+    document.getElementById('phone-lobby-settings').classList.add('hidden');
+    document.getElementById('btn-back-to-lobby').classList.remove('hidden');
     document.getElementById('settings-overlay').classList.remove('hidden');
 });
 document.getElementById('btn-close-settings').addEventListener('click', () => {
@@ -1999,10 +2267,9 @@ const invitedRoom = new URLSearchParams(window.location.search).get('room');
 const suggestedName = new URLSearchParams(window.location.search).get('name');
 if (invitedRoom && /^[A-Za-z]{4}$/.test(invitedRoom)) {
     document.getElementById('input-room-code').value = invitedRoom.toUpperCase();
-    document.getElementById('input-name').focus();
+    showEntryFlow('join');
 }
 if (suggestedName) document.getElementById('input-name').value = suggestedName.slice(0, 12);
 if (FORCE_NEW) {
-    document.getElementById('dashboard-heading').textContent = 'Create a fresh room';
-    document.getElementById('btn-create-player-game').textContent = 'Create New Game';
+    showEntryFlow('host');
 }

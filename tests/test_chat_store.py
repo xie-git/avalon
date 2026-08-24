@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
 import json
 
+import pytest
 import server
 from chat_store import HARD_MAX_BYTES, ChatStore
 
@@ -96,6 +97,51 @@ def test_game_events_share_database_and_can_be_replayed(tmp_path):
     events = store.events_for_game("abcd", 123.5)
     assert events[0]["event_type"] == "mission_completed"
     assert json.loads(events[0]["payload_json"])["team"] == ["Arthur", "Merlin"]
+
+
+def test_product_events_have_versioned_envelopes_and_deduplicate(tmp_path):
+    store = ChatStore(str(tmp_path / "analytics.sqlite3"), max_bytes=1024 * 1024)
+    values = {
+        "event_id": "event-1",
+        "schema_version": 1,
+        "app_version": "2026.08.24",
+        "party_id": "party-1",
+        "room_code": "abcd",
+        "game_id": "game-1",
+        "game_started_at": 123.5,
+        "actor_type": "player",
+        "actor_id": "player-1",
+        "analytics_id": "11111111-1111-4111-8111-111111111111",
+        "event_type": "vote_submitted",
+        "phase": "TEAM_VOTE",
+        "mission_num": 2,
+        "proposal_attempt": 1,
+        "payload": {"choice": "approve", "decision_ms": 1234},
+    }
+    store.save_product_event(**values)
+    store.save_product_event(**values)
+
+    rows = store.product_events(game_id="game-1")
+    assert len(rows) == 1
+    assert rows[0]["room_code"] == "ABCD"
+    assert rows[0]["app_version"] == "2026.08.24"
+    assert json.loads(rows[0]["payload_json"]) == {
+        "choice": "approve",
+        "decision_ms": 1234,
+    }
+
+
+def test_product_event_payloads_are_bounded(tmp_path):
+    store = ChatStore(str(tmp_path / "analytics.sqlite3"), max_bytes=1024 * 1024)
+    with pytest.raises(ValueError, match="4096"):
+        store.save_product_event(
+            event_id="event-1",
+            schema_version=1,
+            app_version="test",
+            event_type="client_error",
+            actor_type="browser",
+            payload={"value": "x" * 5000},
+        )
 
 
 def test_selfie_metadata_is_indexed_without_storing_image_bytes(tmp_path):
@@ -233,4 +279,62 @@ def test_player_can_use_and_privately_archive_a_small_selfie(
     saved_file = tmp_path / "selfies" / archived["storage_name"]
     assert saved_file.read_bytes() == jpeg
     assert saved_file.stat().st_mode & 0o777 == 0o600
+    assert game.players[joined["player_id"]].selfie_sha256 == archived["image_sha256"]
+    player.disconnect()
+
+
+def test_historical_summary_references_selfie_without_embedding_jpeg():
+    game = server.GameState("ABCD")
+    player = server.add_player(game, "Arthur", "player-1")
+    player.avatar_image = "data:image/jpeg;base64,very-large-image"
+    player.selfie_sha256 = "a" * 64
+
+    live = server.get_game_summary(game)
+    history = server.historical_game_summary(game)
+
+    assert live["players"][0]["avatar_image"].startswith("data:image")
+    assert "avatar_image" not in history["players"][0]
+    assert history["players"][0]["selfie_sha256"] == "a" * 64
+
+
+def test_server_records_bounded_lobby_and_client_analytics(
+    tmp_path, monkeypatch, socket_client, create_game
+):
+    store = ChatStore(str(tmp_path / "server-analytics.sqlite3"))
+    store.initialize()
+    monkeypatch.setattr(server, "chat_store", store)
+    created = create_game(socket_client)
+    player = server.socketio.test_client(server.app)
+    analytics_id = "11111111-1111-4111-8111-111111111111"
+    player.emit(
+        "join_game",
+        {
+            "room_code": created["room_code"],
+            "player_name": "Arthur",
+            "analytics_id": analytics_id,
+        },
+    )
+    player.emit(
+        "client_analytics",
+        {
+            "analytics_id": analytics_id,
+            "event_type": "help_opened",
+            "payload": {
+                "context": "lobby",
+                "not_allowed": "must not persist",
+            },
+        },
+    )
+    socket_client.emit("start_game")
+
+    events = store.product_events()
+    types = [row["event_type"] for row in events]
+    assert "player_joined" in types
+    assert "help_opened" in types
+    assert "game_start_clicked" in types
+    assert "game_start_blocked" in types
+    help_event = next(row for row in events if row["event_type"] == "help_opened")
+    assert json.loads(help_event["payload_json"]) == {"context": "lobby"}
+    assert help_event["analytics_id"] == analytics_id
+    assert "must not persist" not in str([dict(row) for row in events])
     player.disconnect()

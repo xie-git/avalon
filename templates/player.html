@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260813-social3">
-<link rel="stylesheet" href="/static/css/player.css?v=20260813-social3">
+<link rel="stylesheet" href="/static/css/common.css?v=20260824-round-table">
+<link rel="stylesheet" href="/static/css/player.css?v=20260824-round-table">
 </head>
 <body data-force-new="{{ 'true' if force_new else 'false' }}">
 
@@ -54,16 +54,46 @@
 
     <!-- ============ JOIN SCREEN ============ -->
     <div class="screen active" id="screen-join">
-        <div class="join-logo">AVALON</div>
-        <p class="join-tagline">The Resistance Awaits</p>
+        <header class="entry-brand">
+            <div class="join-logo">AVALON</div>
+            <p class="join-tagline">The Resistance Awaits</p>
+        </header>
         <div id="resume-card" class="dashboard-resume hidden">
-            <span>Saved adventure</span>
+            <span>Continue your adventure</span>
             <strong id="resume-title">Room ----</strong>
             <small id="resume-detail"></small>
-            <button type="button" class="btn btn-primary" id="btn-resume-game">Resume Game</button>
+            <button type="button" class="btn btn-primary" id="btn-resume-game">Continue</button>
         </div>
-        <p class="dashboard-heading" id="dashboard-heading">Join, host, or restore a game</p>
-        <div class="join-form">
+        <section id="entry-mode-chooser" class="entry-mode-chooser" aria-labelledby="dashboard-heading">
+            <p class="dashboard-heading" id="dashboard-heading">How are you entering Avalon?</p>
+            <button type="button" class="entry-mode-card entry-mode-primary" id="btn-mode-join">
+                <span class="entry-mode-icon" aria-hidden="true">♜</span>
+                <span><strong>Join a Game</strong><small>Enter the room code from your group.</small></span>
+                <span aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="entry-mode-card" id="btn-mode-host">
+                <span class="entry-mode-icon" aria-hidden="true">♔</span>
+                <span><strong>Host a Game</strong><small>Create a room and play from this phone.</small></span>
+                <span aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="entry-mode-card" id="btn-mode-display">
+                <span class="entry-mode-icon" aria-hidden="true">▣</span>
+                <span><strong>Pair a Shared Display</strong><small>(Works best on a TV or computer screen.)</small></span>
+                <span aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="entry-mode-card" id="btn-mode-spectate">
+                <span class="entry-mode-icon" aria-hidden="true">◈</span>
+                <span><strong>Spectate</strong><small>Watch and chat without taking a seat.</small></span>
+                <span aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="entry-utility-link" id="btn-show-recovery">Recover a disconnected seat</button>
+        </section>
+        <div class="join-form hidden" id="entry-flow-panel">
+            <button type="button" class="entry-back" id="btn-entry-back" aria-label="Back to entry choices">← Back</button>
+            <div class="entry-flow-heading">
+                <strong id="entry-flow-title">Join a Game</strong>
+                <small id="entry-flow-copy">Enter the code shown by your host.</small>
+            </div>
             <div class="form-group">
                 <label for="input-room-code">Room Code</label>
                 <input type="text" id="input-room-code" maxlength="4" autocomplete="off"
@@ -75,22 +105,13 @@
                 <small class="form-hint" id="real-name-hint">Use the name people call you in real life—Avalon gets confusing otherwise.</small>
             </div>
             <div class="error-message" id="join-error"></div>
-            <label class="spectator-join-option">
-                <input type="checkbox" id="join-as-spectator">
-                <span><strong>Join as a spectator</strong><small>Watch, chat, and use a private board without taking a player seat.</small></span>
-            </label>
+            <fieldset id="spectator-mode-options" class="spectator-mode-options hidden">
+                <legend>Spectator knowledge</legend>
+                <label><input type="radio" name="spectator-vision" value="blind" checked><span><strong>Blind</strong><small>Roles stay secret, just like they do for players.</small></span></label>
+                <label><input type="radio" name="spectator-vision" value="omniscient"><span><strong>All-knowing</strong><small>See every player’s role throughout the game.</small></span></label>
+            </fieldset>
             <button class="btn btn-primary" id="btn-join">Join Game</button>
-            <button type="button" class="btn" id="btn-create-player-game">Host a New Game</button>
-            <button type="button" class="join-recovery-toggle" id="btn-show-display-pairing">Pair a shared display</button>
-            <div class="join-recovery hidden" id="display-pairing">
-                <label for="input-display-room">Display room code</label>
-                <input type="text" id="input-display-room" maxlength="4" autocapitalize="characters" placeholder="ABCD">
-                <label for="input-display-code">Six-digit pairing code</label>
-                <input type="text" id="input-display-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
-                <button type="button" class="btn" id="btn-pair-display">Pair This Display</button>
-                <div class="error-message" id="display-pairing-error"></div>
-            </div>
-            <button type="button" class="join-recovery-toggle" id="btn-show-recovery">Recover a disconnected seat</button>
+            <button type="button" class="btn btn-primary hidden" id="btn-create-player-game">Create My Room</button>
             <div class="join-recovery hidden" id="join-recovery">
                 <label for="input-recovery-code">Host recovery code</label>
                 <input type="text" id="input-recovery-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
@@ -102,52 +123,72 @@
 
     <!-- ============ LOBBY SCREEN ============ -->
     <div class="screen" id="screen-lobby">
-        <div class="screen-header">
-            <div class="screen-title-small">AVALON</div>
-            <div class="screen-subtitle">Room: <span id="lobby-code-display" style="color:var(--gold)">----</span></div>
-        </div>
+        <header class="phone-lobby-header">
+            <div><span>Room</span><strong id="lobby-code-display">----</strong></div>
+        </header>
         <div id="spectator-banner" class="spectator-banner hidden">◈ Spectator · watching only</div>
-        <div id="lobby-host-controls" class="hidden" style="width:100%;text-align:center;margin-bottom:1rem">
-            <div class="display-pair-card">
-                <strong>Optional shared display</strong>
-                <span>Pair a TV or laptop without exposing player roles.</span>
-                <button type="button" class="btn" id="btn-request-display-pairing">Get Display Code</button>
-                <div id="display-pairing-result" class="hidden" aria-live="polite"></div>
+        <section id="phone-lobby-settings" class="hidden phone-lobby-settings host-setup-card">
+            <div class="lobby-section-heading"><strong>Game setup</strong><small>Only you can see and change these</small></div>
+            <div class="host-setting-grid">
+                <div class="phone-discussion-setting">
+                    <label for="phone-discussion-slider"><strong>Discussion</strong><span id="phone-discussion-time-display">1 minute</span></label>
+                    <input type="range" id="phone-discussion-slider" min="1" max="16" step="1" value="1" aria-label="Discussion time in minutes; final position is unlimited">
+                </div>
+                <label class="phone-proposal-setting"><input type="checkbox" id="phone-proposal-timer-enabled" checked><span><strong>Proposal timer</strong><small>Advisory · 60 seconds</small></span></label>
             </div>
             <div class="phone-bot-controls">
-                <div class="phone-bot-copy">
-                    <strong>Fill with bots</strong>
-                    <span>Add temporary players for testing from this phone.</span>
-                </div>
+                <div class="phone-bot-copy"><strong>Practice players</strong><small>Fill empty seats with automatic players</small></div>
                 <label for="phone-beta-player-count">Total</label>
-                <select id="phone-beta-player-count" aria-label="Total players with bots">
-                    <option value="6">6</option>
-                    <option value="7">7</option>
-                    <option value="8">8</option>
-                    <option value="9">9</option>
-                    <option value="10">10</option>
+                <select id="phone-beta-player-count" aria-label="Total players with practice players">
+                    <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
                 </select>
                 <button type="button" class="btn" id="btn-phone-beta-mode" aria-pressed="false">Add Bots</button>
             </div>
-            <div class="phone-discussion-setting">
-                <label for="phone-discussion-slider"><strong>Discussion time</strong><span id="phone-discussion-time-display">1 minute</span></label>
-                <input type="range" id="phone-discussion-slider" min="1" max="16" step="1" value="1" aria-label="Discussion time in minutes; final position is unlimited">
-                <small>Choose 1–15 minutes, or slide all the way right for Unlimited.</small>
-            </div>
-            <button class="btn btn-primary" id="btn-host-start" style="width:100%">Begin the Quest</button>
-            <div id="host-start-hint" class="dim-text" style="font-size:0.75rem;margin-top:0.4rem;font-family:var(--font-heading)">Need 6–10 players</div>
-        </div>
-        <div class="avatar-picker" id="avatar-picker">
-            <div class="avatar-picker-label">Choose your character</div>
-            <div class="avatar-options" id="avatar-options"></div>
-            <label class="selfie-picker" for="input-selfie">
-                <span id="selfie-preview">📷</span>
-                <strong>Use a selfie</strong>
-                <input type="file" id="input-selfie" accept="image/*" capture="user">
-            </label>
-            <small class="error-message" id="selfie-error"></small>
+            <details class="host-setup-details" open>
+                <summary>Shared display & leader order</summary>
+                <div class="display-pair-card">
+                    <strong>Pair a shared display</strong>
+                    <span>On the TV, choose Pair a Shared Display, then enter both codes shown here.</span>
+                    <button type="button" class="btn" id="btn-request-display-pairing">Generate Code</button>
+                    <div id="display-pairing-result" class="hidden" aria-live="polite"></div>
+                </div>
+                <div class="phone-turn-order">
+                    <div class="lobby-section-heading"><strong>Leader rotation</strong><small>Move players into turn order</small></div>
+                    <ol id="phone-reorder-list"></ol>
+                </div>
+            </details>
+        </section>
+        <div class="lobby-ready-summary" id="lobby-ready-summary" aria-live="polite">
+            <strong>0 ready</strong><span>0 not ready</span>
         </div>
         <button type="button" class="btn lobby-ready-btn" id="btn-ready" aria-pressed="false">I’m Ready</button>
+        <section class="lobby-identity-card" id="lobby-identity-card">
+            <div class="lobby-section-heading"><strong>Your seat</strong><small>Editable until the quest begins</small></div>
+            <div class="lobby-name-editor">
+                <label class="sr-only" for="lobby-name-input">Your name</label>
+                <div class="lobby-name-row">
+                    <input type="text" id="lobby-name-input" maxlength="12" autocomplete="name">
+                    <button type="button" class="btn" id="btn-change-name">Update</button>
+                </div>
+                <small class="error-message" id="lobby-name-error" aria-live="polite"></small>
+            </div>
+            <div class="avatar-picker" id="avatar-picker">
+            <div class="avatar-picker-label">Choose your portrait</div>
+            <label class="selfie-picker selfie-picker-featured" for="input-selfie">
+                <span id="selfie-preview">📸</span>
+                <span class="selfie-picker-copy"><strong>Take a selfie</strong><small>Tap here to use your camera or photo library</small></span>
+                <span class="selfie-picker-action">Choose photo</span>
+                <input type="file" id="input-selfie" accept="image/*" capture="user">
+            </label>
+            <div class="avatar-picker-divider"><span>or pick a character</span></div>
+            <div class="avatar-options" id="avatar-options"></div>
+            <small class="error-message" id="selfie-error"></small>
+            </div>
+        </section>
+        <div id="lobby-host-controls" class="hidden phone-host-startbar">
+            <div id="host-start-hint" class="host-start-copy">Need 5 more players</div>
+            <button class="btn btn-primary" id="btn-host-start">Begin the Quest</button>
+        </div>
         <p class="waiting-text" style="margin-top:1rem">Waiting for the host to begin...</p>
     </div>
 
@@ -219,6 +260,10 @@
     <div class="screen" id="screen-vote-reveal-player">
         <div class="screen-header">
             <div class="screen-title-small">The Votes Are Revealed</div>
+        </div>
+        <div class="vote-team-display vote-reveal-team-display">
+            <h3>Proposed quest party</h3>
+            <div class="vote-team-names-list" id="player-vote-reveal-team"></div>
         </div>
         <div class="player-reveal-cards" id="player-vote-reveal-cards"></div>
         <div class="player-reveal-banner" id="player-vote-reveal-result"></div>
@@ -342,7 +387,17 @@
 </div>
 
 <div class="player-utility-dock" id="player-utility-dock">
+    <button id="btn-spectator-roles" class="settings-float-btn spectator-roles-button hidden" aria-label="Show all player roles" title="All-knowing spectator roles">◉</button>
     <button id="btn-settings" class="settings-float-btn hidden" aria-label="Settings" title="Settings">⚙</button>
+</div>
+
+<div id="spectator-roles-overlay" class="role-overlay hidden">
+    <div class="role-overlay-box spectator-roles-box">
+        <div class="role-overlay-name">All-Knowing Spectator</div>
+        <p class="spectator-roles-note">These identities are for your eyes only.</p>
+        <div id="spectator-roles-list" class="spectator-roles-list"></div>
+        <button class="btn" id="btn-close-spectator-roles" style="margin-top:1rem;width:100%">Close</button>
+    </div>
 </div>
 
 <!-- Settings overlay -->
@@ -476,7 +531,7 @@
 </style>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/presence.js?v=20260813-polish3"></script>
-<script src="/static/js/player.js?v=20260813-social3"></script>
+<script src="/static/js/presence.js?v=20260824-round-table"></script>
+<script src="/static/js/player.js?v=20260824-round-table"></script>
 </body>
 </html>

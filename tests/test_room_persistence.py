@@ -1,6 +1,7 @@
 import json
 import time
 
+import pytest
 import server
 from chat_store import ChatStore
 from game_logic import GamePhase, GameState, PlayerInfo, Role, Team, add_player, assign_roles
@@ -57,6 +58,35 @@ def test_complex_room_round_trip_preserves_state_without_raw_capabilities():
     assert restored.players[game.player_order[0]].role in Role
     assert restored.players[game.player_order[0]].team in Team
     assert all(not player.connected and player.sid is None for player in restored.players.values())
+
+
+def test_beta_lobby_and_bot_seats_survive_restore():
+    game = GameState("BETA")
+    human = add_player(game, "Arthur", "human-" + "a" * 32)
+    state = server.serialize_game(game)
+    bot_id = "bot-" + "b" * 32
+    state["players"].append({"player_id": bot_id, "name": "Bot 1", "is_bot": True})
+    state["player_order"] = [human.player_id, bot_id]
+    state["beta_test_mode"] = True
+
+    restored = server.deserialize_game(state, saved_at=time.time())
+
+    assert restored.player_order == [human.player_id, bot_id]
+    assert restored.players[bot_id].is_bot is True
+    assert restored.players[bot_id].ready is True
+    assert restored.beta_test_mode is True
+
+
+def test_started_beta_room_is_restored():
+    state = server.serialize_game(GameState("BETA"))
+    state["phase"] = GamePhase.DISCUSSION.value
+    state["players"].append(
+        {"player_id": "bot-" + "b" * 32, "name": "Bot 1", "is_bot": True}
+    )
+
+    restored = server.deserialize_game(state, saved_at=time.time())
+    assert restored.phase == GamePhase.DISCUSSION
+    assert any(player.is_bot for player in restored.players.values())
 
 
 def test_room_snapshot_survives_runtime_reload(tmp_path, monkeypatch):

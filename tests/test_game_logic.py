@@ -128,6 +128,35 @@ def test_special_roles_receive_only_rulebook_night_knowledge():
     assert get_night_phase_info(game, by_role[Role.OBERON].player_id)["sees"] == []
 
 
+def test_nine_player_merlin_cannot_see_mordred():
+    game = make_game(9)
+    roles = [role for team in PLAYER_COUNT_ROLES[9] for role in team]
+    for player_id, role in zip(game.player_order, roles):
+        player = game.players[player_id]
+        player.role = role
+        player.team = Team.GOOD if role in {
+            Role.MERLIN,
+            Role.PERCIVAL,
+            Role.LOYAL_SERVANT,
+        } else Team.EVIL
+
+    by_role = {player.role: player for player in game.players.values()}
+    assert set(PLAYER_COUNT_ROLES[9][1]) == {
+        Role.ASSASSIN,
+        Role.MORGANA,
+        Role.MORDRED,
+    }
+    assert set(
+        get_night_phase_info(game, by_role[Role.MERLIN].player_id)["sees"]
+    ) == {
+        by_role[Role.ASSASSIN].name,
+        by_role[Role.MORGANA].name,
+    }
+    assert by_role[Role.MORDRED].name not in get_night_phase_info(
+        game, by_role[Role.MERLIN].player_id
+    )["sees"]
+
+
 def test_regular_minion_knows_other_non_oberon_evil_players():
     game = make_game(7)
     roles = [role for team in PLAYER_COUNT_ROLES[7] for role in team]

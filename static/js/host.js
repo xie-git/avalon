@@ -9,7 +9,32 @@ const presenceTable = new AvalonPresenceTable({
 });
 const HOST_CODE_KEY = 'avalon-host-game-code';
 const HOST_TOKEN_KEY = 'avalon-host-token';
+const PAIRED_DISPLAY_KEY = 'avalon-host-is-paired-display';
 const TV_CHAT_KEY = 'avalon-tv-chat-enabled';
+const ANALYTICS_ID_KEY = 'avalon-analytics-id';
+
+function analyticsId() {
+    let value = localStorage.getItem(ANALYTICS_ID_KEY);
+    if (!value) {
+        value = crypto.randomUUID ? crypto.randomUUID() :
+            'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, character => {
+                const random = Math.random() * 16 | 0;
+                return (character === 'x' ? random : (random & 0x3 | 0x8)).toString(16);
+            });
+        localStorage.setItem(ANALYTICS_ID_KEY, value);
+    }
+    return value;
+}
+
+const ANALYTICS_ID = analyticsId();
+
+function track(eventType, payload = {}) {
+    socket.emit('client_analytics', {
+        analytics_id: ANALYTICS_ID,
+        event_type: eventType,
+        payload,
+    });
+}
 const presenceScreenLabels = {
     'screen-night': 'Night Phase',
     'screen-round': 'Mission Discussion',
@@ -48,12 +73,12 @@ let currentLeaderName = '';
 let proposedTeam = [];
 let pendingVoters = [];
 let timerMax = 0;
-let betaTestMode = false;
-let betaTestPlayerCount = 6;
 let gameStartedAt = null;
 let gameClockInterval = null;
 let tvChatMessages = [];
 let tvChatEnabled = localStorage.getItem(TV_CHAT_KEY) !== 'false';
+let isPairedDisplay = localStorage.getItem(PAIRED_DISPLAY_KEY) === 'true';
+let chatAudioContext = null;
 
 function hostSession() {
     const code = localStorage.getItem(HOST_CODE_KEY) || sessionStorage.getItem('host_game_code');
@@ -132,7 +157,7 @@ function renderTvChat() {
     const strip = document.getElementById('host-chat-strip');
     strip.classList.toggle('hidden', !tvChatEnabled || !gameStartedAt || !tvChatMessages.length);
     strip.replaceChildren();
-    tvChatMessages.slice(-2).forEach(item => {
+    tvChatMessages.slice(-3).forEach(item => {
         const line = document.createElement('div');
         const name = document.createElement('strong');
         name.textContent = `${item.name}${item.is_spectator ? ' · spectator' : ''}`;
@@ -147,7 +172,7 @@ function renderTvChat() {
 function renderRecoveryList() {
     const list = document.getElementById('seat-recovery-list');
     list.replaceChildren();
-    const disconnected = players.filter(player => !player.connected && !player.is_bot);
+    const disconnected = players.filter(player => !player.connected);
     if (!disconnected.length) {
         document.getElementById('seat-recovery-result').classList.add('hidden');
         return;
@@ -167,6 +192,20 @@ function renderRecoveryList() {
         });
         list.appendChild(button);
     });
+}
+
+function renderNightPending(names = []) {
+    const pending = document.getElementById('night-pending');
+    const cleanNames = Array.isArray(names) ? names.filter(Boolean) : [];
+    pending.replaceChildren();
+    pending.classList.toggle('complete', !cleanNames.length);
+    if (!cleanNames.length) {
+        pending.textContent = '✓ Everyone understands their role';
+        return;
+    }
+    const label = document.createElement('strong');
+    label.textContent = 'Still waiting: ';
+    pending.append(label, document.createTextNode(cleanNames.join(', ')));
 }
 
 
@@ -210,9 +249,55 @@ function flash(type = 'white', duration = 300) {
 // ---------------------------------------------------------------------------
 function showGameHeader() {
     document.getElementById('game-header').classList.add('visible');
+    document.getElementById('host-mission-rail').classList.add('visible');
+    document.body.classList.add('host-gameplay');
 }
 function hideGameHeader() {
     document.getElementById('game-header').classList.remove('visible');
+    document.getElementById('host-mission-rail').classList.remove('visible');
+    document.body.classList.remove('host-gameplay');
+}
+
+function renderMissionRail() {
+    const rail = document.getElementById('host-mission-rail');
+    rail.replaceChildren();
+    for (let index = 0; index < 5; index++) {
+        const history = missionHistory[index];
+        const result = missionResults[index];
+        const current = !result && index === currentMission;
+        const item = document.createElement('section');
+        item.className = `host-mission-summary ${result || (current ? 'current' : 'future')}`;
+
+        const heading = document.createElement('div');
+        heading.className = 'host-mission-summary-heading';
+        const title = document.createElement('strong');
+        title.textContent = `Mission ${index + 1}`;
+        const state = document.createElement('span');
+        state.textContent = result === 'pass' ? 'Succeeded' : result === 'fail' ? 'Failed' : current ? 'Current' : 'Upcoming';
+        heading.append(title, state);
+        item.appendChild(heading);
+
+        const requirement = document.createElement('p');
+        const size = missionSizes[index] || '?';
+        requirement.textContent = `${size} knight${size === 1 ? '' : 's'}${index === 3 && players.length >= 7 ? ' · 2 fails required' : ''}`;
+        item.appendChild(requirement);
+
+        if (history) {
+            const leader = document.createElement('p');
+            leader.textContent = `Led by ${history.leader_name}`;
+            const party = document.createElement('p');
+            party.className = 'host-mission-party';
+            party.textContent = (history.team || []).join(', ');
+            const cards = document.createElement('small');
+            cards.textContent = `${history.success_count} success · ${history.fail_count} failure${history.fail_count === 1 ? '' : 's'}`;
+            item.append(leader, party, cards);
+        } else if (current && currentLeaderName) {
+            const leader = document.createElement('p');
+            leader.textContent = `${currentLeaderName} leads this mission`;
+            item.appendChild(leader);
+        }
+        rail.appendChild(item);
+    }
 }
 
 function updateMissionTracker() {
@@ -248,6 +333,7 @@ function updateMissionTracker() {
             if (event.key === 'Enter' || event.key === ' ') show(event);
         });
     });
+    renderMissionRail();
 }
 
 function formatElapsed(seconds) {
@@ -282,13 +368,64 @@ function startGameClock(epochSeconds, elapsedSeconds = null) {
 }
 
 function updateLeaderDisplay(name) {
-    document.getElementById('leader-display').innerHTML =
-        `Leader: <span>${name}</span>`;
+    const display = document.getElementById('leader-display');
+    display.replaceChildren(document.createTextNode('Leader: '));
+    const identity = createLeaderIdentity(name);
+    display.appendChild(identity);
+}
+
+function createLeaderIdentity(name) {
+    const identity = document.createElement('span');
+    identity.className = 'leader-identity';
+    const leader = players.find(player => player.name === name);
+    if (leader && leader.avatar_image) {
+        identity.classList.add('has-selfie');
+        const selfie = document.createElement('img');
+        selfie.className = 'leader-selfie';
+        selfie.src = leader.avatar_image;
+        selfie.alt = '';
+        identity.appendChild(selfie);
+    }
+    const label = document.createElement('span');
+    label.textContent = name || '—';
+    identity.appendChild(label);
+    return identity;
+}
+
+function renderLeaderName(elementId, name) {
+    const element = document.getElementById(elementId);
+    element.replaceChildren(createLeaderIdentity(name));
+}
+
+function playChatChime() {
+    if (!isPairedDisplay || !tvChatEnabled || !gameStartedAt || document.visibilityState === 'hidden') return;
+    try {
+        chatAudioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+        if (chatAudioContext.state === 'suspended') chatAudioContext.resume().catch(() => {});
+        const oscillator = chatAudioContext.createOscillator();
+        const gain = chatAudioContext.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(660, chatAudioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(880, chatAudioContext.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.0001, chatAudioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.055, chatAudioContext.currentTime + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, chatAudioContext.currentTime + 0.13);
+        oscillator.connect(gain).connect(chatAudioContext.destination);
+        oscillator.start();
+        oscillator.stop(chatAudioContext.currentTime + 0.14);
+    } catch (_) { /* Audio is optional and may be blocked by the display browser. */ }
 }
 
 function showHostRoomCode(code) {
     const badge = document.getElementById('host-room-code-badge');
     badge.querySelector('strong').textContent = code || '----';
+}
+
+function renderSpectatorCount(count = 0) {
+    const element = document.getElementById('host-spectator-count');
+    const total = Math.max(0, Number(count) || 0);
+    element.textContent = `◈ ${total} spectator${total === 1 ? '' : 's'}`;
+    element.classList.toggle('hidden', !isPairedDisplay);
 }
 
 function syncPresencePlayers(playerList = players) {
@@ -316,6 +453,26 @@ function renderReorderList(playerList) {
         li.draggable = true;
         li.dataset.index = i;
         li.innerHTML = `<span class="reorder-num">${i + 1}</span>${escapeHtml(p.name)}${p.ready ? '<span class="ready-mark">✓ Ready</span>' : ''}`;
+        const actions = document.createElement('span');
+        actions.className = 'reorder-actions';
+        const up = document.createElement('button');
+        const down = document.createElement('button');
+        up.type = down.type = 'button';
+        up.textContent = '↑';
+        down.textContent = '↓';
+        up.disabled = i === 0;
+        down.disabled = i === playerList.length - 1;
+        up.setAttribute('aria-label', `Move ${p.name} earlier`);
+        down.setAttribute('aria-label', `Move ${p.name} later`);
+        const move = offset => {
+            const next = [...players];
+            [next[i], next[i + offset]] = [next[i + offset], next[i]];
+            socket.emit('reorder_players', { order: next.map(player => player.name) });
+        };
+        up.addEventListener('click', event => { event.stopPropagation(); move(-1); });
+        down.addEventListener('click', event => { event.stopPropagation(); move(1); });
+        actions.append(up, down);
+        li.append(actions);
 
         li.addEventListener('dragstart', e => {
             _dragSrcIndex = i;
@@ -348,29 +505,30 @@ function renderLobbyPlayers(playerList) {
     const n = playerList.length;
     const dot = document.getElementById('player-count-dot');
     const txt = document.getElementById('player-count-text');
-    const valid = n >= 6 && n <= 10;
+    const disconnected = playerList.filter(player => !player.connected);
+    const valid = n >= 6 && n <= 10 && disconnected.length === 0;
     dot.className = 'count-dot ' + (valid ? 'valid' : (n > 0 ? 'invalid' : ''));
     txt.textContent = `${n} / 10 Players`;
+    const ready = playerList.filter(player => player.ready).length;
+    const readySummary = document.getElementById('host-ready-summary');
+    readySummary.querySelector('strong').textContent = `${ready} ready`;
+    readySummary.querySelector('span').textContent = `${n - ready} not ready`;
+    const notReadyNames = playerList.filter(player => !player.ready).map(player => player.name);
+    document.getElementById('host-ready-detail').textContent = disconnected.length
+        ? `Waiting for ${disconnected.map(player => player.name).join(', ')} to reconnect`
+        : notReadyNames.length
+            ? `Not ready: ${notReadyNames.join(', ')}`
+            : n ? 'Every player is ready' : 'Waiting for players to join';
     const btn = document.getElementById('btn-start-game');
     const hint = document.getElementById('start-game-hint');
     btn.disabled = !valid;
-    btn.classList.toggle('beta-start', betaTestMode && valid);
-    btn.textContent = betaTestMode ? 'Start Beta Test Game' : 'Begin the Quest';
-    hint.textContent = valid
-        ? (betaTestMode ? 'Bots make random legal moves automatically' : `${playerList.filter(player => player.ready).length} of ${n} ready`)
+    btn.textContent = 'Begin the Quest';
+    hint.textContent = disconnected.length
+        ? `Waiting for ${disconnected.map(player => player.name).join(', ')} to reconnect`
+        : valid
+        ? (ready === n ? 'Everyone is ready' : `${ready} of ${n} ready · host can start anyway`)
         : (n < 6 ? `Need ${6 - n} more player(s)` : 'Too many players (max 10)');
     renderRecoveryList();
-}
-
-function renderBetaTestMode(enabled, targetCount = betaTestPlayerCount) {
-    betaTestMode = Boolean(enabled);
-    betaTestPlayerCount = Number(targetCount) || 6;
-    document.getElementById('beta-player-count').value = String(betaTestPlayerCount);
-    const toggle = document.getElementById('btn-beta-test-mode');
-    toggle.classList.toggle('enabled', betaTestMode);
-    toggle.setAttribute('aria-pressed', String(betaTestMode));
-    toggle.querySelector('.beta-toggle-state').textContent = betaTestMode ? 'ON' : 'OFF';
-    renderLobbyPlayers(players);
 }
 
 function renderProposalSetting(seconds) {
@@ -488,7 +646,7 @@ function animateMissionReveal(cards) {
     cards.forEach((card, i) => {
         const el = document.createElement('div');
         el.className = 'mission-result-card';
-        el.innerHTML = `<span class="card-icon">?</span><span>${card.toUpperCase()}</span>`;
+        el.innerHTML = '<span class="card-icon">?</span><span>SEALED</span>';
         container.appendChild(el);
         setTimeout(() => {
             el.className = `mission-result-card revealed-${card}`;
@@ -558,7 +716,7 @@ function renderGameOver(summary) {
     renderVictoryCard(document.getElementById('victory-group-card-host'), summary);
     renderRematchStatus(document.getElementById('rematch-status-host'), {
         ready_count: 0,
-        total_count: (summary.players || []).filter(player => !player.is_bot).length,
+        total_count: (summary.players || []).length,
         ready_names: [],
     });
     renderChronicle(document.getElementById('chronicle-host'), summary);
@@ -662,32 +820,47 @@ document.getElementById('confirm-no').addEventListener('click', () => {
 // ---------------------------------------------------------------------------
 
 socket.on('connect', () => {
+    track('client_session_started', {
+        screen_class: window.innerWidth >= 1200 ? 'tv' : 'desktop',
+        display_mode: window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser',
+        context: 'host_page',
+    });
     const { code: stored, token: hostToken } = hostSession();
     if (stored && hostToken) {
         showConnectionStatus('Connected — restoring the host screen…');
-        socket.emit('register_host_screen', { game_code: stored, host_token: hostToken });
+        socket.emit('register_host_screen', {
+            game_code: stored,
+            host_token: hostToken,
+            analytics_id: ANALYTICS_ID,
+        });
     } else hideConnectionStatus();
 });
 
 socket.on('disconnect', () => showConnectionStatus('Connection lost — reconnecting…'));
 socket.on('connect_error', () => showConnectionStatus('Unable to reach the game server — retrying…'));
 
-socket.on('game_created', data => {
-    gameCode = data.room_code;
-    saveHostSession(gameCode, data.host_token);
-    presenceTable.setRoomCode(gameCode);
-    showHostRoomCode(gameCode);
-    hideConnectionStatus();
+socket.on('display_paired', data => {
+    isPairedDisplay = true;
+    localStorage.setItem(PAIRED_DISPLAY_KEY, 'true');
+    saveHostSession(data.room_code, data.host_token);
     document.getElementById('host-create-error').textContent = '';
-    document.getElementById('btn-create-game').disabled = false;
-    document.getElementById('room-code-display').textContent = gameCode;
-    document.getElementById('join-url-display').textContent = `Join at ${data.join_url}`;
-    updateJoinTools();
-    transition('screen-lobby');
+    socket.emit('register_host_screen', {
+        game_code: data.room_code,
+        host_token: data.host_token,
+        analytics_id: ANALYTICS_ID,
+    });
+});
+
+socket.on('display_pairing_failed', data => {
+    const button = document.getElementById('btn-pair-host-display');
+    button.disabled = false;
+    button.textContent = 'Pair Display';
+    document.getElementById('host-create-error').textContent = data.message;
 });
 
 socket.on('host_registered', data => {
     gameCode = data.code;
+    renderSpectatorCount(data.spectator_count);
     presenceTable.setRoomCode(gameCode);
     showHostRoomCode(gameCode);
     hideConnectionStatus();
@@ -695,6 +868,7 @@ socket.on('host_registered', data => {
     document.getElementById('join-url-display').textContent = `Join at ${data.join_url}`;
     updateJoinTools();
     players = data.players || [];
+    playerOrder = data.player_order || players.map(player => player.name);
     missionSizes = data.mission_sizes || [];
     missionResults = data.mission_results || [];
     missionHistory = data.mission_history || [];
@@ -702,8 +876,6 @@ socket.on('host_registered', data => {
     currentMission = data.current_mission || 0;
     consecutiveRejections = data.consecutive_rejections || 0;
     currentLeaderName = data.current_leader || '';
-    betaTestMode = Boolean(data.beta_test_mode);
-    betaTestPlayerCount = Number(data.beta_test_player_count) || 6;
     if (data.game_started_at) startGameClock(data.game_started_at, data.game_elapsed_seconds);
     updateHostProposalTrack();
     renderDiscussionSetting(data.discussion_time);
@@ -718,7 +890,6 @@ socket.on('host_registered', data => {
     if (data.phase === 'LOBBY') {
         transition('screen-lobby');
         renderLobbyPlayers(players);
-        renderBetaTestMode(betaTestMode, betaTestPlayerCount);
     } else {
         // Mid-game reconnect — restore header and show appropriate screen
         showGameHeader();
@@ -744,10 +915,10 @@ socket.on('host_registered', data => {
             spawnStars();
             document.getElementById('night-confirmed').textContent = data.night_confirmed || 0;
             document.getElementById('night-total').textContent = data.night_total || players.length;
+            renderNightPending(data.night_pending_names || []);
             hideGameHeader();
         } else if (data.phase === 'TEAM_PROPOSAL') {
-            document.getElementById('proposal-leader-name').textContent =
-                currentLeaderName;
+            renderLeaderName('proposal-leader-name', currentLeaderName);
             document.getElementById('proposal-mission-size').textContent =
                 `Select ${missionSizes[currentMission] || '?'} members for the quest`;
             document.getElementById('proposal-timer-host').textContent =
@@ -760,6 +931,8 @@ socket.on('host_registered', data => {
         } else if (data.phase === 'TEAM_VOTE' || data.phase === 'VOTE_REVEAL') {
             proposedTeam = data.proposed_team || [];
             document.getElementById('vote-team-names').textContent =
+                proposedTeam.join(', ');
+            document.getElementById('vote-reveal-team-names').textContent =
                 proposedTeam.join(', ');
             document.getElementById('vote-leader-label').textContent =
                 `${currentLeaderName} proposes:`;
@@ -802,7 +975,7 @@ socket.on('host_registered', data => {
         } else if (data.phase === 'GAME_OVER' && data.summary) {
             renderGameOver(data.summary);
             const readyIds = data.rematch_ready_ids || [];
-            const eligible = (data.summary.players || []).filter(player => !player.is_bot);
+            const eligible = data.summary.players || [];
             renderRematchStatus(document.getElementById('rematch-status-host'), {
                 ready_count: readyIds.length,
                 total_count: eligible.length,
@@ -846,13 +1019,17 @@ socket.on('player_reconnected', data => {
 
 socket.on('lobby_update', data => {
     players = data.players || [];
+    if (data.player_order) {
+        const byName = new Map(players.map(player => [player.name, player]));
+        players = data.player_order.map(name => byName.get(name)).filter(Boolean);
+        playerOrder = data.player_order;
+    }
     renderLobbyPlayers(players);
     presenceTable.setPublicPositions(data.public_spectrum || {});
     presenceTable.setRoleManifest(data.role_manifest || []);
     if (data.settings) {
         renderDiscussionSetting(data.settings.discussion_time);
         renderProposalSetting(data.settings.proposal_time);
-        renderBetaTestMode(data.settings.beta_test_mode, data.settings.beta_test_player_count);
     }
 });
 
@@ -870,7 +1047,8 @@ socket.on('game_starting', data => {
 socket.on('night_phase_start', data => {
     spawnStars();
     document.getElementById('night-total').textContent = data.total_players;
-    document.getElementById('night-confirmed').textContent = 0;
+    document.getElementById('night-confirmed').textContent = data.confirmed || 0;
+    renderNightPending(data.pending_names || players.map(player => player.name));
     hideGameHeader();
     transition('screen-night');
 });
@@ -878,6 +1056,7 @@ socket.on('night_phase_start', data => {
 socket.on('night_phase_progress', data => {
     document.getElementById('night-confirmed').textContent = data.confirmed;
     document.getElementById('night-total').textContent = data.total;
+    renderNightPending(data.pending_names || []);
 });
 
 socket.on('night_phase_complete', () => {
@@ -895,7 +1074,7 @@ socket.on('round_start', data => {
     syncPresencePlayers(players);
 
     document.getElementById('round-title').textContent = `Mission ${data.mission_num}`;
-    document.getElementById('round-leader-name').textContent = data.leader_name;
+    renderLeaderName('round-leader-name', data.leader_name);
     updateMissionTracker();
     updateGameStats();
     updateLeaderDisplay(data.leader_name);
@@ -929,7 +1108,7 @@ socket.on('proposal_start', data => {
     currentLeaderName = data.leader_name;
     updateLeaderDisplay(data.leader_name);
     proposedTeam = [];
-    document.getElementById('proposal-leader-name').textContent = data.leader_name;
+    renderLeaderName('proposal-leader-name', data.leader_name);
     document.getElementById('proposal-mission-size').textContent =
         `Select ${data.mission_size} members for the quest`;
     proposalDuration = Number(data.duration_seconds) || 0;
@@ -999,8 +1178,13 @@ function renderVoteStatus(voted, remaining) {
 }
 
 socket.on('vote_reveal', data => {
+    document.getElementById('vote-reveal-team-names').textContent = proposedTeam.join(', ');
     transition('screen-vote-reveal');
     setTimeout(() => animateVoteReveal(data.votes), 400);
+});
+
+socket.on('spectator_count_updated', data => {
+    renderSpectatorCount(data.spectator_count);
 });
 
 socket.on('rejection_warning', data => {
@@ -1101,6 +1285,8 @@ socket.on('assassination_result', data => {
 socket.on('game_over', data => {
     renderGameOver(data);
     transition('screen-game-over');
+    track('victory_screen_viewed', { context: data.win_reason || 'unknown' });
+    track('rematch_prompt_viewed', { context: 'host_display' });
 });
 
 socket.on('rematch_status', data => {
@@ -1111,6 +1297,7 @@ socket.on('chat_message', data => {
     tvChatMessages.push(data);
     if (tvChatMessages.length > 20) tvChatMessages.shift();
     renderTvChat();
+    playChatChime();
 });
 
 socket.on('seat_recovery_code', data => {
@@ -1174,10 +1361,10 @@ socket.on('game_ended', () => {
     presenceTable.hide();
     presenceTable.setRoomCode('');
     showHostRoomCode('');
+    renderSpectatorCount(0);
     updateJoinTools();
     renderTvChat();
     renderLobbyPlayers([]);
-    document.getElementById('btn-create-game').disabled = false;
     transition('screen-title');
 });
 
@@ -1186,10 +1373,10 @@ socket.on('error', data => {
     const errorEl = document.getElementById('host-create-error');
     if (errorEl && document.getElementById('screen-title').classList.contains('active')) {
         errorEl.textContent = data.message;
-        document.getElementById('btn-create-game').disabled = false;
     }
     if (currentPhase === 'lobby') {
         document.getElementById('btn-start-game').disabled = false;
+        document.getElementById('start-game-hint').textContent = data.message || 'The game could not start.';
     }
     if (/host authorization invalid|Game not found/i.test(data.message || '')) {
         clearHostSession();
@@ -1197,8 +1384,7 @@ socket.on('error', data => {
         hideConnectionStatus();
         showScreen('screen-title');
         document.getElementById('host-create-error').textContent =
-            'The previous game is no longer available. Create a new game to continue.';
-        document.getElementById('btn-create-game').disabled = false;
+            'That display session is no longer available. Generate a new pairing code on the host phone.';
     }
 });
 
@@ -1206,8 +1392,31 @@ socket.on('error', data => {
 // UI event listeners
 // ---------------------------------------------------------------------------
 
-document.getElementById('btn-create-game').addEventListener('click', () => {
-    window.location.assign('/');
+document.getElementById('host-pair-room').addEventListener('input', event => {
+    event.target.value = event.target.value.toUpperCase().replace(/[^A-Z]/g, '');
+});
+document.getElementById('host-pair-code').addEventListener('input', event => {
+    event.target.value = event.target.value.replace(/\D/g, '');
+});
+document.getElementById('host-pair-code').addEventListener('keydown', event => {
+    if (event.key === 'Enter') document.getElementById('btn-pair-host-display').click();
+});
+document.getElementById('btn-pair-host-display').addEventListener('click', event => {
+    const roomCode = document.getElementById('host-pair-room').value.trim().toUpperCase();
+    const pairingCode = document.getElementById('host-pair-code').value.trim();
+    const error = document.getElementById('host-create-error');
+    error.textContent = '';
+    if (roomCode.length !== 4 || pairingCode.length !== 6) {
+        error.textContent = 'Enter the four-letter room and six-digit display code.';
+        return;
+    }
+    event.currentTarget.disabled = true;
+    event.currentTarget.textContent = 'Pairing…';
+    socket.emit('pair_host_display', {
+        room_code: roomCode,
+        pairing_code: pairingCode,
+        analytics_id: ANALYTICS_ID,
+    });
 });
 
 document.getElementById('btn-start-game').addEventListener('click', () => {
@@ -1221,14 +1430,6 @@ document.getElementById('btn-close-room').addEventListener('click', async () => 
         'All joined players will be disconnected and this room code will stop working.'
     );
     if (ok) socket.emit('end_game');
-});
-
-document.getElementById('btn-beta-test-mode').addEventListener('click', () => {
-    socket.emit('set_beta_test_mode', { enabled: !betaTestMode, target_count: betaTestPlayerCount });
-});
-document.getElementById('beta-player-count').addEventListener('change', event => {
-    betaTestPlayerCount = Number(event.target.value);
-    socket.emit('set_beta_test_mode', { enabled: betaTestMode, target_count: betaTestPlayerCount });
 });
 
 document.getElementById('btn-return-lobby').addEventListener('click', () => {

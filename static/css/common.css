@@ -89,7 +89,7 @@ body::after {
     flex: 1 1 250px;
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    gap: 0.25rem;
     position: relative;
     user-select: none;
 }
@@ -97,27 +97,27 @@ body::after {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.6rem;
+    gap: 0.4rem;
     width: 100%;
 }
 .presence-view-toggle {
     align-self: flex-start;
     display: flex;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0.2rem;
+    gap: 0.15rem;
+    padding: 0.14rem;
     border: 1px solid rgba(201,168,76,0.25);
     border-radius: var(--radius-pill);
     background: rgba(7,7,9,0.72);
 }
 .presence-view-toggle button {
-    min-height: 28px;
-    padding: 0.25rem 0.7rem;
+    min-height: 24px;
+    padding: 0.2rem 0.58rem;
     border: 0;
     border-radius: var(--radius-pill);
     background: transparent;
     color: var(--text-dim);
-    font: 0.55rem var(--font-heading);
+    font: 0.5rem var(--font-heading);
     letter-spacing: 0.07em;
     text-transform: uppercase;
     cursor: pointer;
@@ -132,16 +132,20 @@ body::after {
     color: #fff0b5;
     box-shadow: 0 0 10px rgba(201,168,76,0.2);
 }
+.presence-order-view .presence-view-toggle button[aria-pressed="true"] {
+    background: linear-gradient(145deg, rgba(124,93,38,0.7), rgba(61,43,18,0.84));
+    color: #fff0b5;
+}
 .presence-reset {
     margin-left: auto;
-    min-height: 27px;
-    padding: 0.25rem 0.55rem;
+    min-height: 23px;
+    padding: 0.18rem 0.46rem;
     border: 1px solid rgba(201,168,76,0.42);
     border-radius: var(--radius-pill);
     background: rgba(10,8,4,0.72);
     color: var(--text-secondary);
     font-family: var(--font-heading);
-    font-size: 0.52rem;
+    font-size: 0.47rem;
     letter-spacing: 0.04em;
     cursor: pointer;
     touch-action: manipulation;
@@ -169,23 +173,106 @@ body::after {
 }
 .presence-role-manifest {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: center;
     gap: 0.25rem;
     margin-top: 0.28rem;
     padding: 0.12rem 0.2rem;
 }
 .presence-character {
-    padding: 0.13rem 0.3rem;
+    appearance: none;
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 5.5rem;
+    padding: 0.2rem 0.16rem;
     border: 1px solid currentColor;
     border-radius: var(--radius-pill);
     background: rgba(4,5,8,0.7);
-    font: 0.45rem/1.2 var(--font-heading);
+    color: inherit;
+    overflow: hidden;
+    font: clamp(0.38rem, 1.65vw, 0.54rem)/1.2 var(--font-heading);
     letter-spacing: 0.025em;
     white-space: nowrap;
+    cursor: pointer;
 }
+.presence-order-view .presence-field {
+    border-color: rgba(201,168,76,0.45);
+    background:
+        radial-gradient(ellipse at center, rgba(67,48,22,0.22), transparent 52%),
+        linear-gradient(145deg, rgba(12,10,8,0.98), rgba(4,4,6,0.98));
+    box-shadow: inset 0 0 46px rgba(0,0,0,0.72), 0 0 24px rgba(201,168,76,0.08);
+}
+.presence-order-view .presence-field::before {
+    content: '';
+    position: absolute;
+    z-index: 0;
+    inset: 12% 7%;
+    border: clamp(2px, 0.35vw, 4px) solid rgba(201,168,76,0.72);
+    border-radius: 50%;
+    background:
+        repeating-conic-gradient(from 12deg, rgba(255,255,255,0.025) 0deg 8deg, transparent 8deg 19deg),
+        radial-gradient(ellipse at 48% 42%, rgba(139,101,45,0.3), rgba(57,37,16,0.72) 48%, rgba(21,14,8,0.96) 76%);
+    box-shadow:
+        inset 0 0 0 6px rgba(8,6,3,0.52),
+        inset 0 0 32px rgba(0,0,0,0.72),
+        0 0 0 1px rgba(255,229,150,0.18),
+        0 14px 34px rgba(0,0,0,0.58);
+    pointer-events: none;
+}
+.presence-order-view .presence-field::after {
+    content: '✦  AVALON  ✦';
+    position: absolute;
+    z-index: 0;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: rgba(224,190,98,0.17);
+    font: clamp(0.65rem, 1.5vw, 1rem) var(--font-title);
+    letter-spacing: 0.22em;
+    white-space: nowrap;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.04);
+    pointer-events: none;
+}
+.presence-order-view .presence-spectrum-labels { display: none; }
+.presence-order-view .presence-node { cursor: default; }
+.presence-order-number {
+    position: absolute;
+    left: -0.25rem;
+    top: -0.25rem;
+    z-index: 3;
+    display: none;
+    place-items: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    border: 1px solid var(--gold-light);
+    border-radius: 50%;
+    background: #171008;
+    color: var(--gold-light);
+    font: 700 0.58rem/1 var(--font-heading);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.7);
+}
+.presence-order-view .presence-order-number { display: grid; }
 .presence-character.good { color: #8bcfff; box-shadow: inset 0 0 8px rgba(46,134,222,0.09); }
 .presence-character.evil { color: #ff8d8d; box-shadow: inset 0 0 8px rgba(192,57,43,0.1); }
+.presence-character:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+.presence-character-tooltip {
+    position: fixed;
+    z-index: 1400;
+    width: min(270px, calc(100vw - 16px));
+    padding: 0.72rem 0.82rem;
+    border: 1px solid var(--gold);
+    border-radius: var(--radius-md);
+    background: rgba(9,8,6,0.98);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.76);
+    color: var(--text-secondary);
+    font: 0.72rem/1.4 var(--font-body);
+    user-select: text;
+}
+.presence-character-tooltip strong { display: block; color: var(--gold-light); font: 0.86rem var(--font-heading); }
+.presence-character-tooltip > span { display: block; margin: 0.18rem 0 0.35rem; font: 0.58rem var(--font-heading); text-transform: uppercase; letter-spacing: 0.08em; }
+.presence-character-tooltip > span.good { color: #8bcfff; }
+.presence-character-tooltip > span.evil { color: #ff8d8d; }
+.presence-character-tooltip p { margin: 0; }
 .presence-spectrum-labels {
     position: absolute;
     z-index: 3;
@@ -203,7 +290,7 @@ body::after {
 .presence-spectrum-labels span:first-child { color: #91d1ff; text-align: left; }
 .presence-spectrum-labels span:nth-child(2) { color: rgba(231,226,210,0.58); text-align: center; }
 .presence-spectrum-labels span:last-child { color: #ff9b9b; text-align: right; }
-.presence-nodes { position: absolute; inset: 0; pointer-events: none; }
+.presence-nodes { position: absolute; z-index: 1; inset: 0; pointer-events: none; }
 .presence-node {
     position: absolute;
     width: clamp(58px, 18vw, 76px);
@@ -295,9 +382,11 @@ body::after {
 .presence-node:focus-visible .presence-portrait { outline: 2px solid var(--gold-light); outline-offset: 3px; }
 
 @media (max-width: 520px) {
-    .presence-controls { gap: 0.4rem; }
-    .presence-reset { min-height: 24px; }
+    .presence-controls { gap: 0.25rem; }
+    .presence-reset { min-height: 22px; padding-inline: 0.38rem; }
     .presence-view-toggle { justify-content: flex-start; }
+    .presence-view-toggle button { min-height: 23px; padding-inline: 0.36rem; font-size: 0.44rem; }
+    .presence-role-manifest { gap: 0.12rem; padding-inline: 0; }
 }
 
 .mission-history-tooltip {

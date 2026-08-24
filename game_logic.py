@@ -1,6 +1,7 @@
 import secrets
 import threading
 import time
+import uuid
 from enum import Enum
 
 
@@ -75,7 +76,7 @@ PLAYER_COUNT_ROLES = {
             Role.LOYAL_SERVANT,
             Role.LOYAL_SERVANT,
         ],
-        [Role.ASSASSIN, Role.MORGANA, Role.MINION_OF_MORDRED],
+        [Role.ASSASSIN, Role.MORGANA, Role.MORDRED],
     ),
     10: (
         [
@@ -130,6 +131,13 @@ class PlayerInfo:
         self.color_index = color_index
         self.avatar_index = avatar_index
         self.avatar_image: str | None = None
+        # Optional, resettable installation identifier used only for aggregate
+        # product analytics. It is never an authentication capability.
+        self.analytics_id: str | None = None
+        # The private archive remains the source of truth for historical
+        # selfies; summaries refer to it by hash instead of embedding JPEGs.
+        self.selfie_sha256: str | None = None
+        self.selfie_storage_name: str | None = None
         self.ready = is_bot
 
     def to_dict(self, include_role=False):
@@ -150,7 +158,13 @@ class PlayerInfo:
 
 
 class SpectatorInfo:
-    def __init__(self, spectator_id: str, name: str, color_index: int = 0):
+    def __init__(
+        self,
+        spectator_id: str,
+        name: str,
+        color_index: int = 0,
+        vision_mode: str = "blind",
+    ):
         self.spectator_id = spectator_id
         self.name = name
         self.sid = None
@@ -158,11 +172,16 @@ class SpectatorInfo:
         self.session_token = None
         self.session_token_hash: str | None = None
         self.color_index = color_index
+        self.vision_mode = vision_mode
+        self.analytics_id: str | None = None
 
 
 class GameState:
     def __init__(self, game_code: str):
         self.code = game_code
+        # party_id survives same-room rematches; game_id changes for each start.
+        self.party_id = str(uuid.uuid4())
+        self.game_id: str | None = None
         self.phase = GamePhase.LOBBY
         self.players: dict[str, PlayerInfo] = {}  # player_id -> PlayerInfo
         self.spectators: dict[str, SpectatorInfo] = {}
@@ -179,6 +198,7 @@ class GameState:
         self.beta_test_mode = False
         self.beta_test_player_count = 6
         self.started_at: float | None = None
+        self.phase_started_at = time.time()
 
         # Round state
         self.current_leader_index = 0
@@ -269,6 +289,7 @@ class GameState:
             player.role = None
             player.team = None
             player.ready = player.is_bot
+            player.ready = False
         self.current_leader_index = 0
         self.current_mission = 0
         self.mission_results = []
@@ -293,6 +314,8 @@ class GameState:
         self.spotlight_player_id = None
         self.rematch_ready = set()
         self.started_at = None
+        self.game_id = None
+        self.phase_started_at = time.time()
         self.active_elapsed_seconds = 0.0
         self.active_since = None
 

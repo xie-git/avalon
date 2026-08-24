@@ -125,7 +125,7 @@
             this.players = [];
             this.privatePositions = {};
             this.publicPositions = {};
-            this.view = 'private';
+            this.view = 'order';
             this.revealedRoles = null;
             this.roleManifest = [];
             this.contributesToAverage = true;
@@ -138,10 +138,11 @@
             this.element.innerHTML = `
                 <div class="presence-controls">
                     <div class="presence-view-toggle" role="group" aria-label="Choose suspicion spectrum">
-                        <button type="button" data-view="private" aria-pressed="true">Private</button>
+                        <button type="button" data-view="order" aria-pressed="true">Round Table</button>
                         <button type="button" data-view="public" aria-pressed="false">Group Average</button>
+                        <button type="button" data-view="private" aria-pressed="false">Private</button>
                     </div>
-                    <button type="button" class="presence-reset" title="Reset avatar positions">Reset positions</button>
+                    <button type="button" class="presence-reset" title="Reset avatar positions">Reset</button>
                 </div>
                 <div class="presence-field">
                     <div class="presence-spectrum-labels" aria-hidden="true">
@@ -158,6 +159,16 @@
             this.element.querySelector('.presence-reset').addEventListener('click', () => this.reset());
             this.element.querySelectorAll('[data-view]').forEach(button => {
                 button.addEventListener('click', () => this.setView(button.dataset.view));
+            });
+
+            this.roleTooltip = document.createElement('div');
+            this.roleTooltip.className = 'presence-character-tooltip hidden';
+            this.roleTooltip.setAttribute('role', 'tooltip');
+            document.body.appendChild(this.roleTooltip);
+            document.addEventListener('pointerdown', event => {
+                if (!this.roleTooltip.contains(event.target) && !event.target.closest('.presence-character')) {
+                    this.hideRoleTooltip();
+                }
             });
 
             if ('ResizeObserver' in window) {
@@ -182,6 +193,7 @@
             this.roomCode = normalized;
             this.privatePositions = {};
             this.publicPositions = {};
+            this.view = 'order';
             const key = this.storageKey();
             if (key) {
                 try {
@@ -189,8 +201,6 @@
                     if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
                         this.privatePositions = this.sanitizePositions(saved);
                     }
-                    const savedView = localStorage.getItem(this.viewStorageKey());
-                    this.view = savedView === 'public' ? 'public' : 'private';
                 } catch (_) {
                     this.privatePositions = {};
                 }
@@ -283,10 +293,7 @@
         }
 
         setView(view) {
-            this.view = view === 'public' ? 'public' : 'private';
-            try {
-                if (this.viewStorageKey()) localStorage.setItem(this.viewStorageKey(), this.view);
-            } catch (_) { /* storage is optional */ }
+            this.view = ['public', 'order'].includes(view) ? view : 'private';
             this.updateViewControls();
             this.layout();
         }
@@ -296,11 +303,13 @@
                 button.setAttribute('aria-pressed', String(button.dataset.view === this.view));
             });
             const isPublic = this.view === 'public';
+            const isOrder = this.view === 'order';
             this.element.classList.toggle('presence-public-view', isPublic);
+            this.element.classList.toggle('presence-order-view', isOrder);
             const reset = this.element.querySelector('.presence-reset');
-            reset.classList.toggle('presence-reset-placeholder', isPublic);
-            reset.disabled = isPublic;
-            reset.setAttribute('aria-hidden', String(isPublic));
+            reset.classList.toggle('presence-reset-placeholder', isPublic || isOrder);
+            reset.disabled = isPublic || isOrder;
+            reset.setAttribute('aria-hidden', String(isPublic || isOrder));
         }
 
         setContributionEnabled(enabled) {
@@ -323,18 +332,65 @@
             this.manifest.replaceChildren();
             this.roleManifest.forEach(item => {
                 if (!item || !item.role || !['good', 'evil'].includes(item.team)) return;
-                const badge = document.createElement('span');
+                const badge = document.createElement('button');
+                badge.type = 'button';
                 badge.className = `presence-character ${item.team}`;
                 badge.textContent = `${item.team === 'good' ? '✦' : '◆'} ${abbreviations[item.role] || item.role.slice(0, 3)}`;
                 badge.title = item.role;
-                badge.setAttribute('aria-label', `${item.team}, ${item.role}`);
+                badge.setAttribute('aria-label', `${item.team}, ${item.role}. Tap for role description.`);
+                badge.addEventListener('click', event => {
+                    event.stopPropagation();
+                    this.showRoleTooltip(badge, item);
+                });
                 this.manifest.appendChild(badge);
             });
             this.manifest.classList.toggle('hidden', !this.manifest.children.length);
         }
 
+        showRoleTooltip(anchor, item) {
+            const descriptions = {
+                'Merlin': 'Sees most evil players and guides Good without being identified.',
+                'Percival': 'Sees Merlin and Morgana, but does not know which is which.',
+                'Loyal Servant': 'Has no secret information and must find trustworthy allies.',
+                'Assassin': 'Serves Evil and can steal victory by identifying Merlin at the end.',
+                'Morgana': 'Serves Evil and appears as Merlin to Percival.',
+                'Mordred': 'Serves Evil but is hidden from Merlin.',
+                'Oberon': 'Serves Evil but does not know the other evil players, or they him.',
+                'Minion of Mordred': 'Serves Evil and works with the other known evil players.',
+            };
+            this.roleTooltip.replaceChildren();
+            const title = document.createElement('strong');
+            title.textContent = item.role;
+            const team = document.createElement('span');
+            team.className = item.team;
+            team.textContent = item.team === 'good' ? 'Forces of Good' : 'Forces of Evil';
+            const description = document.createElement('p');
+            description.textContent = descriptions[item.role] || 'A character in this game of Avalon.';
+            this.roleTooltip.append(title, team, description);
+            this.roleTooltip.classList.remove('hidden');
+            const rect = anchor.getBoundingClientRect();
+            const tooltipRect = this.roleTooltip.getBoundingClientRect();
+            const left = Math.min(window.innerWidth - tooltipRect.width - 8, Math.max(8, rect.left + rect.width / 2 - tooltipRect.width / 2));
+            const above = rect.top - tooltipRect.height - 8;
+            const top = above >= 8 ? above : Math.min(window.innerHeight - tooltipRect.height - 8, rect.bottom + 8);
+            this.roleTooltip.style.left = `${left}px`;
+            this.roleTooltip.style.top = `${top}px`;
+        }
+
+        hideRoleTooltip() {
+            this.roleTooltip.classList.add('hidden');
+        }
+
         activePositions() {
             return this.view === 'public' ? this.publicPositions : this.privatePositions;
+        }
+
+        orderPosition(index, count) {
+            const angle = -Math.PI / 2 + (index / Math.max(1, count)) * Math.PI * 2;
+            return {
+                x: 0.5 + Math.cos(angle) * 0.39,
+                y: 0.5 + Math.sin(angle) * 0.34,
+            };
         }
 
         setRoleReveal(roles) {
@@ -400,6 +456,11 @@
                 const status = document.createElement('span');
                 status.className = 'presence-status';
                 portrait.appendChild(status);
+                const order = document.createElement('span');
+                order.className = 'presence-order-number';
+                order.textContent = String(this.players.indexOf(player) + 1);
+                order.setAttribute('aria-hidden', 'true');
+                portrait.appendChild(order);
                 if (player.ready && !reveal) {
                     const ready = document.createElement('span');
                     ready.className = 'presence-ready';
@@ -480,7 +541,9 @@
             const count = nodeElements.length;
             const positions = this.activePositions();
             nodeElements.forEach((node, index) => {
-                const saved = positions[node.dataset.playerKey];
+                const saved = this.view === 'order'
+                    ? this.orderPosition(index, count)
+                    : positions[node.dataset.playerKey];
                 let xRatio;
                 let yRatio;
                 if (saved) {
@@ -503,7 +566,7 @@
         }
 
         startDrag(event, node) {
-            if (this.view === 'public') return;
+            if (this.view !== 'private') return;
             if (event.button !== undefined && event.button !== 0) return;
             event.preventDefault();
             node.focus({ preventScroll: true });
@@ -539,7 +602,7 @@
         }
 
         moveWithKeyboard(event, node) {
-            if (this.view === 'public') return;
+            if (this.view !== 'private') return;
             if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
             event.preventDefault();
             const positions = this.activePositions();

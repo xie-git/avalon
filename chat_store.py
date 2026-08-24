@@ -67,6 +67,41 @@ class ChatStore:
             "ON game_events(room_code, game_started_at, id)"
         )
         connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS product_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                schema_version INTEGER NOT NULL,
+                app_version TEXT NOT NULL,
+                party_id TEXT,
+                room_code TEXT,
+                game_id TEXT,
+                game_started_at REAL,
+                actor_type TEXT NOT NULL,
+                actor_id TEXT,
+                analytics_id TEXT,
+                event_type TEXT NOT NULL,
+                phase TEXT,
+                mission_num INTEGER,
+                proposal_attempt INTEGER,
+                payload_json TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_product_events_game "
+            "ON product_events(game_id, id)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_product_events_party "
+            "ON product_events(party_id, id)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_product_events_created_at "
+            "ON product_events(created_at)"
+        )
+        connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at "
             "ON chat_messages(created_at)"
         )
@@ -136,8 +171,20 @@ class ChatStore:
                 )
                 """
             )
+            product_cursor = connection.execute(
+                """
+                DELETE FROM product_events
+                WHERE id IN (
+                    SELECT id FROM product_events ORDER BY id LIMIT 100000
+                )
+                """
+            )
             connection.commit()
-            if chat_cursor.rowcount == 0 and event_cursor.rowcount == 0:
+            if (
+                chat_cursor.rowcount == 0
+                and event_cursor.rowcount == 0
+                and product_cursor.rowcount == 0
+            ):
                 break
 
     @staticmethod
@@ -234,6 +281,103 @@ class ChatStore:
                 )
                 connection.commit()
 
+    def save_product_event(
+        self,
+        *,
+        event_id: str,
+        schema_version: int,
+        app_version: str,
+        event_type: str,
+        actor_type: str,
+        payload: dict,
+        party_id: str | None = None,
+        room_code: str | None = None,
+        game_id: str | None = None,
+        game_started_at: float | None = None,
+        actor_id: str | None = None,
+        analytics_id: str | None = None,
+        phase: str | None = None,
+        mission_num: int | None = None,
+        proposal_attempt: int | None = None,
+        created_at: datetime | None = None,
+    ) -> None:
+        """Save a bounded, token-free product event envelope."""
+        timestamp = created_at or datetime.now(timezone.utc)
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        timestamp_text = timestamp.astimezone(timezone.utc).isoformat(
+            timespec="milliseconds"
+        ).replace("+00:00", "Z")
+        payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        if len(payload_json.encode("utf-8")) > 4096:
+            raise ValueError("product event payload exceeds 4096 bytes")
+        with self._lock, self._connect() as connection:
+            self._initialize(connection)
+            if self._database_bytes(connection) >= self.prune_at_bytes:
+                self._prune(connection)
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO product_events (
+                    event_id, created_at, schema_version, app_version,
+                    party_id, room_code, game_id, game_started_at,
+                    actor_type, actor_id, analytics_id, event_type, phase,
+                    mission_num, proposal_attempt, payload_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_id,
+                    timestamp_text,
+                    int(schema_version),
+                    app_version,
+                    party_id,
+                    room_code.upper() if room_code else None,
+                    game_id,
+                    game_started_at,
+                    actor_type,
+                    actor_id,
+                    analytics_id,
+                    event_type,
+                    phase,
+                    mission_num,
+                    proposal_attempt,
+                    payload_json,
+                ),
+            )
+            connection.commit()
+
+    def product_events(
+        self,
+        *,
+        game_id: str | None = None,
+        party_id: str | None = None,
+        limit: int = 10000,
+    ) -> list[sqlite3.Row]:
+        clauses = []
+        parameters: list[object] = []
+        if game_id:
+            clauses.append("game_id = ?")
+            parameters.append(game_id)
+        if party_id:
+            clauses.append("party_id = ?")
+            parameters.append(party_id)
+        parameters.append(max(1, min(int(limit), 100000)))
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        with self._lock, self._connect() as connection:
+            self._initialize(connection)
+            return list(
+                connection.execute(
+                    f"""
+                    SELECT event_id, created_at, schema_version, app_version,
+                           party_id, room_code, game_id, game_started_at,
+                           actor_type, actor_id, analytics_id, event_type,
+                           phase, mission_num, proposal_attempt, payload_json
+                    FROM product_events{where}
+                    ORDER BY id
+                    LIMIT ?
+                    """,
+                    parameters,
+                )
+            )
     def save_selfie_reference(
         self,
         *,

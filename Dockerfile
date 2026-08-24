@@ -13,7 +13,7 @@ RUN groupadd --system --gid 10001 avalon \
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --requirement requirements.txt
 
-COPY --chown=avalon:avalon server.py game_logic.py chat_store.py selfie_archive.py chat_history.py game_history.py selfie_history.py ./
+COPY --chown=avalon:avalon server.py game_logic.py chat_store.py selfie_archive.py chat_history.py game_history.py selfie_history.py analytics_history.py ./
 COPY --chown=avalon:avalon templates ./templates
 COPY --chown=avalon:avalon static ./static
 

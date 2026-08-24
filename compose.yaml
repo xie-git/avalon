@@ -11,6 +11,7 @@ services:
       CHAT_DB_PATH: ${CHAT_DB_PATH:-/data/avalon-chats.sqlite3}
       CHAT_DB_MAX_BYTES: ${CHAT_DB_MAX_BYTES:-2684354560}
       SELFIE_ARCHIVE_DIR: ${SELFIE_ARCHIVE_DIR:-/data/private/selfies}
+      APP_VERSION: ${APP_VERSION:-development}
     ports:
       - "127.0.0.1:5001:5001"
     read_only: true

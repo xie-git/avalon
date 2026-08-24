@@ -27,8 +27,13 @@ def test_security_headers_and_development_routes_are_closed():
     assert b'maxlength="4"' in response.data
     host_response = client.get("/host")
     assert b"host-admin-password" not in host_response.data
-    assert b"Open Game Dashboard" in host_response.data
-    assert b"Host a New Game" in response.data
+    assert b"Pair this screen" in host_response.data
+    assert b"Host a Game" in response.data
+    assert b"Pair a Shared Display" in response.data
+
+    presence_script = client.get("/static/js/presence.js").data
+    assert presence_script.index(b'data-view="order"') < presence_script.index(b'data-view="private"')
+    assert b">Reset</button>" in presence_script
 
 
 def test_party_pages_do_not_reference_portrait_or_audio_assets():
@@ -88,23 +93,86 @@ def test_phone_creator_hosts_while_occupying_a_player_seat(socket_client):
     assert game.player_count() == 1
 
 
-def test_phone_creator_can_fill_lobby_to_selected_count_with_bots(socket_client):
+def test_player_can_rename_only_in_lobby(socket_client):
     socket_client.emit("create_player_game", {"player_name": "Arthur"})
     joined = packets_for(socket_client, "join_success")[0]
-
-    socket_client.emit(
-        "set_beta_test_mode", {"enabled": True, "target_count": 8}
-    )
-
     game = server.games[joined["room_code"]]
-    assert game.beta_test_mode is True
-    assert game.beta_test_player_count == 8
-    assert game.player_count() == 8
-    assert sum(player.is_bot for player in game.players.values()) == 7
 
+    socket_client.emit("change_name", {"player_name": "Artoria"})
+
+    assert game.players[joined["player_id"]].name == "Artoria"
+    packets = socket_client.get_received()
+    changed = [packet["args"][0] for packet in packets if packet["name"] == "name_changed"]
+    updates = [packet["args"][0] for packet in packets if packet["name"] == "lobby_update"]
+    assert changed[-1] == {
+        "player_name": "Artoria"
+    }
+    assert updates[-1]["players"][0]["name"] == "Artoria"
+
+    game.phase = server.GamePhase.DISCUSSION
+    socket_client.emit("change_name", {"player_name": "Merlin"})
+
+    assert game.players[joined["player_id"]].name == "Artoria"
+    assert "Wrong game phase" in packets_for(socket_client, "name_change_failed")[-1]["message"]
+
+
+def test_player_rename_rejects_duplicate_name(socket_client):
+    socket_client.emit("create_player_game", {"player_name": "Arthur"})
+    joined = packets_for(socket_client, "join_success")[0]
+    second = server.socketio.test_client(server.app)
+    second.emit("join_game", {"room_code": joined["room_code"], "player_name": "Merlin"})
+    second.get_received()
+
+    socket_client.emit("change_name", {"player_name": "merlin"})
+
+    assert server.games[joined["room_code"]].players[joined["player_id"]].name == "Arthur"
+    assert "already taken" in packets_for(socket_client, "name_change_failed")[-1]["message"]
+    second.disconnect()
+
+
+def test_only_host_can_manage_practice_bots(socket_client):
+    socket_client.emit("create_player_game", {"player_name": "Arthur"})
+    joined = packets_for(socket_client, "join_success")[0]
+    game = server.games[joined["room_code"]]
+
+    player = server.socketio.test_client(server.app)
+    player.emit("join_game", {"room_code": joined["room_code"], "player_name": "Merlin"})
+    player.get_received()
+    player.emit("set_beta_test_mode", {"enabled": True, "target_count": 8})
+    assert game.player_count() == 2
+    assert "Host authorization required" in packets_for(player, "error")[-1]["message"]
+
+    socket_client.emit("set_beta_test_mode", {"enabled": True, "target_count": 8})
     update = packets_for(socket_client, "lobby_update")[-1]
+    assert game.player_count() == 8
+    assert sum(candidate.is_bot for candidate in game.players.values()) == 6
     assert update["settings"]["beta_test_mode"] is True
     assert update["settings"]["beta_test_player_count"] == 8
+    assert all(candidate.ready for candidate in game.players.values() if candidate.is_bot)
+    player.disconnect()
+
+
+def test_bot_leader_automatically_reaches_team_vote(socket_client):
+    socket_client.emit("create_player_game", {"player_name": "Arthur"})
+    joined = packets_for(socket_client, "join_success")[0]
+    socket_client.emit("set_beta_test_mode", {"enabled": True, "target_count": 6})
+    socket_client.emit("start_game")
+    game = server.games[joined["room_code"]]
+    game.current_leader_index = next(
+        index
+        for index, player_id in enumerate(game.player_order)
+        if game.players[player_id].is_bot
+    )
+    socket_client.get_received()
+
+    socket_client.emit("night_phase_ack")
+
+    event_names = [packet["name"] for packet in socket_client.get_received()]
+    assert "discussion_start" in event_names
+    assert "proposal_start" in event_names
+    assert "vote_start" in event_names
+    assert game.phase == server.GamePhase.TEAM_VOTE
+    assert game.proposed_team
 
 
 def test_discussion_setting_accepts_one_to_fifteen_minutes_and_unlimited(socket_client):
@@ -128,7 +196,11 @@ def test_discussion_setting_accepts_one_to_fifteen_minutes_and_unlimited(socket_
 def test_leader_can_spotlight_a_player_without_changing_gameplay(socket_client):
     socket_client.emit("create_player_game", {"player_name": "Arthur"})
     joined = packets_for(socket_client, "join_success")[0]
-    socket_client.emit("set_beta_test_mode", {"enabled": True, "target_count": 6})
+    second = server.socketio.test_client(server.app)
+    second.emit(
+        "join_game",
+        {"room_code": joined["room_code"], "player_name": "Guinevere"},
+    )
     game = server.games[joined["room_code"]]
     game.phase = server.GamePhase.DISCUSSION
     game.current_leader_index = game.player_order.index(joined["player_id"])
@@ -146,9 +218,10 @@ def test_leader_can_spotlight_a_player_without_changing_gameplay(socket_client):
     }
     assert game.phase == server.GamePhase.DISCUSSION
     assert game.proposed_team == []
+    second.disconnect()
 
 
-def test_all_human_players_can_run_it_back_without_waiting_for_bots(socket_client):
+def test_all_players_can_run_it_back(socket_client):
     socket_client.emit("create_player_game", {"player_name": "Arthur"})
     joined = packets_for(socket_client, "join_success")[0]
     second = server.socketio.test_client(server.app)
@@ -157,9 +230,7 @@ def test_all_human_players_can_run_it_back_without_waiting_for_bots(socket_clien
         {"room_code": joined["room_code"], "player_name": "Guinevere"},
     )
     second_joined = packets_for(second, "join_success")[0]
-    socket_client.emit("set_beta_test_mode", {"enabled": True, "target_count": 6})
     game = server.games[joined["room_code"]]
-    server.assign_roles(game)
     game.phase = server.GamePhase.GAME_OVER
     game.winner = "good"
     game.win_reason = "missions"
@@ -177,38 +248,10 @@ def test_all_human_players_can_run_it_back_without_waiting_for_bots(socket_clien
     assert game.phase == server.GamePhase.LOBBY
     assert game.rematch_ready == set()
     lobby = packets_for(second, "return_to_lobby")[-1]
-    assert len(lobby["players"]) == 6
+    assert len(lobby["players"]) == 2
     assert all(player.role is None for player in game.players.values())
     assert second_joined["player_id"] in game.players
     second.disconnect()
-
-
-def test_phone_bot_leader_starts_timer_then_proposes_without_tv(socket_client):
-    socket_client.emit("create_player_game", {"player_name": "Arthur"})
-    joined = packets_for(socket_client, "join_success")[0]
-    socket_client.emit(
-        "set_beta_test_mode", {"enabled": True, "target_count": 6}
-    )
-    socket_client.emit("start_game")
-    game = server.games[joined["room_code"]]
-    game.current_leader_index = next(
-        index
-        for index, player_id in enumerate(game.player_order)
-        if game.players[player_id].is_bot
-    )
-    socket_client.get_received()
-
-    socket_client.emit("night_phase_ack")
-
-    packets = socket_client.get_received()
-    names = [packet["name"] for packet in packets]
-    assert "discussion_start" in names
-    assert "proposal_start" in names
-    assert "vote_start" in names
-    assert names.index("discussion_start") < names.index("proposal_start")
-    assert game.phase == server.GamePhase.TEAM_VOTE
-    assert game.proposed_team
-    assert game.timer_deadline is None
 
 
 def test_phone_only_game_reaches_first_mission_without_host_display(socket_client):
@@ -236,6 +279,8 @@ def test_phone_only_game_reaches_first_mission_without_host_display(socket_clien
     clients[leader_index].emit("propose_team", {"team": team})
     for client in clients:
         client.emit("cast_vote", {"vote": "approve"})
+    reveal = packets_for(clients[leader_index], "vote_reveal")[-1]
+    assert reveal["team"] == [game.players[player_id].name for player_id in team]
     clients[leader_index].emit("confirm_vote_reveal")
 
     assert game.phase == server.GamePhase.MISSION
@@ -392,6 +437,57 @@ def test_spectator_chat_is_labeled_and_game_inputs_are_rejected(
     assert packets_for(spectator, "error")[-1]["message"] == "Not a player"
     assert game.votes == {}
     spectator.disconnect()
+
+
+def test_spectator_vision_modes_keep_roles_private_and_update_connected_count(
+    socket_client, create_game
+):
+    created, clients, _ = join_players(socket_client, create_game)
+    socket_client.get_received()
+    omniscient = server.socketio.test_client(server.app)
+    omniscient.emit(
+        "join_spectator",
+        {
+            "room_code": created["room_code"],
+            "spectator_name": "Seer",
+            "vision_mode": "omniscient",
+        },
+    )
+    joined = packets_for(omniscient, "spectator_join_success")[0]
+    assert joined["snapshot"]["spectator_vision_mode"] == "omniscient"
+    assert joined["snapshot"]["spectator_roles"] == []
+    assert packets_for(socket_client, "spectator_count_updated")[-1] == {
+        "spectator_count": 1
+    }
+
+    socket_client.emit("start_game")
+    revealed = packets_for(omniscient, "spectator_roles_revealed")[-1]["players"]
+    assert len(revealed) == 6
+    assert all(set(player) == {"player_id", "name", "role", "team"} for player in revealed)
+
+    blind = server.socketio.test_client(server.app)
+    blind.emit(
+        "join_spectator",
+        {
+            "room_code": created["room_code"],
+            "spectator_name": "Watcher",
+            "vision_mode": "blind",
+        },
+    )
+    blind_snapshot = packets_for(blind, "spectator_join_success")[0]["snapshot"]
+    assert blind_snapshot["spectator_vision_mode"] == "blind"
+    assert "spectator_roles" not in blind_snapshot
+    assert "spectator_roles_revealed" not in [
+        packet["name"] for packet in blind.get_received()
+    ]
+
+    omniscient.disconnect()
+    assert packets_for(socket_client, "spectator_count_updated")[-1] == {
+        "spectator_count": 1
+    }
+    blind.disconnect()
+    for client in clients:
+        client.disconnect()
 
 
 def test_host_display_owner_can_also_join_as_a_player(socket_client, create_game):
@@ -723,114 +819,6 @@ def test_assassin_targets_are_private_in_reconnect_snapshots(
 
     for client in clients:
         client.disconnect()
-
-
-def test_beta_mode_is_host_only_and_fills_then_removes_bots(
-    socket_client, create_game
-):
-    created = create_game(socket_client)
-    player = server.socketio.test_client(server.app)
-    player.emit(
-        "join_game", {"room_code": created["room_code"], "player_name": "Arthur"}
-    )
-    player.get_received()
-
-    player.emit("set_beta_test_mode", {"enabled": True})
-    assert packets_for(player, "error")[0]["message"] == "Host authorization required"
-
-    socket_client.emit("set_beta_test_mode", {"enabled": True})
-    game = server.games[created["room_code"]]
-    assert game.beta_test_mode is True
-    assert game.player_count() == 6
-    assert sum(p.is_bot for p in game.players.values()) == 5
-    assert all("is_bot" in p for p in game.public_players())
-
-    socket_client.emit("set_beta_test_mode", {"enabled": False})
-    assert game.beta_test_mode is False
-    assert game.player_count() == 1
-    assert not any(p.is_bot for p in game.players.values())
-    player.disconnect()
-
-
-def test_one_human_can_start_beta_game_and_bots_confirm_night(
-    socket_client, create_game
-):
-    created = create_game(socket_client)
-    player = server.socketio.test_client(server.app)
-    player.emit(
-        "join_game", {"room_code": created["room_code"], "player_name": "Arthur"}
-    )
-    player.get_received()
-    socket_client.get_received()
-
-    socket_client.emit("set_beta_test_mode", {"enabled": True})
-    socket_client.emit("start_game")
-    game = server.games[created["room_code"]]
-    assert game.phase == server.GamePhase.NIGHT_PHASE
-    assert len(game.night_acks) == 5
-
-    player.emit("night_phase_ack")
-    assert game.phase in {server.GamePhase.DISCUSSION, server.GamePhase.TEAM_VOTE}
-    player.disconnect()
-
-
-@pytest.mark.parametrize("beta_count", range(6, 11))
-def test_one_human_and_random_bots_can_finish_a_complete_game(
-    socket_client, create_game, beta_count
-):
-    created = create_game(socket_client)
-    player = server.socketio.test_client(server.app)
-    player.emit(
-        "join_game", {"room_code": created["room_code"], "player_name": "Arthur"}
-    )
-    joined = packets_for(player, "join_success")[0]
-    human_id = joined["player_id"]
-    socket_client.get_received()
-    socket_client.emit(
-        "set_beta_test_mode", {"enabled": True, "target_count": beta_count}
-    )
-    assert server.games[created["room_code"]].player_count() == beta_count
-    socket_client.emit("start_game")
-    player.get_received()
-    player.emit("night_phase_ack")
-    game = server.games[created["room_code"]]
-
-    for _ in range(100):
-        if game.phase == server.GamePhase.GAME_OVER:
-            break
-        if game.phase == server.GamePhase.DISCUSSION:
-            player.emit("skip_discussion", {"confirmed": True})
-        elif game.phase == server.GamePhase.TEAM_PROPOSAL:
-            assert game.current_leader().player_id == human_id
-            player.emit(
-                "propose_team",
-                {"team": game.player_order[: game.mission_size()]},
-            )
-        elif game.phase == server.GamePhase.TEAM_VOTE:
-            player.emit("cast_vote", {"vote": "approve"})
-        elif game.phase == server.GamePhase.VOTE_REVEAL:
-            player.emit("confirm_vote_reveal")
-        elif game.phase == server.GamePhase.MISSION:
-            assert human_id in game.proposed_team
-            player.emit("play_mission_card", {"card": "success"})
-        elif game.phase == server.GamePhase.MISSION_REVEAL:
-            player.emit("advance_after_mission")
-        elif game.phase == server.GamePhase.ASSASSIN_PHASE:
-            assert server.get_assassin(game).player_id == human_id
-            player.emit(
-                "assassinate",
-                {
-                    "target_player_id": server.get_assassin_targets(game)[
-                        0
-                    ].player_id
-                },
-            )
-        else:
-            pytest.fail(f"Beta game stalled in {game.phase}")
-
-    assert game.phase == server.GamePhase.GAME_OVER
-    assert game.winner in {"good", "evil"}
-    player.disconnect()
 
 
 def test_production_configuration_fails_closed_when_secrets_are_missing():

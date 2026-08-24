@@ -61,6 +61,8 @@ PUBLIC_ORIGIN = os.environ.get("PUBLIC_ORIGIN", "").rstrip("/")
 ENABLE_DEV_ROUTES = os.environ.get("ENABLE_DEV_ROUTES", "false").lower() == "true"
 TRUST_PROXY_HEADERS = os.environ.get("TRUST_PROXY_HEADERS", "false").lower() == "true"
 PORT = int(os.environ.get("PORT", 5001))
+APP_VERSION = os.environ.get("APP_VERSION", "development")[:64]
+ANALYTICS_SCHEMA_VERSION = 1
 
 if IS_PRODUCTION:
     missing = [
@@ -127,6 +129,7 @@ chat_persistence_error_logged = False
 game_persistence_error_logged = False
 room_persistence_error_logged = False
 selfie_persistence_error_logged = False
+analytics_persistence_error_logged = False
 
 
 @app.after_request
@@ -171,6 +174,7 @@ EVENT_LIMITS = {
     "claim_seat": (10, 60),
     "pair_display": (10, 60),
     "chat": (30, 60),
+    "analytics": (30, 60),
     "default": (120, 60),
 }
 MAX_CONNECTIONS = int(os.environ.get("MAX_CONNECTIONS", 100))
@@ -261,6 +265,85 @@ def log_game_event(game: GameState, event_type: str, payload: dict) -> None:
             game_persistence_error_logged = True
 
 
+def historical_game_summary(game: GameState) -> dict:
+    """History keeps selfie references while the live victory UI keeps images."""
+    summary = get_game_summary(game)
+    for item, player in zip(summary.get("players", []), game.player_order_list()):
+        item.pop("avatar_image", None)
+        if player.selfie_sha256:
+            item["selfie_sha256"] = player.selfie_sha256
+    return summary
+
+
+def log_completed_game(game: GameState) -> None:
+    """Write the compact durable summary and one terminal product event."""
+    log_game_event(game, "game_over", historical_game_summary(game))
+    record_product_event(
+        "game_completed",
+        game=game,
+        payload={
+            "winner": game.winner or "unknown",
+            "win_reason": game.win_reason or "unknown",
+            "mission_count": len(game.mission_results),
+            "duration_seconds": max(
+                0, int(time.time() - game.started_at) if game.started_at else 0
+            ),
+        },
+    )
+
+
+def record_product_event(
+    event_type: str,
+    *,
+    game: GameState | None = None,
+    actor_type: str = "system",
+    actor_id: str | None = None,
+    analytics_id: str | None = None,
+    payload: dict | None = None,
+) -> None:
+    """Persist one privacy-bounded analytics fact; never interrupt gameplay."""
+    global analytics_persistence_error_logged
+    try:
+        phase = game.phase.value if game else None
+        chat_store.save_product_event(
+            event_id=str(uuid.uuid4()),
+            schema_version=ANALYTICS_SCHEMA_VERSION,
+            app_version=APP_VERSION,
+            party_id=game.party_id if game else None,
+            room_code=game.code if game else None,
+            game_id=game.game_id if game else None,
+            game_started_at=game.started_at if game else None,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            analytics_id=analytics_id,
+            event_type=event_type,
+            phase=phase,
+            mission_num=(game.current_mission + 1) if game and game.started_at else None,
+            proposal_attempt=(game.consecutive_rejections + 1) if game and game.started_at else None,
+            payload=payload or {},
+        )
+        analytics_persistence_error_logged = False
+    except Exception:
+        if not analytics_persistence_error_logged:
+            logger.exception("Could not persist product analytics")
+            analytics_persistence_error_logged = True
+
+
+def mark_phase_started(game: GameState, event_type: str, payload: dict | None = None) -> None:
+    game.phase_started_at = time.time()
+    record_product_event(event_type, game=game, payload=payload)
+
+
+def valid_analytics_id(value) -> str | None:
+    """Accept only a resettable UUID supplied by the browser."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return str(uuid.UUID(value))
+    except (ValueError, AttributeError):
+        return None
+
+
 def recent_chat_payload(game: GameState, limit: int = 30) -> list[dict]:
     """Return a small player-safe chat tail for reconnecting clients."""
     try:
@@ -324,7 +407,10 @@ def serialize_game(game: GameState) -> dict:
         active_elapsed += max(0, now - game.active_since)
     return {
         "code": game.code,
+        "party_id": game.party_id,
+        "game_id": game.game_id,
         "phase": game.phase.value,
+        "phase_started_at": game.phase_started_at,
         "players": [
             {
                 "player_id": player.player_id,
@@ -337,6 +423,9 @@ def serialize_game(game: GameState) -> dict:
                 "color_index": player.color_index,
                 "avatar_index": player.avatar_index,
                 "avatar_image": player.avatar_image,
+                "analytics_id": player.analytics_id,
+                "selfie_sha256": player.selfie_sha256,
+                "selfie_storage_name": player.selfie_storage_name,
                 "ready": player.ready,
             }
             for player in game.players.values()
@@ -348,6 +437,8 @@ def serialize_game(game: GameState) -> dict:
                 "session_token_hash": spectator.session_token_hash
                 or (token_digest(spectator.session_token) if spectator.session_token else None),
                 "color_index": spectator.color_index,
+                "vision_mode": spectator.vision_mode,
+                "analytics_id": spectator.analytics_id,
             }
             for spectator in game.spectators.values()
         ],
@@ -399,7 +490,10 @@ def deserialize_game(state: dict, *, saved_at: float) -> GameState:
     if not isinstance(state, dict) or not isinstance(state.get("code"), str):
         raise ValueError("Invalid room snapshot")
     game = GameState(state["code"].upper())
+    game.party_id = state.get("party_id") or game.party_id
+    game.game_id = state.get("game_id")
     game.phase = GamePhase(state.get("phase", GamePhase.LOBBY.value))
+    game.phase_started_at = float(state.get("phase_started_at", saved_at))
     for item in state.get("players", []):
         player = PlayerInfo(
             item["player_id"],
@@ -412,15 +506,22 @@ def deserialize_game(state: dict, *, saved_at: float) -> GameState:
         player.team = Team(item["team"]) if item.get("team") else None
         player.session_token_hash = item.get("session_token_hash")
         player.avatar_image = item.get("avatar_image")
+        player.analytics_id = valid_analytics_id(item.get("analytics_id"))
+        player.selfie_sha256 = item.get("selfie_sha256")
+        player.selfie_storage_name = item.get("selfie_storage_name")
         player.ready = bool(item.get("ready", player.is_bot))
         player.connected = False
         player.sid = None
         game.players[player.player_id] = player
     for item in state.get("spectators", []):
         spectator = SpectatorInfo(
-            item["spectator_id"], item["name"], int(item.get("color_index", 0))
+            item["spectator_id"],
+            item["name"],
+            int(item.get("color_index", 0)),
+            item.get("vision_mode", "blind"),
         )
         spectator.session_token_hash = item.get("session_token_hash")
+        spectator.analytics_id = valid_analytics_id(item.get("analytics_id"))
         spectator.connected = False
         spectator.sid = None
         game.spectators[spectator.spectator_id] = spectator
@@ -586,9 +687,19 @@ def resume_game(game: GameState) -> None:
     persist_game(game)
 
 
-def discard_game(game_code: str, *, notify: bool = False) -> None:
+def discard_game(
+    game_code: str, *, notify: bool = False, reason: str = "host_ended"
+) -> None:
     """Remove one game and all of its reconnect/authorization state."""
     with state_lock:
+        game = games.get(game_code)
+        if game:
+            event_type = "game_expired" if reason == "expired" else "game_abandoned"
+            record_product_event(
+                event_type,
+                game=game,
+                payload={"reason": reason, "had_started": bool(game.started_at)},
+            )
         if notify:
             emit_to_game(game_code, "game_ended", {})
         # Remove still-connected clients from the Socket.IO room as well as
@@ -638,7 +749,7 @@ def cleanup_stale_games() -> None:
             continue
         with game.lock:
             if game.expires_at is not None and game.expires_at <= time.time():
-                discard_game(game_code, notify=True)
+                discard_game(game_code, notify=True, reason="expired")
 
 
 def pause(seconds: float) -> None:
@@ -814,6 +925,7 @@ def public_spectrum_payload(game: GameState) -> dict[str, dict[str, float]]:
 def lobby_payload(game: GameState) -> dict:
     return {
         "players": game.public_players(),
+        "player_order": [game.players[player_id].name for player_id in game.player_order],
         "public_spectrum": public_spectrum_payload(game),
         "role_manifest": role_manifest(game),
         "settings": {
@@ -825,6 +937,41 @@ def lobby_payload(game: GameState) -> dict:
     }
 
 
+def night_pending_names(game: GameState) -> list[str]:
+    """Public confirmation status only; never includes roles or teams."""
+    return [
+        player.name
+        for player in game.player_order_list()
+        if player.player_id not in game.night_acks
+    ]
+
+
+def connected_spectator_count(game: GameState) -> int:
+    return sum(spectator.connected for spectator in game.spectators.values())
+
+
+def spectator_role_payload(game: GameState) -> list[dict]:
+    """Private omniscient-spectator knowledge; never broadcast to the room."""
+    return [
+        {
+            "player_id": player.player_id,
+            "name": player.name,
+            "role": player.role.value,
+            "team": player.team.value,
+        }
+        for player in game.player_order_list()
+        if player.role and player.team
+    ]
+
+
+def emit_spectator_count(game: GameState) -> None:
+    emit_to_game(
+        game.code,
+        "spectator_count_updated",
+        {"spectator_count": connected_spectator_count(game)},
+    )
+
+
 def spectator_snapshot(game: GameState, spectator: SpectatorInfo) -> dict:
     snapshot = build_state_snapshot(game, "")
     snapshot.update(
@@ -832,8 +979,11 @@ def spectator_snapshot(game: GameState, spectator: SpectatorInfo) -> dict:
             "is_spectator": True,
             "spectator_id": spectator.spectator_id,
             "my_name": spectator.name,
+            "spectator_vision_mode": spectator.vision_mode,
         }
     )
+    if spectator.vision_mode == "omniscient":
+        snapshot["spectator_roles"] = spectator_role_payload(game)
     return snapshot
 
 
@@ -853,9 +1003,7 @@ def validate_participant_name(game: GameState, name: str) -> str:
 def add_beta_bots(game: GameState, target_count: int = 6) -> None:
     bot_number = 1
     existing_names = {player.name.lower() for player in game.players.values()}
-    existing_names.update(
-        spectator.name.lower() for spectator in game.spectators.values()
-    )
+    existing_names.update(spectator.name.lower() for spectator in game.spectators.values())
     while game.player_count() < target_count:
         while f"bot {bot_number}" in existing_names:
             bot_number += 1
@@ -878,15 +1026,18 @@ def remove_beta_bots(game: GameState) -> None:
 
 def sync_beta_bots(game: GameState, target_count: int) -> None:
     while game.player_count() > target_count:
-        bot = next((p for p in reversed(game.player_order) if game.players[p].is_bot), None)
-        if bot is None:
+        bot_id = next(
+            (player_id for player_id in reversed(game.player_order) if game.players[player_id].is_bot),
+            None,
+        )
+        if bot_id is None:
             break
-        game.players.pop(bot, None)
-        game.player_order.remove(bot)
+        game.players.pop(bot_id, None)
+        game.player_order.remove(bot_id)
     add_beta_bots(game, target_count)
 
 
-def bot_players(game: GameState):
+def bot_players(game: GameState) -> list[PlayerInfo]:
     return [player for player in game.players.values() if player.is_bot]
 
 
@@ -940,18 +1091,23 @@ def run_discussion_timer(game_code: str, phase_key: str, duration: int):
             )
             emit_to_game(game_code, "discussion_tick", {"remaining_seconds": remaining})
             if remaining <= 0:
+                record_product_event(
+                    "discussion_timer_expired",
+                    game=game,
+                    payload={"duration_seconds": game.discussion_time},
+                )
                 transition_to_team_proposal(game)
                 return
 
 
-def run_bot_discussion(game_code: str, phase_key: str, duration: int):
-    """Let the timer visibly begin, then have a bot leader choose promptly."""
+def run_bot_discussion(game_code: str, phase_key: str | None, duration: int) -> None:
+    """Give the table a brief beat, then let a bot leader continue."""
     pause(min(3, max(1, duration)))
     game = games.get(game_code)
     if not game:
         return
     with game.lock:
-        if game.timer_phase_key != phase_key or game.phase != GamePhase.DISCUSSION:
+        if game.phase != GamePhase.DISCUSSION or game.timer_phase_key != phase_key:
             return
         game.timer_phase_key = None
         game.timer_deadline = None
@@ -977,6 +1133,11 @@ def run_proposal_timer(game_code: str, phase_key: str, duration: int):
             if remaining <= 0:
                 # Advisory only: the leader can still finish their proposal.
                 emit_to_game(game_code, "proposal_timer_expired", {})
+                record_product_event(
+                    "proposal_timer_expired",
+                    game=game,
+                    payload={"duration_seconds": game.proposal_time},
+                )
                 game.timer_remaining = 0
                 persist_game(game)
                 return
@@ -989,6 +1150,11 @@ def run_proposal_timer(game_code: str, phase_key: str, duration: int):
 
 def start_round(game: GameState):
     game.phase = GamePhase.ROUND_START
+    mark_phase_started(
+        game,
+        "round_started",
+        {"leader_id": game.current_leader().player_id if game.current_leader() else None},
+    )
     leader = game.current_leader()
     player_count = game.player_count()
     mission_sizes = MISSION_SIZES.get(player_count, [])
@@ -1035,6 +1201,11 @@ def start_round(game: GameState):
     game.timer_kind = "discussion" if phase_key else None
     game.timer_deadline = time.time() + game.discussion_time if phase_key else None
     game.timer_remaining = None
+    mark_phase_started(
+        game,
+        "discussion_started",
+        {"duration_seconds": game.discussion_time},
+    )
     emit_to_game(
         game.code,
         "discussion_start",
@@ -1072,6 +1243,14 @@ def transition_to_team_proposal(game: GameState):
     game.timer_kind = "proposal" if phase_key else None
     game.timer_deadline = time.time() + game.proposal_time if phase_key else None
     game.timer_remaining = None
+    mark_phase_started(
+        game,
+        "proposal_started",
+        {
+            "duration_seconds": game.proposal_time,
+            "leader_id": leader.player_id if leader else None,
+        },
+    )
     emit_to_game(
         game.code,
         "proposal_start",
@@ -1103,7 +1282,16 @@ def transition_to_night_phase(game: GameState):
     game.timer_kind = None
     game.timer_remaining = None
     game.night_acks = set()
-    emit_to_game(game.code, "night_phase_start", {"total_players": game.player_count()})
+    mark_phase_started(game, "night_phase_started", {"player_count": game.player_count()})
+    emit_to_game(
+        game.code,
+        "night_phase_start",
+        {
+            "confirmed": len(game.night_acks),
+            "total_players": game.player_count(),
+            "pending_names": night_pending_names(game),
+        },
+    )
     # Send private role info to each player
     for pid, player in game.players.items():
         if player.sid:
@@ -1119,11 +1307,23 @@ def transition_to_night_phase(game: GameState):
             )
         elif player.is_bot:
             game.night_acks.add(pid)
+    omniscient_roles = spectator_role_payload(game)
+    for spectator in game.spectators.values():
+        if spectator.sid and spectator.vision_mode == "omniscient":
+            emit_to_player(
+                spectator.sid,
+                "spectator_roles_revealed",
+                {"players": omniscient_roles},
+            )
     if game.night_acks:
         emit_to_game(
             game.code,
             "night_phase_progress",
-            {"confirmed": len(game.night_acks), "total": game.player_count()},
+            {
+                "confirmed": len(game.night_acks),
+                "total": game.player_count(),
+                "pending_names": night_pending_names(game),
+            },
         )
     persist_game(game)
 
@@ -1131,6 +1331,7 @@ def transition_to_night_phase(game: GameState):
 def submit_team_proposal(
     game: GameState, leader, team_ids: list[str]
 ) -> None:
+    decision_ms = max(0, int((time.time() - game.phase_started_at) * 1000))
     validate_team_proposal(game, team_ids)
     game.proposed_team = team_ids
     game.timer_phase_key = None
@@ -1138,6 +1339,15 @@ def submit_team_proposal(
     game.timer_kind = None
     game.timer_remaining = None
     game.phase = GamePhase.TEAM_VOTE
+    record_product_event(
+        "team_proposal_submitted",
+        game=game,
+        actor_type="player",
+        actor_id=leader.player_id,
+        analytics_id=leader.analytics_id,
+        payload={"decision_ms": decision_ms, "team_size": len(team_ids)},
+    )
+    mark_phase_started(game, "team_vote_started", {"team_size": len(team_ids)})
     team_names = [game.players[pid].name for pid in team_ids]
     payload = {
         "team": team_names,
@@ -1201,6 +1411,11 @@ def emit_mission_waiting(game: GameState) -> None:
 
 def finish_mission(game: GameState, result: dict) -> None:
     game.phase = GamePhase.MISSION_REVEAL
+    mark_phase_started(
+        game,
+        "mission_reveal_started",
+        {"passed": bool(result["passed"]), "fail_count": result["fail_count"]},
+    )
     emit_to_game(
         game.code,
         "mission_reveal",
@@ -1269,7 +1484,7 @@ def play_bot_mission_cards(game: GameState) -> None:
         if not player.is_bot:
             continue
         card = "success"
-        if player.team.value == "evil":
+        if player.team == Team.EVIL:
             card = secure_random.choice(("success", "fail"))
         result = record_mission_card(game, player_id, card)
     emit_mission_waiting(game)
@@ -1279,6 +1494,11 @@ def play_bot_mission_cards(game: GameState) -> None:
 
 def finish_vote(game: GameState, result: dict) -> None:
     game.phase = GamePhase.VOTE_REVEAL
+    mark_phase_started(
+        game,
+        "vote_reveal_started",
+        {"approved": bool(result["approved"])},
+    )
     public_vote = {
         "mission_num": game.current_mission + 1,
         "attempt": game.consecutive_rejections + 1,
@@ -1298,7 +1518,7 @@ def finish_vote(game: GameState, result: dict) -> None:
             **result,
         },
     )
-    emit_to_game(game.code, "vote_reveal", result)
+    emit_to_game(game.code, "vote_reveal", {**result, "team": public_vote["team"]})
     leader = game.current_leader()
     if leader and leader.is_bot:
         advance_after_vote(game)
@@ -1311,6 +1531,7 @@ def advance_after_vote(game: GameState) -> None:
     game.pending_vote_result = None
     outcome = process_vote_result(game, result["approved"])
     if outcome == "mission":
+        mark_phase_started(game, "mission_started", {"team_size": len(game.proposed_team)})
         emit_to_game(
             game.code,
             "mission_start",
@@ -1326,7 +1547,7 @@ def advance_after_vote(game: GameState) -> None:
         persist_game(game)
         pause(2)
         emit_to_game(game.code, "game_over", get_game_summary(game))
-        log_game_event(game, "game_over", get_game_summary(game))
+        log_completed_game(game)
     else:
         emit_to_game(
             game.code,
@@ -1359,7 +1580,7 @@ def run_bot_assassination(game: GameState) -> None:
     pause(3)
     emit_to_game(game.code, "game_over", get_game_summary(game))
     log_game_event(game, "assassination", result)
-    log_game_event(game, "game_over", get_game_summary(game))
+    log_completed_game(game)
 
 
 # ---------------------------------------------------------------------------
@@ -1380,6 +1601,81 @@ def on_connect(auth=None):
         connected_sids.add(request.sid)
         sid_to_ip[request.sid] = client_ip
     return None
+
+
+CLIENT_ANALYTICS_EVENTS = {
+    "client_session_started",
+    "help_opened",
+    "role_card_opened",
+    "chat_opened",
+    "chat_closed",
+    "chat_notification_opened",
+    "selfie_prompt_shown",
+    "selfie_capture_started",
+    "selfie_permission_denied",
+    "selfie_capture_failed",
+    "victory_screen_viewed",
+    "rematch_prompt_viewed",
+    "spectator_mode_help_opened",
+    "client_error",
+}
+CLIENT_ANALYTICS_KEYS = {
+    "screen_class",
+    "display_mode",
+    "context",
+    "role",
+    "source",
+    "reason",
+    "error_category",
+    "unread_count",
+    "camera_permission",
+    "vision_mode",
+}
+
+
+@socketio.on("client_analytics")
+@rate_limited("analytics")
+def on_client_analytics(data):
+    """Accept a small allowlisted UX event; free-form text is never stored."""
+    try:
+        data = require_object(data)
+        event_type = require_string(data, "event_type", minimum=3, maximum=64)
+        if event_type not in CLIENT_ANALYTICS_EVENTS:
+            raise ValueError("Unsupported analytics event")
+        raw_payload = data.get("payload", {})
+        if not isinstance(raw_payload, dict) or len(raw_payload) > 10:
+            raise ValueError("Invalid analytics payload")
+        payload = {}
+        for key, value in raw_payload.items():
+            if key not in CLIENT_ANALYTICS_KEYS:
+                continue
+            if isinstance(value, bool):
+                payload[key] = value
+            elif isinstance(value, int) and not isinstance(value, bool):
+                payload[key] = max(-1_000_000, min(value, 1_000_000))
+            elif isinstance(value, str):
+                payload[key] = value[:64]
+        info = sid_to_info.get(request.sid, {})
+        game = games.get(info.get("game_code"))
+        analytics_id = valid_analytics_id(data.get("analytics_id")) or info.get(
+            "analytics_id"
+        )
+        actor_type = "host_display" if info.get("is_host_screen") else (
+            "spectator" if info.get("spectator_id") else (
+                "player" if info.get("player_id") else "browser"
+            )
+        )
+        actor_id = info.get("player_id") or info.get("spectator_id")
+        record_product_event(
+            event_type,
+            game=game,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            analytics_id=analytics_id,
+            payload=payload,
+        )
+    except ValueError:
+        return
 
 
 @socketio.on("disconnect")
@@ -1406,6 +1702,13 @@ def on_disconnect(reason=None):
                 suspend_game(game)
             else:
                 persist_game(game)
+            record_product_event(
+                "host_display_disconnected",
+                game=game,
+                actor_type="host_display",
+                analytics_id=info.get("analytics_id"),
+                payload={"reason": str(reason or "unknown")[:32]},
+            )
             return
         spectator_id = info.get("spectator_id")
         if spectator_id and spectator_id in game.spectators:
@@ -1413,6 +1716,15 @@ def on_disconnect(reason=None):
             if spectator.sid == sid:
                 spectator.connected = False
                 spectator.sid = None
+                emit_spectator_count(game)
+                record_product_event(
+                    "spectator_disconnected",
+                    game=game,
+                    actor_type="spectator",
+                    actor_id=spectator_id,
+                    analytics_id=spectator.analytics_id,
+                    payload={"reason": str(reason or "unknown")[:32]},
+                )
             persist_game(game)
             return
         player_id = info.get("player_id")
@@ -1434,6 +1746,14 @@ def on_disconnect(reason=None):
                     "player_name": game.players[player_id].name,
                     "players": game.public_players(),
                 },
+            )
+            record_product_event(
+                "player_disconnected",
+                game=game,
+                actor_type="player",
+                actor_id=player_id,
+                analytics_id=player.analytics_id,
+                payload={"reason": str(reason or "unknown")[:32]},
             )
             if not has_connected_real_player(game):
                 suspend_game(game)
@@ -1533,6 +1853,7 @@ def on_pair_host_display(data):
     try:
         data = require_object(data)
         game_code = require_string(data, "room_code", minimum=4, maximum=4).upper()
+        analytics_id = valid_analytics_id(data.get("analytics_id"))
         pairing_code = require_string(data, "pairing_code", minimum=6, maximum=6)
         if not pairing_code.isdigit():
             raise ValueError("Pairing code must contain six digits")
@@ -1554,7 +1875,14 @@ def on_pair_host_display(data):
             "game_code": game.code,
             "is_host_screen": True,
             "host_token": host_token,
+            "analytics_id": analytics_id,
         }
+        record_product_event(
+            "host_display_paired",
+            game=game,
+            actor_type="host_display",
+            analytics_id=analytics_id,
+        )
         emit(
             "display_paired",
             {"room_code": game.code, "host_token": host_token},
@@ -1571,6 +1899,7 @@ def on_register_host_screen(data):
         data = require_object(data)
         game_code = require_string(data, "game_code", minimum=4, maximum=4).upper()
         host_token = require_string(data, "host_token", minimum=32, maximum=128)
+        analytics_id = valid_analytics_id(data.get("analytics_id"))
         game = games.get(game_code)
         if (
             not game
@@ -1593,7 +1922,14 @@ def on_register_host_screen(data):
             "game_code": game_code,
             "is_host_screen": True,
             "host_token": host_token,
+            "analytics_id": analytics_id,
         }
+        record_product_event(
+            "host_display_reconnected",
+            game=game,
+            actor_type="host_display",
+            analytics_id=analytics_id,
+        )
         player_count = game.player_count()
         emit(
             "host_registered",
@@ -1601,6 +1937,7 @@ def on_register_host_screen(data):
                 "code": game_code,
                 "join_url": public_base_url(),
                 "players": game.public_players(),
+                "player_order": [game.players[player_id].name for player_id in game.player_order],
                 "public_spectrum": public_spectrum_payload(game),
                 "role_manifest": role_manifest(game),
                 "phase": game.phase,
@@ -1623,8 +1960,6 @@ def on_register_host_screen(data):
                     if game.timer_deadline
                     else None
                 ),
-                "beta_test_mode": game.beta_test_mode,
-                "beta_test_player_count": game.beta_test_player_count,
                 "game_started_at": game.started_at,
                 "game_elapsed_seconds": int(
                     game.active_elapsed_seconds
@@ -1634,6 +1969,8 @@ def on_register_host_screen(data):
                 "expires_at": game.expires_at,
                 "night_confirmed": len(game.night_acks),
                 "night_total": game.player_count(),
+                "night_pending_names": night_pending_names(game),
+                "spectator_count": connected_spectator_count(game),
                 "pending_mission_outcome": game.pending_mission_outcome,
                 "spotlight_player_id": game.spotlight_player_id,
                 "rematch_ready_ids": sorted(game.rematch_ready),
@@ -1684,6 +2021,9 @@ def on_register_host_screen(data):
 @rate_limited("create_game")
 def on_create_game(data=None):
     try:
+        if not app.config.get("TESTING"):
+            raise ValueError("Create rooms from a player phone, then pair this display")
+        analytics_id = valid_analytics_id(data.get("analytics_id")) if isinstance(data, dict) else None
         cleanup_stale_games()
         with state_lock:
             sid = request.sid
@@ -1720,7 +2060,15 @@ def on_create_game(data=None):
                 "game_code": code,
                 "is_host_screen": True,
                 "host_token": game.host_token,
+                "analytics_id": analytics_id,
             }
+            record_product_event(
+                "room_created",
+                game=game,
+                actor_type="host_display",
+                analytics_id=analytics_id,
+                payload={"creation_mode": "host_display"},
+            )
         emit(
             "game_created",
             {
@@ -1740,6 +2088,7 @@ def on_create_player_game(data):
     try:
         data = require_object(data)
         name = require_string(data, "player_name", minimum=1, maximum=12)
+        analytics_id = valid_analytics_id(data.get("analytics_id"))
         cleanup_stale_games()
         with state_lock:
             sid = request.sid
@@ -1753,6 +2102,7 @@ def on_create_player_game(data):
             game.host_token_hash = token_digest(game.host_token)
             player_id = str(uuid.uuid4())
             player = add_player(game, name, player_id)
+            player.analytics_id = analytics_id
             token = secrets.token_urlsafe(32)
             player.session_token = token
             player.session_token_hash = token_digest(token)
@@ -1762,7 +2112,27 @@ def on_create_player_game(data):
             game_activity[code] = time.monotonic()
             session_tokens[player.session_token_hash] = (code, player_id)
             join_room(code)
-            sid_to_info[sid] = {"game_code": code, "player_id": player_id}
+            sid_to_info[sid] = {
+                "game_code": code,
+                "player_id": player_id,
+                "analytics_id": analytics_id,
+            }
+            record_product_event(
+                "room_created",
+                game=game,
+                actor_type="player",
+                actor_id=player_id,
+                analytics_id=analytics_id,
+                payload={"creation_mode": "player_host"},
+            )
+            record_product_event(
+                "player_joined",
+                game=game,
+                actor_type="player",
+                actor_id=player_id,
+                analytics_id=analytics_id,
+                payload={"join_method": "created_room", "player_count": 1},
+            )
         emit(
             "join_success",
             {
@@ -1792,6 +2162,7 @@ def on_join_game(data):
         data = require_object(data)
         code = require_string(data, "room_code", minimum=4, maximum=4).upper()
         name = require_string(data, "player_name", minimum=1, maximum=12)
+        analytics_id = valid_analytics_id(data.get("analytics_id"))
         game = games.get(code)
         if not game:
             raise ValueError("Room not found. Check the code and try again.")
@@ -1829,20 +2200,36 @@ def on_join_game(data):
             raise ValueError("This connection is already in another game")
         validate_participant_name(game, name)
         if game.beta_test_mode and game.player_count() >= game.beta_test_player_count:
-            bot = next((p for p in reversed(game.player_order) if game.players[p].is_bot), None)
-            if bot is not None:
-                game.players.pop(bot, None)
-                game.player_order.remove(bot)
+            bot_id = next(
+                (player_id for player_id in reversed(game.player_order) if game.players[player_id].is_bot),
+                None,
+            )
+            if bot_id is not None:
+                game.players.pop(bot_id, None)
+                game.player_order.remove(bot_id)
         player_id = str(uuid.uuid4())
         player = add_player(game, name, player_id)
+        player.analytics_id = analytics_id
         token = secrets.token_urlsafe(32)
         player.session_token = token
         player.session_token_hash = token_digest(token)
         player.sid = sid
         session_tokens[player.session_token_hash] = (code, player_id)
         join_room(code)
-        sid_to_info[sid] = {"game_code": code, "player_id": player_id}
+        sid_to_info[sid] = {
+            "game_code": code,
+            "player_id": player_id,
+            "analytics_id": analytics_id,
+        }
         resume_game(game)
+        record_product_event(
+            "player_joined",
+            game=game,
+            actor_type="player",
+            actor_id=player_id,
+            analytics_id=analytics_id,
+            payload={"join_method": "room_code", "player_count": game.player_count()},
+        )
         emit(
             "join_success",
             {
@@ -1884,6 +2271,10 @@ def on_join_spectator(data):
         data = require_object(data)
         code = require_string(data, "room_code", minimum=4, maximum=4).upper()
         name = require_string(data, "spectator_name", minimum=1, maximum=12)
+        vision_mode = data.get("vision_mode", "blind")
+        analytics_id = valid_analytics_id(data.get("analytics_id"))
+        if vision_mode not in {"blind", "omniscient"}:
+            raise ValueError("Choose blind or all-knowing spectator mode")
         game = games.get(code)
         if not game:
             raise ValueError("Room not found. Check the code and try again.")
@@ -1897,7 +2288,9 @@ def on_join_spectator(data):
             spectator_id,
             name,
             color_index=(game.player_count() + len(game.spectators)) % 10,
+            vision_mode=vision_mode,
         )
+        spectator.analytics_id = analytics_id
         token = secrets.token_urlsafe(32)
         spectator.session_token = token
         spectator.session_token_hash = token_digest(token)
@@ -1908,12 +2301,22 @@ def on_join_spectator(data):
         sid_to_info[request.sid] = {
             "game_code": game.code,
             "spectator_id": spectator_id,
+            "analytics_id": analytics_id,
         }
         snapshot = spectator_snapshot(game, spectator)
         snapshot["recent_chat"] = recent_chat_payload(game)
         emit(
             "spectator_join_success",
             {"session_token": token, "snapshot": snapshot},
+        )
+        emit_spectator_count(game)
+        record_product_event(
+            "spectator_joined",
+            game=game,
+            actor_type="spectator",
+            actor_id=spectator_id,
+            analytics_id=analytics_id,
+            payload={"vision_mode": vision_mode},
         )
     except ValueError as error:
         emit_validation_error(error)
@@ -1929,6 +2332,7 @@ def on_reconnect_game(data):
         cleanup_stale_games()
         data = require_object(data)
         token = require_string(data, "session_token", minimum=32, maximum=128)
+        analytics_id = valid_analytics_id(data.get("analytics_id"))
         digest = token_digest(token)
         entry = session_tokens.get(digest)
         spectator_entry = spectator_tokens.get(digest)
@@ -1949,14 +2353,25 @@ def on_reconnect_game(data):
             spectator.sid = request.sid
             spectator.connected = True
             spectator.session_token = token
+            if analytics_id:
+                spectator.analytics_id = analytics_id
             join_room(game_code)
             sid_to_info[request.sid] = {
                 "game_code": game_code,
                 "spectator_id": spectator_id,
+                "analytics_id": spectator.analytics_id,
             }
             snapshot = spectator_snapshot(game, spectator)
             snapshot["recent_chat"] = recent_chat_payload(game)
             emit("state_snapshot", snapshot)
+            emit_spectator_count(game)
+            record_product_event(
+                "spectator_reconnected",
+                game=game,
+                actor_type="spectator",
+                actor_id=spectator_id,
+                analytics_id=spectator.analytics_id,
+            )
             return
         if not entry:
             raise ValueError("Session not found. Please rejoin.")
@@ -1980,9 +2395,22 @@ def on_reconnect_game(data):
         player.sid = sid
         player.connected = True
         player.session_token = token
+        if analytics_id:
+            player.analytics_id = analytics_id
         join_room(game_code)
-        sid_to_info[sid] = {"game_code": game_code, "player_id": player_id}
+        sid_to_info[sid] = {
+            "game_code": game_code,
+            "player_id": player_id,
+            "analytics_id": player.analytics_id,
+        }
         resume_game(game)
+        record_product_event(
+            "player_reconnected",
+            game=game,
+            actor_type="player",
+            actor_id=player_id,
+            analytics_id=player.analytics_id,
+        )
         snapshot = build_state_snapshot(game, player_id)
         snapshot["recent_chat"] = recent_chat_payload(game)
         emit("state_snapshot", snapshot)
@@ -2008,8 +2436,10 @@ def on_request_seat_recovery(data):
         data = require_object(data)
         player_id = require_string(data, "player_id", minimum=32, maximum=64)
         player = game.players.get(player_id)
-        if not player or player.is_bot:
+        if not player:
             raise ValueError("Player not found")
+        if player.is_bot:
+            raise ValueError("Bot seats cannot be recovered")
         if player.connected:
             raise ValueError("That player is still connected")
         now = time.time()
@@ -2161,6 +2591,16 @@ def on_select_avatar(data):
         data = require_object(data)
         player.avatar_index = require_integer(data, "avatar_index", minimum=0, maximum=9)
         player.avatar_image = None
+        player.selfie_sha256 = None
+        player.selfie_storage_name = None
+        record_product_event(
+            "avatar_selected",
+            game=game,
+            actor_type="player",
+            actor_id=player.player_id,
+            analytics_id=player.analytics_id,
+            payload={"avatar_index": player.avatar_index},
+        )
         emit_to_game(game.code, "lobby_update", lobby_payload(game))
     except ValueError as error:
         emit_validation_error(error)
@@ -2170,6 +2610,8 @@ def on_select_avatar(data):
 @rate_limited()
 def on_select_selfie(data):
     global selfie_persistence_error_logged
+    game = None
+    player = None
     try:
         game, player = validate_caller(request.sid, require_phase=GamePhase.LOBBY)
         data = require_object(data)
@@ -2198,13 +2640,39 @@ def on_select_selfie(data):
                 byte_count=byte_count,
             )
             selfie_persistence_error_logged = False
+            player.selfie_sha256 = digest
+            player.selfie_storage_name = storage_name
+            record_product_event(
+                "selfie_uploaded",
+                game=game,
+                actor_type="player",
+                actor_id=player.player_id,
+                analytics_id=player.analytics_id,
+                payload={"byte_count": byte_count},
+            )
         except Exception:
             if not selfie_persistence_error_logged:
                 logger.exception("Could not privately archive selfie")
                 selfie_persistence_error_logged = True
+            record_product_event(
+                "selfie_archive_failed",
+                game=game,
+                actor_type="player",
+                actor_id=player.player_id,
+                analytics_id=player.analytics_id,
+            )
         player.avatar_image = image
         emit_to_game(game.code, "lobby_update", lobby_payload(game))
     except ValueError as error:
+        if game and player:
+            record_product_event(
+                "selfie_upload_rejected",
+                game=game,
+                actor_type="player",
+                actor_id=player.player_id,
+                analytics_id=player.analytics_id,
+                payload={"reason": "validation"},
+            )
         emit_validation_error(error)
 
 
@@ -2218,9 +2686,50 @@ def on_set_ready(data):
         if not isinstance(ready, bool):
             raise ValueError("ready must be true or false")
         player.ready = ready
+        record_product_event(
+            "player_ready_changed",
+            game=game,
+            actor_type="player",
+            actor_id=player.player_id,
+            analytics_id=player.analytics_id,
+            payload={"ready": ready},
+        )
         emit_to_game(game.code, "lobby_update", lobby_payload(game))
     except ValueError as error:
         emit_validation_error(error)
+
+
+@socketio.on("change_name")
+@rate_limited()
+def on_change_name(data):
+    """Allow a seated player to rename only while the room is still a lobby."""
+    try:
+        game, player = validate_caller(request.sid, require_phase=GamePhase.LOBBY)
+        data = require_object(data)
+        name = require_string(data, "player_name", minimum=1, maximum=12).strip()
+        if not all(character.isalnum() or character == " " for character in name):
+            raise ValueError("Names may contain only letters, numbers, and spaces")
+        occupied = [
+            candidate.name
+            for candidate in game.players.values()
+            if candidate.player_id != player.player_id
+        ]
+        occupied.extend(spectator.name for spectator in game.spectators.values())
+        if any(existing.lower() == name.lower() for existing in occupied):
+            raise ValueError(f"Name '{name}' is already taken")
+        player.name = name
+        record_product_event(
+            "player_renamed",
+            game=game,
+            actor_type="player",
+            actor_id=player.player_id,
+            analytics_id=player.analytics_id,
+            payload={"name_length": len(name)},
+        )
+        emit("name_changed", {"player_name": player.name})
+        emit_to_game(game.code, "lobby_update", lobby_payload(game))
+    except ValueError as error:
+        emit("name_change_failed", {"message": str(error)})
 
 
 @socketio.on("update_settings")
@@ -2240,6 +2749,15 @@ def on_update_settings(data):
             game.proposal_time = require_integer(
                 data, "proposal_time", minimum=0, maximum=120
             )
+        record_product_event(
+            "settings_changed",
+            game=game,
+            actor_type="host_display",
+            payload={
+                "discussion_time": game.discussion_time,
+                "proposal_time": game.proposal_time,
+            },
+        )
         emit_to_game(
             game.code,
             "lobby_update",
@@ -2258,7 +2776,11 @@ def on_set_beta_test_mode(data):
         enabled = data.get("enabled")
         if not isinstance(enabled, bool):
             raise ValueError("enabled must be true or false")
-        target_count = require_integer(data, "target_count", minimum=6, maximum=10) if "target_count" in data else game.beta_test_player_count
+        target_count = (
+            require_integer(data, "target_count", minimum=6, maximum=10)
+            if "target_count" in data
+            else game.beta_test_player_count
+        )
         game.beta_test_player_count = target_count
         game.beta_test_mode = enabled
         if enabled:
@@ -2266,6 +2788,7 @@ def on_set_beta_test_mode(data):
         else:
             remove_beta_bots(game)
         emit_to_game(game.code, "lobby_update", lobby_payload(game))
+        persist_game(game)
     except ValueError as error:
         emit_validation_error(error)
 
@@ -2296,8 +2819,16 @@ def on_preview_team(data):
 @socketio.on("start_game")
 @rate_limited()
 def on_start_game():
+    game = None
     try:
         game = validate_host(request.sid, require_phase=GamePhase.LOBBY)
+        record_product_event(
+            "game_start_clicked",
+            game=game,
+            actor_type="host_display",
+            analytics_id=sid_to_info.get(request.sid, {}).get("analytics_id"),
+            payload={"player_count": game.player_count()},
+        )
         if prune_disconnected_lobby_players(game):
             emit_to_game(game.code, "lobby_update", lobby_payload(game))
         n = game.player_count()
@@ -2307,15 +2838,18 @@ def on_start_game():
             if not player.is_bot and not player.connected
         ]
         if disconnected:
-            raise ValueError("All players must reconnect before the game can start.")
-        if game.beta_test_mode and not any(
-            not player.is_bot for player in game.players.values()
-        ):
+            raise ValueError(
+                "All players must reconnect before the game can start. Waiting for: "
+                + ", ".join(disconnected)
+                + "."
+            )
+        if game.beta_test_mode and not any(not player.is_bot for player in game.players.values()):
             raise ValueError("Join with at least one real player before testing.")
         if n < 6 or n > 10:
             raise ValueError(f"Need 6-10 players. Currently {n}.")
         assign_roles(game)
         game.started_at = time.time()
+        game.game_id = str(uuid.uuid4())
         game.active_elapsed_seconds = 0.0
         game.active_since = game.started_at
         log_game_event(
@@ -2339,11 +2873,37 @@ def on_start_game():
                 ],
             },
         )
+        record_product_event(
+            "game_started",
+            game=game,
+            actor_type="host_display",
+            analytics_id=sid_to_info.get(request.sid, {}).get("analytics_id"),
+            payload={
+                "player_count": n,
+                "discussion_time": game.discussion_time,
+                "proposal_time": game.proposal_time,
+                "human_count": sum(not player.is_bot for player in game.players.values()),
+            },
+        )
         emit_to_game(game.code, "game_starting", {"player_count": n, "game_started_at": game.started_at})
         persist_game(game)
         pause(1)
         transition_to_night_phase(game)
     except ValueError as error:
+        if game:
+            message = str(error)
+            reason = (
+                "disconnected_players" if "reconnect" in message
+                else "player_count" if "Need 6-10" in message
+                else "no_human_player" if "real player" in message
+                else "validation"
+            )
+            record_product_event(
+                "game_start_blocked",
+                game=game,
+                actor_type="host_display",
+                payload={"reason": reason, "player_count": game.player_count()},
+            )
         emit_validation_error(error)
 
 
@@ -2361,6 +2921,14 @@ def on_night_phase_ack():
         return
     if player.player_id in game.night_acks:
         return  # Already acked, ignore duplicate
+    record_product_event(
+        "night_phase_confirmed",
+        game=game,
+        actor_type="player",
+        actor_id=player.player_id,
+        analytics_id=player.analytics_id,
+        payload={"decision_ms": max(0, int((time.time() - game.phase_started_at) * 1000))},
+    )
     game.night_acks.add(player.player_id)
     confirmed = len(game.night_acks)
     total = game.player_count()
@@ -2370,6 +2938,7 @@ def on_night_phase_ack():
         {
             "confirmed": confirmed,
             "total": total,
+            "pending_names": night_pending_names(game),
         },
     )
     if confirmed >= total:
@@ -2418,7 +2987,7 @@ def on_set_discussion_spotlight(data):
 def on_skip_discussion(data):
     try:
         require_object(data)
-        game, _ = validate_caller(
+        game, player = validate_caller(
             request.sid,
             require_phase=GamePhase.DISCUSSION,
             require_leader=True,
@@ -2427,6 +2996,14 @@ def on_skip_discussion(data):
         game.timer_deadline = None
         game.timer_kind = None
         game.timer_remaining = None
+        record_product_event(
+            "discussion_skipped",
+            game=game,
+            actor_type="player",
+            actor_id=player.player_id,
+            analytics_id=player.analytics_id,
+            payload={"elapsed_ms": max(0, int((time.time() - game.phase_started_at) * 1000))},
+        )
         emit_to_game(game.code, "discussion_end", {})
         transition_to_team_proposal(game)
     except ValueError as error:
@@ -2466,6 +3043,12 @@ def on_skip_proposal_timer():
         game.timer_deadline = None
         game.timer_kind = None
         game.timer_remaining = None
+        record_product_event(
+            "proposal_timer_skipped",
+            game=game,
+            actor_type="host_display",
+            payload={"elapsed_ms": max(0, int((time.time() - game.phase_started_at) * 1000))},
+        )
         emit_to_game(game.code, "proposal_timer_expired", {})
     except ValueError as error:
         emit_validation_error(error)
@@ -2490,6 +3073,17 @@ def on_cast_vote(data):
     except ValueError as e:
         emit("error", {"message": str(e)})
         return
+    record_product_event(
+        "vote_submitted",
+        game=game,
+        actor_type="player",
+        actor_id=player.player_id,
+        analytics_id=player.analytics_id,
+        payload={
+            "choice": vote,
+            "decision_ms": max(0, int((time.time() - game.phase_started_at) * 1000)),
+        },
+    )
     emit("vote_cast_ack", {}, room=sid)
     emit_vote_waiting(game)
     if result:
@@ -2500,10 +3094,18 @@ def on_cast_vote(data):
 @rate_limited()
 def on_confirm_vote_reveal():
     try:
-        game, _ = validate_caller(
+        game, player = validate_caller(
             request.sid,
             require_phase=GamePhase.VOTE_REVEAL,
             require_leader=True,
+        )
+        record_product_event(
+            "vote_reveal_confirmed",
+            game=game,
+            actor_type="player",
+            actor_id=player.player_id,
+            analytics_id=player.analytics_id,
+            payload={"elapsed_ms": max(0, int((time.time() - game.phase_started_at) * 1000))},
         )
         advance_after_vote(game)
     except ValueError as error:
@@ -2529,6 +3131,17 @@ def on_play_mission_card(data):
     except ValueError as e:
         emit("error", {"message": str(e)})
         return
+    record_product_event(
+        "mission_card_submitted",
+        game=game,
+        actor_type="player",
+        actor_id=player.player_id,
+        analytics_id=player.analytics_id,
+        payload={
+            "card": card,
+            "decision_ms": max(0, int((time.time() - game.phase_started_at) * 1000)),
+        },
+    )
     emit("mission_card_ack", {}, room=sid)
     emit_mission_waiting(game)
     if result:
@@ -2545,6 +3158,7 @@ def advance_after_mission(game: GameState) -> None:
     game.pending_mission_outcome = None
     if outcome == "assassin_phase":
         game.phase = GamePhase.ASSASSIN_PHASE
+        mark_phase_started(game, "assassin_phase_started")
         assassin = get_assassin(game)
         public_payload = {"assassin_name": assassin.name if assassin else "Unknown"}
         emit_to_game(game.code, "assassin_phase_start", public_payload)
@@ -2565,7 +3179,7 @@ def advance_after_mission(game: GameState) -> None:
     elif outcome == "evil_wins":
         game.phase = GamePhase.GAME_OVER
         emit_to_game(game.code, "game_over", get_game_summary(game))
-        log_game_event(game, "game_over", get_game_summary(game))
+        log_completed_game(game)
     else:
         game.current_mission += 1
         game.consecutive_rejections = 0
@@ -2580,10 +3194,18 @@ def advance_after_mission(game: GameState) -> None:
 @rate_limited()
 def on_advance_after_mission():
     try:
-        game, _ = validate_caller(
+        game, player = validate_caller(
             request.sid,
             require_phase=GamePhase.MISSION_REVEAL,
             require_leader=True,
+        )
+        record_product_event(
+            "mission_reveal_confirmed",
+            game=game,
+            actor_type="player",
+            actor_id=player.player_id,
+            analytics_id=player.analytics_id,
+            payload={"elapsed_ms": max(0, int((time.time() - game.phase_started_at) * 1000))},
         )
         advance_after_mission(game)
     except ValueError as error:
@@ -2604,6 +3226,14 @@ def on_assassinate(data):
     except ValueError as e:
         emit("error", {"message": str(e)})
         return
+    record_product_event(
+        "assassination_submitted",
+        game=game,
+        actor_type="player",
+        actor_id=player.player_id,
+        analytics_id=player.analytics_id,
+        payload={"decision_ms": max(0, int((time.time() - game.phase_started_at) * 1000))},
+    )
     try:
         data = require_object(data)
         target_id = require_string(data, "target_player_id", minimum=32, maximum=64)
@@ -2616,13 +3246,18 @@ def on_assassinate(data):
     persist_game(game)
     pause(3)
     emit_to_game(game.code, "game_over", get_game_summary(game))
-    log_game_event(game, "game_over", get_game_summary(game))
+    log_completed_game(game)
 
 
 # --- Return to lobby ---
 
 
-def return_game_to_lobby(game: GameState) -> None:
+def return_game_to_lobby(game: GameState, *, reason: str) -> None:
+    record_product_event(
+        "returned_to_lobby",
+        game=game,
+        payload={"reason": reason, "player_count": game.player_count()},
+    )
     game.reset()
     emit_to_game(
         game.code,
@@ -2670,10 +3305,18 @@ def on_set_rematch_ready(data):
             game.rematch_ready.add(player.player_id)
         else:
             game.rematch_ready.discard(player.player_id)
+        record_product_event(
+            "rematch_ready_changed",
+            game=game,
+            actor_type="player",
+            actor_id=player.player_id,
+            analytics_id=player.analytics_id,
+            payload={"ready": ready},
+        )
         status = rematch_status_payload(game)
         emit_to_game(game.code, "rematch_status", status)
         if status["total_count"] and status["ready_count"] == status["total_count"]:
-            return_game_to_lobby(game)
+            return_game_to_lobby(game, reason="unanimous_rematch")
     except ValueError as error:
         emit_validation_error(error)
 
@@ -2683,7 +3326,7 @@ def on_set_rematch_ready(data):
 def on_return_to_lobby():
     try:
         game = validate_host(request.sid)
-        return_game_to_lobby(game)
+        return_game_to_lobby(game, reason="host_return")
     except ValueError as error:
         emit_validation_error(error)
 
@@ -2758,6 +3401,14 @@ def on_send_chat(data):
             "is_spectator": spectator is not None,
             "timestamp": timestamp,
         },
+    )
+    record_product_event(
+        "chat_sent",
+        game=game,
+        actor_type="spectator" if spectator else "player",
+        actor_id=(spectator.spectator_id if spectator else player.player_id),
+        analytics_id=(spectator.analytics_id if spectator else player.analytics_id),
+        payload={"message_length": len(msg), "is_spectator": spectator is not None},
     )
 
 
