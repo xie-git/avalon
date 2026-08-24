@@ -12,7 +12,8 @@ __pycache__
 htmlcov
 logs
 tests
-static/img
+static/img/*
+!static/img/avalon-entry-background.png
 static/sounds
 README.md
 compose.yaml
