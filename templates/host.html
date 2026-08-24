@@ -6,7 +6,7 @@
 <title>Avalon — Host</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/css/common.css?v=20260824-round-table">
-<link rel="stylesheet" href="/static/css/host.css?v=20260824-uniform-entry">
+<link rel="stylesheet" href="/static/css/host.css?v=20260824-saved-display-exit">
 <link rel="stylesheet" href="/static/css/entry.css?v=20260824-uniform-entry-4">
 <style>
 .reorder-label {
@@ -55,6 +55,13 @@
 <body>
 
 <div id="connection-status" class="connection-status hidden" role="status" aria-live="polite"></div>
+<aside id="suspended-display-recovery" class="suspended-display-recovery hidden" aria-live="polite">
+    <div>
+        <strong>Saved game detected</strong>
+        <span>This display is still linked to a paused game. You can leave it linked for recovery, or pair this browser with a different game.</span>
+    </div>
+    <button type="button" class="btn" id="btn-forget-saved-display">Pair a different game</button>
+</aside>
 <div id="host-top-meta" class="host-top-meta hidden">
     <div class="leader-display" id="leader-display">Leader: <span>—</span></div>
     <div id="host-spectator-count" class="host-spectator-count hidden" aria-live="polite">◈ 0 spectators</div>
@@ -255,6 +262,6 @@
 
 <script src="/static/js/socket.io.min.js"></script>
 <script src="/static/js/presence.js?v=20260824-round-table"></script>
-<script src="/static/js/host.js?v=20260824-display-only"></script>
+<script src="/static/js/host.js?v=20260824-saved-display-exit"></script>
 </body>
 </html>

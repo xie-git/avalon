@@ -254,6 +254,7 @@ function showScreen(id) {
     const target = document.getElementById(id);
     if (target) target.classList.add('active');
     document.body.classList.toggle('role-reveal-active', id === 'screen-role');
+    document.body.classList.toggle('quest-reveal-active', id === 'screen-mission-reveal-player');
     const label = presenceScreenLabels[id];
     if (label && gameCode && presencePlayers.length) presenceTable.show(target, label);
     else presenceTable.hide();
@@ -261,6 +262,28 @@ function showScreen(id) {
     if (settingsButton) {
         settingsButton.classList.toggle('hidden', !isHost || id === 'screen-join' || id === 'screen-lobby');
     }
+}
+
+function playerForName(name) {
+    return presencePlayers.find(player => player.name === name) || { name };
+}
+
+function createIdentityAvatar(name, className = 'identity-avatar') {
+    const player = playerForName(name);
+    const identity = document.createElement('div');
+    identity.className = className;
+    const portrait = document.createElement('span');
+    portrait.className = 'identity-avatar-portrait';
+    portrait.appendChild(presenceTable.createPortraitElement(
+        player.avatar_index,
+        player.color_index,
+        player.avatar_image
+    ));
+    const label = document.createElement('span');
+    label.className = 'identity-avatar-name';
+    label.textContent = name;
+    identity.append(portrait, label);
+    return identity;
 }
 
 function transition(id, delay = 0) {
@@ -851,12 +874,11 @@ function showNightInfo(info) {
     document.getElementById('night-waiting-text').classList.add('hidden');
     if (info.sees && info.sees.length > 0) {
         info.sees.forEach(name => {
-            const div = document.createElement('div');
-            // Evil players shown in red for Merlin, blue for Percival, red for evil sees-each-other
             const isPercival = myRole === 'Percival';
-            div.className = 'night-sees-name' + (isPercival ? ' good-reveal' : '');
-            div.textContent = name;
-            namesEl.appendChild(div);
+            namesEl.appendChild(createIdentityAvatar(
+                name,
+                `night-sees-name${isPercival ? ' good-reveal' : ''}`
+            ));
         });
     } else {
         namesEl.innerHTML = `<div class="night-no-info">${info.sees_label || 'No special knowledge'}</div>`;
@@ -925,15 +947,17 @@ function showVoteReveal(data) {
     const teamList = document.getElementById('player-vote-reveal-team');
     teamList.replaceChildren();
     (data.team || []).forEach(name => {
-        const chip = document.createElement('div');
-        chip.className = 'vote-name-chip';
-        chip.textContent = name;
-        teamList.appendChild(chip);
+        teamList.appendChild(createIdentityAvatar(name, 'vote-name-chip'));
     });
-    entries.forEach(([name, vote]) => {
+    entries.forEach(([name, vote], index) => {
         const card = document.createElement('div');
         card.className = `player-reveal-card ${vote}`;
-        card.innerHTML = `<span><strong>${vote === 'approve' ? 'APPROVE' : 'REJECT'}</strong>${escapeHtml(name)}</span>`;
+        card.style.setProperty('--reveal-delay', `${index * 0.38}s`);
+        card.appendChild(createIdentityAvatar(name, 'vote-reveal-identity'));
+        const stamp = document.createElement('span');
+        stamp.className = 'vote-reveal-stamp';
+        stamp.innerHTML = `<b>${vote === 'approve' ? '✓' : '×'}</b><strong>${vote === 'approve' ? 'APPROVE' : 'REJECT'}</strong>`;
+        card.appendChild(stamp);
         cards.appendChild(card);
     });
     const approvals = entries.filter(([, vote]) => vote === 'approve').length;
@@ -950,41 +974,30 @@ function showVoteReveal(data) {
 }
 
 function showMissionReveal(data, canContinue = false) {
-    const existingReveal = latestMissionReveal === data && document.getElementById('player-mission-reveal-cards').children.length > 0;
+    const reveal = document.getElementById('quest-reveal-product');
+    const revealKey = JSON.stringify([Boolean(data.passed), data.success_count || 0, data.fail_count || 0, data.cards_shuffled || []]);
+    const existingReveal = reveal.dataset.revealKey === revealKey;
     latestMissionReveal = data;
-    if (existingReveal) {
-        const leaderCanContinue = canContinue && myPlayerId === currentLeaderId;
-        document.getElementById('btn-player-next-round').classList.toggle('hidden', !leaderCanContinue);
-        document.getElementById('player-mission-reveal-waiting').classList.toggle('hidden', leaderCanContinue);
-        return;
-    }
-    const sequence = ++missionRevealSequence;
-    const cards = document.getElementById('player-mission-reveal-cards');
-    cards.replaceChildren();
-    const revealedCards = data.cards_shuffled || [
-        ...Array(data.success_count || 0).fill('success'),
-        ...Array(data.fail_count || 0).fill('fail'),
-    ];
-    const result = document.getElementById('player-mission-reveal-result');
-    result.textContent = '';
-    result.classList.add('hidden');
-    revealedCards.forEach((value, index) => {
-        const card = document.createElement('div');
-        card.className = 'player-reveal-card quest-card-hidden';
-        card.innerHTML = '<span><strong>?</strong></span>';
-        cards.appendChild(card);
+    if (!existingReveal) {
+        const sequence = ++missionRevealSequence;
+        reveal.dataset.revealKey = revealKey;
+        reveal.className = `quest-reveal-product ${data.passed ? 'success' : 'fail'}`;
+        const art = document.getElementById('quest-reveal-art');
+        art.src = data.passed
+            ? '/static/assets/quests/quest-successful.png?v=20260824'
+            : '/static/assets/quests/quest-failed.png?v=20260824';
+        art.alt = data.passed ? 'Knights celebrating a successful quest' : 'Knights returning from a failed quest';
+        document.getElementById('player-mission-reveal-result').textContent =
+            data.passed ? 'Quest Successful' : 'Quest Failed';
+        const failures = Number(data.fail_count || 0);
+        document.getElementById('player-mission-reveal-detail').textContent = data.passed
+            ? 'The fellowship returns with honor. Avalon endures.'
+            : `${failures} ${failures === 1 ? 'act' : 'acts'} of betrayal doomed the quest.`;
+        requestAnimationFrame(() => reveal.classList.add('is-revealed'));
         window.setTimeout(() => {
-            if (sequence !== missionRevealSequence || !card.isConnected) return;
-            card.className = `player-reveal-card ${value} quest-card-revealed`;
-            card.innerHTML = `<span><strong>${value === 'success' ? '☀ SUCCESS' : '☠ FAIL'}</strong></span>`;
-            flash(value === 'success' ? 'blue' : 'red', 180);
-        }, 550 + index * 480);
-    });
-    window.setTimeout(() => {
-        if (sequence !== missionRevealSequence) return;
-        result.textContent = data.passed ? 'The Quest Succeeds!' : 'The Quest Has Failed';
-        result.classList.remove('hidden');
-    }, 650 + revealedCards.length * 480);
+            if (sequence === missionRevealSequence) reveal.classList.add('is-action-ready');
+        }, 2000);
+    }
     const leaderCanContinue = canContinue && myPlayerId === currentLeaderId;
     const continueButton = document.getElementById('btn-player-next-round');
     continueButton.disabled = false;
@@ -1075,10 +1088,7 @@ function showVoteScreen(data) {
     const teamList = document.getElementById('vote-team-names-player');
     teamList.innerHTML = '';
     team.forEach(name => {
-        const chip = document.createElement('div');
-        chip.className = 'vote-name-chip';
-        chip.textContent = name;
-        teamList.appendChild(chip);
+        teamList.appendChild(createIdentityAvatar(name, 'vote-name-chip'));
     });
     document.getElementById('vote-buttons').classList.toggle('hidden', isSpectator);
     document.getElementById('vote-cast-waiting').classList.toggle('hidden', !isSpectator);

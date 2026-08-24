@@ -533,6 +533,12 @@ body.role-reveal-active #player-utility-dock,
 body.role-reveal-active #connection-status {
     display: none !important;
 }
+body.quest-reveal-active #player-board,
+body.quest-reveal-active #chat-container,
+body.quest-reveal-active #player-utility-dock,
+body.quest-reveal-active #connection-status {
+    display: none !important;
+}
 .role-reveal-product {
     position: absolute;
     inset: 0;
@@ -617,7 +623,7 @@ body.role-reveal-active #connection-status {
 .role-reveal-product.is-revealed .role-reveal-details { opacity: 1; transform: translateY(0); }
 .role-reveal-eyebrow {
     margin: 0;
-    color: var(--gold-light);
+    color: #b8ad97;
     font: 0.58rem var(--font-heading);
     letter-spacing: 0.22em;
     text-transform: uppercase;
@@ -630,21 +636,21 @@ body.role-reveal-active #connection-status {
     padding: 0.25rem 0.68rem;
     border-radius: var(--radius-pill);
 }
-.role-team-badge.good { background: rgba(46,134,222,0.2); color: #7ec8ff; border: 1px solid var(--blue-glow); }
-.role-team-badge.evil { background: rgba(192,57,43,0.2); color: #ff8080; border: 1px solid var(--red-glow); }
+.role-team-badge.good { background: rgba(93,112,126,0.2); color: #aebdc6; border: 1px solid rgba(131,153,167,0.48); }
+.role-team-badge.evil { background: rgba(119,72,69,0.2); color: #c2a09c; border: 1px solid rgba(157,105,99,0.46); }
 .role-name {
     font-family: var(--font-title);
     font-size: clamp(2.35rem, 11vw, 3.7rem);
     font-weight: 700;
     line-height: 1.08;
-    color: var(--gold-light);
+    color: #d2c5aa;
     text-wrap: balance;
     text-shadow: 0 3px 14px rgba(0,0,0,0.95);
 }
-.role-reveal-product.evil .role-name { color: #ffad9f; }
+.role-reveal-product.evil .role-name { color: #cba5a0; }
 .role-flavor {
     margin: 0;
-    color: #f1e8d5;
+    color: #d8cfbd;
     font: 600 clamp(0.88rem, 2.05dvh, 1rem)/1.32 var(--font-title);
     text-wrap: balance;
 }
@@ -652,7 +658,7 @@ body.role-reveal-active #connection-status {
     margin: 0;
     font-family: var(--font-body);
     font-size: clamp(0.78rem, 1.75dvh, 0.9rem);
-    color: #b8ad99;
+    color: #aaa292;
     line-height: 1.35;
 }
 .role-confirm-button {
@@ -663,10 +669,11 @@ body.role-reveal-active #connection-status {
     width: min(calc(100% - 2.5rem), 360px);
     min-height: 48px;
     margin: 0;
-    border: 1px solid rgba(232,212,139,0.72);
+    border: 1px solid rgba(186,174,145,0.48);
     border-radius: var(--radius-pill);
-    background: linear-gradient(135deg, rgba(58,46,22,0.92), rgba(22,18,12,0.94));
-    box-shadow: 0 10px 30px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 18px rgba(201,168,76,0.12);
+    background: linear-gradient(135deg, rgba(42,38,30,0.92), rgba(17,16,14,0.95));
+    color: #c9bea7;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.055);
     font-size: 0.7rem;
     letter-spacing: 0.1em;
     opacity: 0;
@@ -714,19 +721,23 @@ body.role-reveal-active #connection-status {
     margin-bottom: 0.75rem;
 }
 .night-sees-names {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
 }
 .night-sees-name {
+    display: grid;
+    justify-items: center;
+    gap: 0.4rem;
     font-family: var(--font-heading);
-    font-size: 1.2rem;
+    font-size: 0.72rem;
     color: var(--red-glow);
     padding: 0.4rem;
     border-radius: var(--radius-sm);
     background: rgba(139,26,26,0.15);
     border: 1px solid rgba(192,57,43,0.3);
 }
+.night-sees-name .identity-avatar-portrait { width: 72px; height: 72px; }
 .night-sees-name.good-reveal { color: #7ec8ff; background: rgba(46,134,222,0.1); border-color: rgba(46,134,222,0.3); }
 .night-no-info { font-family: var(--font-body); font-style: italic; color: var(--text-dim); font-size: 1.1rem; }
 
@@ -848,6 +859,7 @@ body.role-reveal-active #connection-status {
     gap: 0.55rem;
 }
 .player-reveal-card {
+    position: relative;
     display: grid;
     place-items: center;
     min-height: 76px;
@@ -857,6 +869,39 @@ body.role-reveal-active #connection-status {
     font: 0.72rem var(--font-heading);
     text-align: center;
 }
+.player-reveal-card.approve,
+.player-reveal-card.reject {
+    min-height: 126px;
+    overflow: hidden;
+    border-color: rgba(201,168,76,0.28);
+    background: rgba(12,11,10,0.78);
+    opacity: 0;
+    animation: vote-player-in 0.6s cubic-bezier(.18,.78,.2,1) var(--reveal-delay, 0s) forwards;
+}
+.vote-reveal-identity { display: grid; justify-items: center; gap: 0.35rem; color: #c9c0ad; }
+.vote-reveal-identity .identity-avatar-portrait { width: 78px; height: 78px; }
+.vote-reveal-stamp {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    color: #a6bdad;
+    text-shadow: 0 2px 8px #000;
+    opacity: 0;
+    transform: rotate(-10deg) scale(1.75);
+    animation: vote-stamp-in 0.42s cubic-bezier(.2,.9,.2,1.25) calc(var(--reveal-delay, 0s) + 0.34s) forwards;
+}
+.player-reveal-card.reject .vote-reveal-stamp {
+    color: #c59a96;
+    transform: rotate(9deg) scale(1.75);
+    animation-name: vote-stamp-reject-in;
+}
+.vote-reveal-stamp b { font: 3.8rem/0.78 sans-serif; }
+.vote-reveal-stamp strong { padding: 0.16rem 0.35rem; border: 2px solid currentColor; font-size: 0.58rem; letter-spacing: 0.12em; }
+@keyframes vote-player-in { from { opacity: 0; transform: translateY(12px) scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes vote-stamp-in { to { opacity: 0.9; transform: rotate(-10deg) scale(1); } }
+@keyframes vote-stamp-reject-in { to { opacity: 0.9; transform: rotate(9deg) scale(1); } }
 .player-reveal-card.quest-card-hidden {
     border-color: var(--border-gold);
     background: repeating-linear-gradient(45deg, rgba(201,168,76,0.11) 0 7px, rgba(6,6,8,0.94) 7px 14px);
@@ -882,6 +927,54 @@ body.role-reveal-active #connection-status {
     font: 1.05rem var(--font-title);
     text-align: center;
 }
+
+.player-reveal-card.approve,
+.player-reveal-card.reject { border-color: rgba(201,168,76,0.28); background: rgba(12,11,10,0.78); color: #c9c0ad; }
+
+/* Immersive quest outcome reveal */
+#screen-mission-reveal-player {
+    left: 50%;
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+    scrollbar-gutter: auto;
+    background: #030405;
+}
+.quest-reveal-product { position: absolute; inset: 0; overflow: hidden; background: #030405; }
+.quest-reveal-art {
+    width: 100%; height: 100%; display: block; object-fit: cover; object-position: 50% 45%;
+    opacity: 0; transform: scale(1.07); filter: brightness(0.67) saturate(0.76) contrast(1.04);
+    transition: opacity 1.9s ease 0.12s, transform 3.2s cubic-bezier(.18,.72,.16,1) 0.08s;
+}
+.quest-reveal-product.is-revealed .quest-reveal-art { opacity: 1; transform: scale(1); }
+.quest-reveal-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(2,3,4,0.18), rgba(2,3,4,0.08) 42%, rgba(2,3,4,0.94) 100%); }
+.quest-reveal-copy {
+    position: absolute; z-index: 2; left: clamp(1.3rem, 6vw, 2rem); right: clamp(1.3rem, 6vw, 2rem);
+    bottom: calc(6.3rem + env(safe-area-inset-bottom)); display: grid; gap: 0.45rem;
+    opacity: 0; transform: translateY(18px); transition: opacity 1s ease 0.9s, transform 1.1s cubic-bezier(.2,.75,.2,1) 0.82s;
+}
+.quest-reveal-product.is-revealed .quest-reveal-copy { opacity: 1; transform: none; }
+.quest-reveal-eyebrow { margin: 0; color: #b7aa93; font: 0.58rem var(--font-heading); letter-spacing: 0.22em; text-transform: uppercase; }
+.quest-reveal-copy h1 { margin: 0; color: #d4c8ae; font: clamp(2.4rem, 11vw, 3.8rem)/1.02 var(--font-title); text-shadow: 0 3px 16px #000; }
+.quest-reveal-product.fail .quest-reveal-copy h1 { color: #c5aaa5; }
+.quest-reveal-copy p:last-child { margin: 0; color: #b7ae9e; font-size: 0.86rem; line-height: 1.35; }
+.quest-reveal-action {
+    position: absolute; z-index: 4; left: 50%; bottom: max(0.9rem, env(safe-area-inset-bottom));
+    width: min(calc(100% - 2.5rem), 360px); min-height: 48px; transform: translate(-50%, 12px);
+    border: 1px solid rgba(186,174,145,0.48); border-radius: var(--radius-pill);
+    background: linear-gradient(135deg, rgba(42,38,30,0.92), rgba(17,16,14,0.95)); color: #c9bea7;
+    opacity: 0; transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.quest-reveal-product.is-action-ready ~ .quest-reveal-action:not(.hidden) { opacity: 1; transform: translate(-50%, 0); }
+.quest-reveal-waiting {
+    position: absolute; z-index: 4; left: 1rem; right: 1rem; bottom: max(1.2rem, env(safe-area-inset-bottom));
+    margin: 0; color: #aaa18f; font: 0.66rem var(--font-heading); letter-spacing: 0.08em; text-align: center;
+    opacity: 0; transition: opacity 0.8s ease;
+}
+.quest-reveal-product.is-action-ready ~ .quest-reveal-waiting:not(.hidden) { opacity: 1; }
 
 .screen.presence-active {
     gap: clamp(0.5rem, 1.5dvh, 0.9rem);
@@ -1086,13 +1179,30 @@ body.role-reveal-active #connection-status {
     justify-content: center;
 }
 .vote-name-chip {
-    padding: 0.3rem 0.8rem;
+    display: grid;
+    justify-items: center;
+    gap: 0.25rem;
+    min-width: 72px;
+    padding: 0.4rem 0.5rem;
     border: 1px solid var(--border-gold);
     border-radius: var(--radius-pill);
     font-family: var(--font-heading);
-    font-size: 0.85rem;
+    font-size: 0.68rem;
     color: var(--gold-light);
 }
+.identity-avatar-portrait {
+    display: block;
+    width: 54px;
+    height: 54px;
+    overflow: hidden;
+    border: 1px solid rgba(201,168,76,0.42);
+    border-radius: 50%;
+    background: #111;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.35);
+}
+.identity-avatar-portrait > img,
+.identity-avatar-portrait > svg { width: 100%; height: 100%; display: block; object-fit: cover; }
+.identity-avatar-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vote-buttons {
     display: flex;
     gap: 1rem;

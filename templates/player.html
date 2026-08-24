@@ -10,7 +10,7 @@
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/css/common.css?v=20260824-round-table">
-<link rel="stylesheet" href="/static/css/player.css?v=20260824-game-polish">
+<link rel="stylesheet" href="/static/css/player.css?v=20260824-immersive-quests-2">
 <link rel="stylesheet" href="/static/css/entry.css?v=20260824-responsive-entry">
 </head>
 <body data-force-new="{{ 'true' if force_new else 'false' }}">
@@ -300,13 +300,17 @@
 
     <!-- ============ MISSION REVEAL — all phones ============ -->
     <div class="screen" id="screen-mission-reveal-player">
-        <div class="screen-header">
-            <div class="screen-title-small">The Quest Returns</div>
+        <div class="quest-reveal-product" id="quest-reveal-product">
+            <img class="quest-reveal-art" id="quest-reveal-art" alt="">
+            <div class="quest-reveal-scrim" aria-hidden="true"></div>
+            <div class="quest-reveal-copy">
+                <p class="quest-reveal-eyebrow">The quest returns</p>
+                <h1 id="player-mission-reveal-result"></h1>
+                <p id="player-mission-reveal-detail"></p>
+            </div>
         </div>
-        <div class="player-reveal-cards" id="player-mission-reveal-cards"></div>
-        <div class="player-reveal-banner" id="player-mission-reveal-result"></div>
-        <button class="btn btn-primary hidden" id="btn-player-next-round" style="width:100%">Continue</button>
-        <p class="waiting-text" id="player-mission-reveal-waiting">Waiting for the leader to continue…</p>
+        <button class="btn quest-reveal-action hidden" id="btn-player-next-round">Continue</button>
+        <p class="quest-reveal-waiting" id="player-mission-reveal-waiting">Waiting for the leader to continue…</p>
     </div>
 
     <!-- ============ VOTE SCREEN ============ -->
@@ -595,6 +599,6 @@
 
 <script src="/static/js/socket.io.min.js"></script>
 <script src="/static/js/presence.js?v=20260824-round-table"></script>
-<script src="/static/js/player.js?v=20260824-game-polish"></script>
+<script src="/static/js/player.js?v=20260824-immersive-quests"></script>
 </body>
 </html>

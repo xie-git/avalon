@@ -54,6 +54,15 @@ function hideConnectionStatus() {
     connectionStatus.classList.add('hidden');
 }
 
+function showSuspendedDisplayRecovery() {
+    showConnectionStatus('Game saved — waiting for a player to resume within 24 hours');
+    document.getElementById('suspended-display-recovery').classList.remove('hidden');
+}
+
+function hideSuspendedDisplayRecovery() {
+    document.getElementById('suspended-display-recovery').classList.add('hidden');
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -742,6 +751,7 @@ socket.on('host_registered', data => {
     presenceTable.setRoomCode(gameCode);
     showHostRoomCode(gameCode);
     hideConnectionStatus();
+    hideSuspendedDisplayRecovery();
     document.getElementById('room-code-display').textContent = gameCode;
     document.getElementById('join-url-display').textContent = `Join at ${data.join_url}`;
     updateJoinTools();
@@ -861,15 +871,18 @@ socket.on('host_registered', data => {
         }
     }
     if (data.suspended) {
-        showConnectionStatus('Game saved — waiting for a player to resume within 24 hours');
+        showSuspendedDisplayRecovery();
     }
 });
 
 socket.on('room_suspended', () => {
-    showConnectionStatus('Game saved — waiting for a player to resume within 24 hours');
+    showSuspendedDisplayRecovery();
 });
 
-socket.on('room_resumed', () => hideConnectionStatus());
+socket.on('room_resumed', () => {
+    hideConnectionStatus();
+    hideSuspendedDisplayRecovery();
+});
 
 socket.on('player_joined', data => {
     players = data.players || [];
@@ -1248,6 +1261,25 @@ socket.on('error', data => {
 // ---------------------------------------------------------------------------
 // UI event listeners
 // ---------------------------------------------------------------------------
+
+document.getElementById('btn-forget-saved-display').addEventListener('click', () => {
+    clearHostSession();
+    localStorage.removeItem(PAIRED_DISPLAY_KEY);
+    isPairedDisplay = false;
+    gameCode = null;
+    presenceTable.hide();
+    presenceTable.setRoomCode('');
+    showHostRoomCode('');
+    hideConnectionStatus();
+    hideSuspendedDisplayRecovery();
+    showScreen('screen-title');
+    document.getElementById('host-pair-room').value = '';
+    document.getElementById('host-pair-code').value = '';
+    document.getElementById('host-create-error').textContent =
+        'This display is ready to pair. The saved game remains recoverable from a player phone.';
+    socket.disconnect();
+    window.setTimeout(() => socket.connect(), 50);
+});
 
 document.getElementById('host-pair-room').addEventListener('input', event => {
     event.target.value = event.target.value.toUpperCase().replace(/[^A-Z]/g, '');
