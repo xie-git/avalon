@@ -21,8 +21,9 @@ html:has(.entry-screen) {
         max(clamp(1rem, 5vw, 1.5rem), env(safe-area-inset-right))
         max(clamp(0.75rem, 3dvh, 2rem), env(safe-area-inset-bottom))
         max(clamp(1rem, 5vw, 1.5rem), env(safe-area-inset-left));
-    overflow-y: auto;
-    overscroll-behavior: contain;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: pan-x;
     background-color: #0a0a0a;
     background-image:
         linear-gradient(180deg, rgba(5, 6, 7, 0.34) 0%, rgba(7, 7, 7, 0.16) 32%, rgba(4, 4, 5, 0.78) 100%),
@@ -30,13 +31,7 @@ html:has(.entry-screen) {
         url('/static/img/avalon-entry-background.png?v=20260824-2');
     background-position: center, center, center -50px;
     background-repeat: no-repeat;
-    background-size: cover, cover, auto calc(100% + 50px);
-}
-
-.entry-screen:has(.entry-mode-chooser:not(.hidden)) {
-    overflow: hidden;
-    overscroll-behavior: none;
-    touch-action: pan-x;
+    background-size: cover, cover, auto calc(100svh + 50px);
 }
 
 .entry-screen > * {
@@ -58,15 +53,6 @@ html:has(.entry-screen) {
     margin: 0 auto;
     object-fit: contain;
     filter: drop-shadow(0 3px 2px rgba(0,0,0,0.82)) drop-shadow(0 0 18px rgba(201,168,76,0.34));
-}
-
-.entry-context {
-    margin: -0.15rem 0 0;
-    color: #e0d6c1;
-    font: 0.72rem var(--font-heading);
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    text-shadow: 0 2px 8px rgba(0,0,0,0.95);
 }
 
 .entry-panel {
@@ -185,11 +171,14 @@ html:has(.entry-screen) {
         gap: 0.35rem;
         padding-block: max(0.4rem, env(safe-area-inset-top)) max(0.4rem, env(safe-area-inset-bottom));
     }
-    .entry-title-art { max-height: 15dvh; }
-    .entry-context { font-size: 0.62rem; }
-    .entry-panel { gap: 0.55rem; padding: 0.7rem; }
+    .entry-title-art { max-height: 13dvh; }
+    .entry-panel { gap: 0.45rem; padding: 0.65rem; }
     .entry-back { min-height: 34px; }
     .entry-flow-heading small { font-size: 0.72rem; line-height: 1.25; }
+    .entry-panel .form-group { gap: 0.25rem; }
+    .entry-panel .form-hint { display: none; }
+    .entry-panel .spectator-mode-options { gap: 0.25rem; padding: 0.4rem; }
+    .entry-panel .spectator-mode-options label { padding: 0.34rem 0.45rem; }
     .entry-pair-fields { gap: 0.5rem; }
     .entry-panel > .btn { min-height: 46px; padding-block: 0.7rem; }
 }

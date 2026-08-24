@@ -6,8 +6,8 @@
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/css/common.css?v=20260824-round-table">
-<link rel="stylesheet" href="/static/css/player.css?v=20260824-spectator-options">
-<link rel="stylesheet" href="/static/css/entry.css?v=20260824-uniform-entry-2">
+<link rel="stylesheet" href="/static/css/player.css?v=20260824-static-entry">
+<link rel="stylesheet" href="/static/css/entry.css?v=20260824-uniform-entry-4">
 </head>
 <body data-force-new="{{ 'true' if force_new else 'false' }}">
 
@@ -113,8 +113,10 @@
             <button class="btn btn-primary" id="btn-join">Join Game</button>
             <button type="button" class="btn btn-primary hidden" id="btn-create-player-game">Create My Room</button>
             <div class="join-recovery hidden" id="join-recovery">
-                <label for="input-recovery-code">Host recovery code</label>
-                <input type="text" id="input-recovery-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
+                <div class="form-group">
+                    <label for="input-recovery-code">Host recovery code</label>
+                    <input type="text" id="input-recovery-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
+                </div>
                 <button type="button" class="btn" id="btn-recover-seat">Recover My Seat</button>
                 <div class="error-message" id="recovery-error"></div>
             </div>
