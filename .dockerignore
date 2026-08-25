@@ -16,5 +16,6 @@ static/img/*
 !static/img/avalon-entry-background.png
 !static/img/avalon-title.png
 static/sounds
+source-assets
 README.md
 compose.yaml

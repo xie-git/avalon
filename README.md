@@ -12,12 +12,20 @@ accounts, app installation, or Tailscale access are required for players.
   phase-specific status panels, optional recent chat, and in-game settings.
 - A phone UI with private actionable controls, reconnect messaging, role
   reminder, mission board, and short live chat.
+- Cinematic, edge-to-edge role reveals use dedicated character artwork, muted
+  overlay copy, and a delayed confirmation action. Loyal Servants randomly
+  receive one of two portraits. Quest outcomes use the same immersive treatment
+  with separate Success and Fail artwork while normal game controls stay hidden.
 - Spectators can join without taking a player seat, watch every public phase,
   chat with a visible spectator badge, and arrange their own private suspicion
   board without affecting the group average.
 - A persistent draggable fellowship table on host and joined-player screens.
-  Players choose from eight knight variants; each player keeps a stable color
-  across their avatar, name, and chat messages.
+  Players can take a selfie or choose from ten illustrated avatars; each player
+  keeps a stable portrait and color across the table, night knowledge, proposed
+  quest parties, vote reveals, and chat messages.
+- Public votes reveal one player portrait at a time with an animated Approve or
+  Reject stamp. Private night knowledge likewise identifies known players with
+  their table portraits instead of plain text.
 - The suspicion spectrum includes a compact, team-colored key showing exactly
   which Good and Evil characters are present for the current 6–10 player game.
 - Completed mission shields are clickable on host and phones. Their tooltip
@@ -31,6 +39,10 @@ accounts, app installation, or Tailscale access are required for players.
   fresh 24-hour inactivity window the next time everyone leaves.
 - A focused phone mode chooser handles joining, hosting, spectating, resuming,
   and seat recovery. Optional displays pair at `/host` with a one-use code.
+- A paired display that reconnects to a suspended room offers **Pair a different
+  game**. This clears only that browser's display credentials, so the saved room
+  remains recoverable from a seated player's phone. The phone host can fully end
+  the room from Settings.
 - Lobby ready indicators, phone action vibration,
   screen wake lock where supported, and action-needed page titles.
 - A same-origin QR code plus copy/share controls for joining a room.
@@ -44,7 +56,8 @@ accounts, app installation, or Tailscale access are required for players.
 - Persistent, timestamped chat and replay-oriented game event logs in one
   bounded SQLite database.
 - Responsive layouts for iPhones, other phones, laptops, and cast/TV screens.
-- No analytics, advertising, tracking, or public history endpoints.
+- No advertising, third-party analytics, or public history endpoints. Local,
+  first-party operational and research events stay in the private SQLite volume.
 
 The host may also play: keep `/host` on the shared display and join normally
 from that person's phone. The host display does not consume a player seat.
@@ -53,18 +66,43 @@ from that person's phone. The host display does not consume a player seat.
 
 1. Open `https://YOUR-PUBLIC-HOST`, choose **Host a Game**, and enter your
    name. Use `/new` to explicitly bypass a saved room.
-2. Other players enter the four-letter room code and a name, then optionally
-   choose a knight. The phone host can generate a six-digit code if the group
-   wants to pair a TV or laptop at `/host` as the shared display.
-3. Players choose a knight and may mark themselves ready. Start once 6–10
+2. Other players enter the four-letter room code and a name, then take a selfie
+   or choose an illustrated avatar. The phone host can generate a six-digit code
+   if the group wants to pair a TV or laptop at `/host` as the shared display.
+3. Players may mark themselves ready. Start once 6–10
    players have joined. The host can reorder seating and adjust the discussion
    timer from 1–15 minutes (or Unlimited) and disable the advisory proposal
    timer.
 4. During play, tap a completed mission shield to inspect that mission. Tap
-   elsewhere to dismiss the tooltip.
+   elsewhere to dismiss the tooltip. Tap **My Role** in the phone header to
+   reopen the illustrated private role card.
+
+The phone host's Settings panel shows both the room code and a refreshable
+display-pairing code during a started game. If a TV browser is stuck on an old
+suspended room, choose **Pair a different game** on that display and enter the
+new room and pairing codes. This does not delete the old room; use **End Game**
+from the authenticated host phone when the room itself should be discarded.
 
 Avatar positions are draggable and resettable. Layout choices are kept in that
 browser's local storage; they do not alter game state or reveal roles.
+
+## Project layout and artwork
+
+Runtime artwork is organized by purpose under `static/`:
+
+| Path | Contents |
+| --- | --- |
+| `static/assets/roles/` | Character reveal and role-reminder artwork. |
+| `static/assets/quests/` | Fullscreen successful/failed quest artwork. |
+| `static/assets/results/` | Good/Evil final-result backgrounds. |
+| `static/img/` | Entry background, title treatment, and UI imagery. |
+| `static/sounds/` | Retained music and sound-effect sources (excluded from the production image). |
+
+`source-assets/` holds distinct original or concept images that are not served
+by Flask and are excluded from the Docker build context. Do not point runtime
+CSS or JavaScript at that directory; copy an approved, web-ready asset into the
+appropriate `static/` subdirectory first. `ops/` contains machine/setup helpers
+that are useful to the project but are not part of the application image.
 
 ## Ruleset
 
@@ -280,6 +318,7 @@ production.
 ```
 
 The application is deliberately database-light and framework-light: Flask,
-Flask-SocketIO, Gunicorn, vanilla JavaScript/CSS, and SQLite. Source image and
-sound assets are retained for possible future use but excluded from the current
-container; the current UI is silent and uses CSS/inline SVG artwork.
+Flask-SocketIO, Gunicorn, vanilla JavaScript/CSS, and SQLite. Runtime images
+under `static/` are copied into the container. Retained audio sources,
+archival originals under `source-assets/`, and operational helpers under
+`ops/` are not.
