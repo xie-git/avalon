@@ -3,6 +3,10 @@
 This directory preserves distinct original and concept artwork that is not used
 directly by the application. It is excluded from the Docker build context.
 
+For the repository-wide file map, see the root [README](../README.md). These
+instructions live here because they apply specifically to the adjacent source
+artwork.
+
 - `role-art/` contains original role-image variants retained before web-ready
   versions were selected for `static/assets/roles/`.
 - `backgrounds/` contains superseded background compositions.

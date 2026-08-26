@@ -1,113 +1,59 @@
 # Avalon
 
-A small, real-time, Jackbox-style implementation of *The Resistance: Avalon*.
-One shared host screen drives the game while 6–10 players use their phones. No
-accounts, app installation, or Tailscale access are required for players.
+A real-time, phone-first implementation of *The Resistance: Avalon* for 6–10
+players. One player creates and controls the room from a phone; an optional TV
+or laptop can pair as a read-only shared display. Players need only a modern web
+browser—there are no accounts or app installations.
 
-## Features
+## What is implemented
 
-- Complete 6–10 player Avalon flow: private roles, night information,
-  discussion, team proposals, voting, quests, assassination, and role reveal.
-- A TV-friendly host display with room/leader badges, mission tracker, timers,
-  phase-specific status panels, optional recent chat, and in-game settings.
-- A phone UI with private actionable controls, reconnect messaging, role
-  reminder, mission board, and short live chat.
-- Cinematic, edge-to-edge role reveals use dedicated character artwork, muted
-  overlay copy, and a delayed confirmation action. Loyal Servants randomly
-  receive one of two portraits. Quest outcomes use the same immersive treatment
-  with separate Success and Fail artwork while normal game controls stay hidden.
-- Spectators can join without taking a player seat, watch every public phase,
-  chat with a visible spectator badge, and arrange their own private suspicion
-  board without affecting the group average.
-- A persistent draggable fellowship table on host and joined-player screens.
-  Players can take a selfie or choose from ten illustrated avatars; each player
-  keeps a stable portrait and color across the table, night knowledge, proposed
-  quest parties, vote reveals, and chat messages.
-- Public votes reveal one player portrait at a time with an animated Approve or
-  Reject stamp. Private night knowledge likewise identifies known players with
-  their table portraits instead of plain text.
-- The suspicion spectrum includes a compact, team-colored key showing exactly
-  which Good and Evil characters are present for the current 6–10 player game.
-- Completed mission shields are clickable on host and phones. Their tooltip
-  shows the leader, quest party, Success count, and Fail count.
-- Refresh and temporary-disconnect recovery restores the same seat, role, and
-  current actionable phase, timers, and recent chat using a private browser
-  token that survives tab closure. The host can issue a five-minute recovery
-  code when a player must move to another phone.
-- Every lobby and game is durably saved. When the last real player disconnects,
-  timers freeze and the room remains resumable for 24 hours; resuming starts a
-  fresh 24-hour inactivity window the next time everyone leaves.
-- A focused phone mode chooser handles joining, hosting, spectating, resuming,
-  and seat recovery. Optional displays pair at `/host` with a one-use code.
-- A paired display that reconnects to a suspended room offers **Pair a different
-  game**. This clears only that browser's display credentials, so the saved room
-  remains recoverable from a seated player's phone. The phone host can fully end
-  the room from Settings.
-- Lobby ready indicators, phone action vibration,
-  screen wake lock where supported, and action-needed page titles.
-- A same-origin QR code plus copy/share controls for joining a room.
-- A post-game Chronicle summarizes leaders, parties, public vote totals, and
-  aggregate quest results without revealing who submitted individual cards.
-- The final reveal includes a screenshot-friendly portrait of the winning
-  fellowship and a voluntary **Run It Back** ready-up for the seated players.
-- During discussion, the current leader may place any player in the optional
-  Accusation Spotlight as a theatrical invitation to defend their case.
-- Multiple independent rooms can run concurrently.
-- Persistent, timestamped chat and replay-oriented game event logs in one
-  bounded SQLite database.
-- Versioned, sequence-numbered research streams with integrity hashes,
-  capability-free full-state checkpoints, normalized game/player facts,
-  AI-ready exports, and visualization-ready **Avalon Wrapped** aggregates.
-- Responsive layouts for iPhones, other phones, laptops, and cast/TV screens.
-- No advertising, third-party analytics, or public history endpoints. Local,
-  first-party operational and research events stay in the private SQLite volume.
+- The complete implemented game loop: private roles, night information,
+  discussion, team proposals, public voting, quests, assassination, final role
+  reveal, and voluntary rematches.
+- Responsive phone and shared-display interfaces with reconnect recovery,
+  resumable rooms, timers, role reminders, chat, mission history, and a
+  draggable fellowship table.
+- Six to ten seated players, optional practice bots, concurrent independent
+  rooms, and spectators who can watch and chat without taking a seat.
+- Built-in avatars or voluntary 128 × 128 selfies, cinematic role/quest/result
+  artwork, a suspicion spectrum, public vote reveals, and a post-game
+  Chronicle.
+- Durable SQLite storage for active-room recovery, chat, game history,
+  first-party product events, private selfie metadata, and canonical research
+  streams.
+- A hardened single-VM deployment using Gunicorn, Docker Compose, and Tailscale
+  Funnel.
 
-The host may also play: keep `/host` on the shared display and join normally
-from that person's phone. The host display does not consume a player seat.
+No advertising or third-party analytics are included. The server does retain
+player names, game decisions, and other first-party data for recovery and
+private analysis; see [Data, privacy, and history](docs/data-and-privacy.md)
+before hosting the game for others.
 
 ## Playing
 
-1. Open `https://YOUR-PUBLIC-HOST`, choose **Host a Game**, and enter your
-   name. Use `/new` to explicitly bypass a saved room.
-2. Other players enter the four-letter room code and a name, then take a selfie
-   or choose an illustrated avatar. The phone host can generate a six-digit code
-   if the group wants to pair a TV or laptop at `/host` as the shared display.
-3. Players may mark themselves ready. Start once 6–10
-   players have joined. The host can reorder seating and adjust the discussion
-   timer from 1–15 minutes (or Unlimited) and disable the advisory proposal
-   timer.
-4. During play, tap a completed mission shield to inspect that mission. Tap
-   elsewhere to dismiss the tooltip. Tap **My Role** in the phone header to
-   reopen the illustrated private role card.
+1. Open the public site, choose **Host a Game**, and enter the name people call
+   you in real life. Use `/new` when you intentionally want to bypass a room
+   saved in that browser.
+2. Other players choose **Join a Game** and enter the four-letter room code and
+   a name. Each player can pick an illustrated avatar or supply a selfie.
+3. Optionally open `/host` on a TV or laptop. The phone host generates a
+   six-digit, one-use pairing code that remains valid for five minutes.
+4. Begin once 6–10 seats are occupied. Ready marks are advisory; the host may
+   reorder seats, set discussion to 1–15 minutes or Unlimited, and disable the
+   advisory 60-second proposal timer.
+5. Follow the private actions on each phone. A completed mission shield opens
+   that mission's leader, party, and aggregate card result. **My Role** reopens
+   the private role card.
 
-The phone host's Settings panel shows both the room code and a refreshable
-display-pairing code during a started game. If a TV browser is stuck on an old
-suspended room, choose **Pair a different game** on that display and enter the
-new room and pairing codes. This does not delete the old room; use **End Game**
-from the authenticated host phone when the room itself should be discarded.
-
-Avatar positions are draggable and resettable. Layout choices are kept in that
-browser's local storage; they do not alter game state or reveal roles.
-
-## Project layout and artwork
-
-Runtime artwork is organized by purpose under `static/`:
-
-| Path | Contents |
-| --- | --- |
-| `static/assets/roles/` | Character reveal and role-reminder artwork. |
-| `static/assets/quests/` | Fullscreen successful/failed quest artwork. |
-| `static/assets/results/` | Good/Evil final-result backgrounds. |
-| `static/img/` | Entry background, title treatment, and UI imagery. |
-| `static/sounds/` | Retained music and sound-effect sources (excluded from the production image). |
-
-`source-assets/` holds distinct original or concept images that are not served
-by Flask and are excluded from the Docker build context. Do not point runtime
-CSS or JavaScript at that directory; copy an approved, web-ready asset into the
-appropriate `static/` subdirectory first. `ops/` contains machine/setup helpers
-that are useful to the project but are not part of the application image.
+The host may also play. The host joins from a phone like everyone else while
+the paired display remains read-only and does not consume a seat. A stale paired
+display can choose **Pair a different game** without deleting its former room.
+**End Game** on the authenticated host phone deletes the room immediately;
+otherwise an inactive suspended room expires after its configured lifetime.
 
 ## Ruleset
+
+The implementation records its rules as `avalon-base-6-10@2`.
 
 | Players | Good / Evil | Quest team sizes |
 | --- | --- | --- |
@@ -117,215 +63,39 @@ that are useful to the project but are not part of the application image.
 | 9 | 6 / 3 | 3, 4, 4, 5, 5 |
 | 10 | 6 / 4 | 3, 4, 4, 5, 5 |
 
-Merlin, Percival, Assassin, and Morgana are always used. Games with 7–9
-players add Mordred; 10-player games use Mordred and Oberon. All players vote
-and ties reject. After four consecutive rejected teams, the fifth leader's
-party is binding and proceeds without a vote. Quest four requires two Fails
-with 7–10 players. Good players can only
-play Success. After three successful quests, the Assassin must identify Merlin.
+Merlin, Percival, Assassin, and Morgana are always present. Seven- through
+nine-player games add Mordred; ten-player games add Mordred and Oberon. Merlin
+cannot see Mordred, Percival sees Merlin and Morgana without knowing which is
+which, and Oberon is hidden from the other Evil players.
 
-Lady of the Lake, Plot, Excalibur, Lancelot, and other optional variants are
-not implemented.
+All players vote and ties reject. This implementation uses a documented house
+rule for the rejection track: after four rejected parties, the fifth leader's
+party is binding and proceeds without a vote. Quest four requires two Fails at
+7–10 players; every other quest requires one. Good players can submit only
+Success. Three successful quests trigger the Assassin's attempt to identify
+Merlin.
 
-## State, chat, and game history
+Lady of the Lake, Plot, Excalibur, Lancelot, and other optional variants are not
+implemented.
 
-Live rooms and hashed reconnect capabilities are stored in the same SQLite
-volume as chat and history. A container restart restores saved rooms in a
-suspended state. Raw reconnect, host, recovery, and display-pairing secrets are
-never written to disk. Rooms expire 24 hours after the last real player
-disconnects unless a player resumes first.
+## Repository layout
 
-The `avalon_chat_data` Docker volume contains `/data/avalon-chats.sqlite3`.
-It persists across container recreation and stores:
-
-- Chat: UTC timestamp, room, game start time, player name, and message.
-- Game events: roster and roles, settings, leaders, proposals, individual
-  votes, mission parties and individual cards, mission results, assassination,
-  and final result.
-- Active-room snapshots: the latest authoritative room state and hashed
-  capabilities needed for restart-safe resumption.
-- Selfie metadata: timestamp, room, player ID/name, content hash,
-  private filename, and compressed byte count.
-- Product analytics: versioned room/lobby/phase/action/rematch/connectivity events
-  with resettable browser IDs and bounded metadata. IP addresses, tokens, and
-  free-form client text are not stored.
-- Canonical research data: hash-chained party/game/client timelines,
-  deduplicated authoritative replay checkpoints, normalized games and
-  participants, pseudonymous cross-game subjects, and client-session context.
-
-Selfies are resized to 128 x 128 and JPEG-compressed in the player's browser.
-The server stores the bytes by SHA-256 content hash under
-`/data/private/selfies`, outside Flask's public `static` tree, with directory
-mode `0700` and file mode `0600`. Repeated identical images share one file but
-each upload receives its own SQLite metadata row. No HTTP route serves
-the archive.
-
-No cookies, reconnect tokens, authorization values, environment variables, or
-IP addresses are written to this database. Game logs intentionally contain
-player names and hidden game information for later replay and balance analysis.
-
-Chat, events, room snapshots, selfie metadata, product analytics, and research
-records share a hard 2.5 GiB SQLite limit. Near the limit, old legacy rows are
-pruned first. Research history is removed only as a complete oldest terminal
-game/stream, never as a partial replay. The external selfie files are
-intentionally not auto-deleted; include the whole Docker volume in backups and
-monitor its disk usage.
-
-```bash
-# List and read chat
-sudo docker compose exec avalon python chat_history.py --dates
-sudo docker compose exec avalon python chat_history.py --date 2026-08-07
-sudo docker compose exec avalon python chat_history.py --date 2026-08-07 --room ABCD
-
-# List recorded games, then replay one chronological event stream
-sudo docker compose exec avalon python game_history.py --games
-sudo docker compose exec avalon python game_history.py --room ABCD --started-at 1786123456.123
-
-# List private selfie metadata and server-side file paths (no public endpoint)
-sudo docker compose exec avalon python selfie_history.py --limit 100
-
-# Export a private browsable copy (open index.html locally, then delete when done)
-sudo docker compose exec avalon python selfie_history.py --limit 1000 --export /data/private/gallery
-sudo docker compose cp avalon:/data/private/gallery ./avalon-selfie-gallery
-
-# Inspect product analytics
-sudo docker compose exec avalon python analytics_history.py --summary
-sudo docker compose exec avalon python analytics_history.py --party-id PARTY_ID
-
-# Canonical research/replay tools
-sudo docker compose exec avalon python research_history.py list --status completed
-sudo docker compose exec avalon python research_history.py validate GAME_ID
-sudo docker compose exec avalon python research_history.py export GAME_ID -o /data/private/game.json
-sudo docker compose exec avalon python research_history.py wrapped --subject-id subject_... --year 2026
-sudo docker compose exec avalon python research_history.py dataset --redact -o /data/private/avalon.jsonl
-```
-
-The complete envelope, field catalog, privacy boundary, replay semantics,
-Wrapped measures, and export workflow are documented in
-[`docs/research-data.md`](docs/research-data.md). Chat content is excluded from
-canonical exports unless `--include-chat` is explicit; `--redact` replaces
-names/subjects/room/selfie references and removes message content.
-
-Live victory cards still include player selfies. Durable game-event summaries
-store the selfie SHA-256 reference rather than a second base64 JPEG; the private
-archive remains the authoritative historical copy. Existing historical event
-rows are not rewritten.
-
-## Production deployment
-
-The included Compose configuration is designed for a dedicated small VM behind
-Tailscale Funnel:
-
-- Gunicorn with one process, required because live game state is in memory.
-- Container runs as an unprivileged user with a read-only root filesystem.
-- All Linux capabilities are dropped and `no-new-privileges` is enabled.
-- CPU, memory, PID, temporary-storage, and rotating-log limits are set.
-- Port 5001 binds only to VM loopback; Funnel terminates public HTTPS.
-- The container restarts unless explicitly stopped and has an HTTP healthcheck.
-
-Install Docker Engine/Compose and Tailscale using their official instructions,
-clone this repository, then create the production environment:
-
-```bash
-cd ~/avalon
-cp -n .env.example .env
-python3 -c 'import secrets; print(secrets.token_hex(32))'
-nano .env
-chmod 600 .env
-```
-
-Set `SECRET_KEY` to the generated value. Set `PUBLIC_BASE_URL` and
-`PUBLIC_ORIGIN` to the exact public HTTPS origin, without a trailing slash.
-The application refuses unsafe/incomplete production configuration.
-
-```bash
-sudo docker compose config --quiet
-sudo docker compose build --pull
-sudo docker compose up -d
-sudo docker compose ps
-curl --fail http://127.0.0.1:5001/healthz
-```
-
-Publish only the loopback service:
-
-```bash
-sudo tailscale funnel --bg 5001
-tailscale funnel status
-```
-
-Do not bind the Compose port to `0.0.0.0`, expose the Docker socket, mount host
-credentials, or add a router port-forward. The VM and Tailscale Funnel are the
-intended network boundary.
-
-### Configuration
-
-| Variable | Production purpose / default |
+| Path | Purpose |
 | --- | --- |
-| `APP_ENV` | Set to `production` to enforce production checks. |
-| `APP_VERSION` | Release/commit label written with every product event. |
-| `SECRET_KEY` | Required random secret of at least 32 characters. |
-| `PUBLIC_BASE_URL` | Public HTTPS URL used in join instructions. |
-| `PUBLIC_ORIGIN` | Exact allowed HTTP/WebSocket origin. |
-| `TRUST_PROXY_HEADERS` | `true` when running behind Funnel/proxy. |
-| `ENABLE_DEV_ROUTES` | Keep `false` in production. |
-| `MAX_CONNECTIONS` | Global live connection limit; default `100`. |
-| `MAX_CONNECTIONS_PER_IP` | Per-source limit; default `30`. |
-| `MAX_GAMES` | Active in-memory room limit; default `50`. |
-| `MAX_RATE_KEYS` | Bound for rate-limit bookkeeping; default `5000`. |
-| `GAME_TTL_SECONDS` | Suspended-room lifetime; default `86400` (24 hours). |
-| `RESEARCH_TELEMETRY_ENABLED` | Canonical events and normalized facts; default `true`. |
-| `RESEARCH_CHECKPOINTS_ENABLED` | Intermediate private replay checkpoints; default `true`. |
-| `ANALYTICS_PSEUDONYM_KEY` | Optional stable secret for cross-game subject IDs; falls back to `SECRET_KEY`. |
-| `CHAT_DB_PATH` | SQLite path; Compose uses `/data/avalon-chats.sqlite3`. |
-| `SELFIE_ARCHIVE_DIR` | Private, non-static directory for compressed selfies. |
-| `CHAT_DB_MAX_BYTES` | Requested DB cap, hard-limited to 2.5 GiB. |
+| `server.py`, `game_logic.py` | HTTP/WebSocket application and authoritative rules. |
+| `chat_store.py` | SQLite schema, migrations, pruning, and history/research persistence. |
+| `templates/`, `static/` | Browser UI and runtime artwork. |
+| `tests/` | Logic, protocol, security, persistence, archive, and research tests. |
+| `docs/` | Operator, privacy, and research documentation. |
+| `source-assets/` | Original/concept artwork excluded from the application image. |
+| `ops/` | Optional, VM-specific host helpers excluded from the application image. |
 
-Keep `.env` private and uncommitted. The checked-in `.env.example` contains no
-working credential.
+Runtime role, quest, and result art lives under `static/assets/`; entry/UI art
+lives under `static/img/`. `static/sounds/` contains retained audio sources but
+is intentionally excluded from the production image. See
+[source-assets/README.md](source-assets/README.md) for artwork handling rules.
 
-### Updating and operations
-
-Update between games:
-
-```bash
-cd ~/avalon
-git pull --ff-only
-sudo docker compose up -d --build
-curl --fail http://127.0.0.1:5001/healthz
-```
-
-Useful checks:
-
-```bash
-sudo docker compose ps
-sudo docker compose logs --tail=100 avalon
-tailscale funnel status
-```
-
-Routine request logging is disabled. Docker retains at most three 10 MiB local
-log files; application errors still appear in the container log. Keep Ubuntu,
-Docker, Tailscale, and Python dependencies patched.
-
-## Security model
-
-This is hardened for a small public hobby game, not sustained hostile traffic:
-
-- A random host capability protects host-only actions; the room code alone
-  grants only player access.
-- Private reconnect tokens and roles are sent only to the relevant browser.
-- Replacement-phone seat recovery requires a short-lived code issued by the
-  authenticated host and rotates the previous reconnect token.
-- Reconnecting from a replacement tab revokes the old socket.
-- HTTP and WebSocket payload sizes, names, lists, room/player counts, games,
-  connections, and event rates are bounded and validated server-side.
-- Production WebSockets accept only the configured origin.
-- Security headers deny framing and unnecessary browser capabilities.
-- Debug/development routes cannot be enabled in production.
-- Stale rooms, sockets, timers, and rate-limit state are cleaned up.
-
-Four-letter room codes are intentionally discoverable and are not passwords.
-
-## Local development and tests
+## Local development
 
 ```bash
 python3 -m venv .venv
@@ -333,16 +103,24 @@ python3 -m venv .venv
 .venv/bin/python server.py
 ```
 
-Open `http://127.0.0.1:5001/host` and `http://127.0.0.1:5001`. To enable the
-local debug route, set `ENABLE_DEV_ROUTES=true`; it remains unavailable in
-production.
+Open `http://127.0.0.1:5001` for the phone UI and
+`http://127.0.0.1:5001/host` for the shared display. The optional `/dev` route
+requires `ENABLE_DEV_ROUTES=true` and is always unavailable when
+`APP_ENV=production`.
+
+Run the automated suite with:
 
 ```bash
 .venv/bin/pytest -q
 ```
 
-The application is deliberately database-light and framework-light: Flask,
-Flask-SocketIO, Gunicorn, vanilla JavaScript/CSS, and SQLite. Runtime images
-under `static/` are copied into the container. Retained audio sources,
-archival originals under `source-assets/`, and operational helpers under
-`ops/` are not.
+The production process must use one Gunicorn worker because authoritative live
+room state is process-local. Threads within that worker handle concurrent
+connections.
+
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Production deployment and operations](docs/deployment.md)
+- [Data, privacy, backups, and history tools](docs/data-and-privacy.md)
+- [Canonical research data specification](docs/research-data.md)

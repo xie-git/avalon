@@ -2,7 +2,7 @@
 
 Version: `avalon.research.event/1.0.0`
 Replay state: `avalon.replay.state/1.0.0`
-Ruleset: `avalon-base-6-10@1`
+Ruleset: `avalon-base-6-10@2`
 
 This document describes the private, first-party research archive. It is built
 for exact game replay, statistical analysis, AI datasets, product/reliability
@@ -12,8 +12,10 @@ research, and visualization projects such as **Avalon Wrapped**.
 
 1. The live `GameState` remains authoritative. Telemetry is best-effort and a
    storage failure never rejects or changes a legal game action.
-2. Every party or game has its own append-only sequence. Sequence numbers are
-   gapless and each event contains the previous event hash.
+2. Every party or game has its own append-only sequence while retained.
+   Sequence numbers are gapless and each event contains the previous event
+   hash. Capacity pruning removes whole terminal research streams, not events
+   from the middle of a retained stream.
 3. Replay checkpoints contain the complete authoritative research state,
    including facts that were secret during play. Identical consecutive states
    are deduplicated.
