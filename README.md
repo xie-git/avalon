@@ -55,6 +55,9 @@ accounts, app installation, or Tailscale access are required for players.
 - Multiple independent rooms can run concurrently.
 - Persistent, timestamped chat and replay-oriented game event logs in one
   bounded SQLite database.
+- Versioned, sequence-numbered research streams with integrity hashes,
+  capability-free full-state checkpoints, normalized game/player facts,
+  AI-ready exports, and visualization-ready **Avalon Wrapped** aggregates.
 - Responsive layouts for iPhones, other phones, laptops, and cast/TV screens.
 - No advertising, third-party analytics, or public history endpoints. Local,
   first-party operational and research events stay in the private SQLite volume.
@@ -115,9 +118,10 @@ that are useful to the project but are not part of the application image.
 | 10 | 6 / 4 | 3, 4, 4, 5, 5 |
 
 Merlin, Percival, Assassin, and Morgana are always used. Games with 7–9
-players add a Minion of Mordred; 10-player games use Mordred and Oberon. All
-players vote, ties reject, and five consecutive rejected teams give Evil the
-game. Quest four requires two Fails with 7–10 players. Good players can only
+players add Mordred; 10-player games use Mordred and Oberon. All players vote
+and ties reject. After four consecutive rejected teams, the fifth leader's
+party is binding and proceeds without a vote. Quest four requires two Fails
+with 7–10 players. Good players can only
 play Success. After three successful quests, the Assassin must identify Merlin.
 
 Lady of the Lake, Plot, Excalibur, Lancelot, and other optional variants are
@@ -145,6 +149,9 @@ It persists across container recreation and stores:
 - Product analytics: versioned room/lobby/phase/action/rematch/connectivity events
   with resettable browser IDs and bounded metadata. IP addresses, tokens, and
   free-form client text are not stored.
+- Canonical research data: hash-chained party/game/client timelines,
+  deduplicated authoritative replay checkpoints, normalized games and
+  participants, pseudonymous cross-game subjects, and client-session context.
 
 Selfies are resized to 128 x 128 and JPEG-compressed in the player's browser.
 The server stores the bytes by SHA-256 content hash under
@@ -157,11 +164,12 @@ No cookies, reconnect tokens, authorization values, environment variables, or
 IP addresses are written to this database. Game logs intentionally contain
 player names and hidden game information for later replay and balance analysis.
 
-Chat, events, room snapshots, selfie metadata, and product analytics share a
-hard 2.5 GiB SQLite limit. Near the limit, old chat, game-event, and product
-analytics records are pruned to approximately 2 GiB. The external selfie files
-are intentionally not auto-deleted; include the whole Docker volume in backups
-and monitor its disk usage.
+Chat, events, room snapshots, selfie metadata, product analytics, and research
+records share a hard 2.5 GiB SQLite limit. Near the limit, old legacy rows are
+pruned first. Research history is removed only as a complete oldest terminal
+game/stream, never as a partial replay. The external selfie files are
+intentionally not auto-deleted; include the whole Docker volume in backups and
+monitor its disk usage.
 
 ```bash
 # List and read chat
@@ -183,7 +191,20 @@ sudo docker compose cp avalon:/data/private/gallery ./avalon-selfie-gallery
 # Inspect product analytics
 sudo docker compose exec avalon python analytics_history.py --summary
 sudo docker compose exec avalon python analytics_history.py --party-id PARTY_ID
+
+# Canonical research/replay tools
+sudo docker compose exec avalon python research_history.py list --status completed
+sudo docker compose exec avalon python research_history.py validate GAME_ID
+sudo docker compose exec avalon python research_history.py export GAME_ID -o /data/private/game.json
+sudo docker compose exec avalon python research_history.py wrapped --subject-id subject_... --year 2026
+sudo docker compose exec avalon python research_history.py dataset --redact -o /data/private/avalon.jsonl
 ```
+
+The complete envelope, field catalog, privacy boundary, replay semantics,
+Wrapped measures, and export workflow are documented in
+[`docs/research-data.md`](docs/research-data.md). Chat content is excluded from
+canonical exports unless `--include-chat` is explicit; `--redact` replaces
+names/subjects/room/selfie references and removes message content.
 
 Live victory cards still include player selfies. Durable game-event summaries
 store the selfie SHA-256 reference rather than a second base64 JPEG; the private
@@ -252,6 +273,9 @@ intended network boundary.
 | `MAX_GAMES` | Active in-memory room limit; default `50`. |
 | `MAX_RATE_KEYS` | Bound for rate-limit bookkeeping; default `5000`. |
 | `GAME_TTL_SECONDS` | Suspended-room lifetime; default `86400` (24 hours). |
+| `RESEARCH_TELEMETRY_ENABLED` | Canonical events and normalized facts; default `true`. |
+| `RESEARCH_CHECKPOINTS_ENABLED` | Intermediate private replay checkpoints; default `true`. |
+| `ANALYTICS_PSEUDONYM_KEY` | Optional stable secret for cross-game subject IDs; falls back to `SECRET_KEY`. |
 | `CHAT_DB_PATH` | SQLite path; Compose uses `/data/avalon-chats.sqlite3`. |
 | `SELFIE_ARCHIVE_DIR` | Private, non-static directory for compressed selfies. |
 | `CHAT_DB_MAX_BYTES` | Requested DB cap, hard-limited to 2.5 GiB. |

@@ -55,7 +55,7 @@ PLAYER_COUNT_ROLES = {
     ),
     7: (
         [Role.MERLIN, Role.PERCIVAL, Role.LOYAL_SERVANT, Role.LOYAL_SERVANT],
-        [Role.ASSASSIN, Role.MORGANA, Role.MINION_OF_MORDRED],
+        [Role.ASSASSIN, Role.MORGANA, Role.MORDRED],
     ),
     8: (
         [
@@ -65,7 +65,7 @@ PLAYER_COUNT_ROLES = {
             Role.LOYAL_SERVANT,
             Role.LOYAL_SERVANT,
         ],
-        [Role.ASSASSIN, Role.MORGANA, Role.MINION_OF_MORDRED],
+        [Role.ASSASSIN, Role.MORGANA, Role.MORDRED],
     ),
     9: (
         [
@@ -494,18 +494,25 @@ def record_vote(game: GameState, player_id: str, vote: str) -> dict | None:
 
 
 def process_vote_result(game: GameState, approved: bool) -> str:
-    """Returns: 'mission', 'next_proposal', or 'evil_wins_by_rejection'."""
+    """Resolve a team vote.
+
+    Four rejected parties advance to a fifth, binding proposal. The fifth
+    leader's party enters the mission without a vote, so a fifth rejection is
+    never a legal state.
+    """
     if approved:
         game.consecutive_rejections = 0
         game.phase = GamePhase.MISSION
         return "mission"
     else:
+        if game.consecutive_rejections >= 4:
+            # Defensive compatibility for a restored pre-rule-change vote: the
+            # selected fifth party is binding regardless of any ballots that
+            # may already have been collected.
+            game.consecutive_rejections = 0
+            game.phase = GamePhase.MISSION
+            return "mission"
         game.consecutive_rejections += 1
-        if game.consecutive_rejections >= 5:
-            game.phase = GamePhase.GAME_OVER
-            game.winner = "evil"
-            game.win_reason = "rejections"
-            return "evil_wins_by_rejection"
         # Advance leader
         game.current_leader_index = (game.current_leader_index + 1) % len(
             game.player_order

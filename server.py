@@ -25,6 +25,15 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from chat_store import configured_chat_store
 from selfie_archive import SelfieArchive
+from research_telemetry import (
+    RESEARCH_SPEC_VERSION,
+    RULESET_VERSION,
+    classify_event,
+    pseudonymous_subject_id,
+    replay_state,
+    scalar,
+    utc_timestamp,
+)
 from game_logic import (
     GameState,
     GamePhase,
@@ -63,6 +72,17 @@ TRUST_PROXY_HEADERS = os.environ.get("TRUST_PROXY_HEADERS", "false").lower() == 
 PORT = int(os.environ.get("PORT", 5001))
 APP_VERSION = os.environ.get("APP_VERSION", "development")[:64]
 ANALYTICS_SCHEMA_VERSION = 1
+RESEARCH_TELEMETRY_ENABLED = (
+    os.environ.get("RESEARCH_TELEMETRY_ENABLED", "true").lower() == "true"
+)
+RESEARCH_CHECKPOINTS_ENABLED = (
+    os.environ.get("RESEARCH_CHECKPOINTS_ENABLED", "true").lower() == "true"
+)
+ANALYTICS_PSEUDONYM_KEY = (
+    os.environ.get("ANALYTICS_PSEUDONYM_KEY")
+    or SECRET_KEY
+    or "avalon-development-research-subjects"
+)
 
 if IS_PRODUCTION:
     missing = [
@@ -82,6 +102,14 @@ if IS_PRODUCTION:
         raise RuntimeError("SECRET_KEY must be at least 32 characters")
     if SECRET_KEY.startswith("replace-with-"):
         raise RuntimeError("Replace the example production secrets before starting")
+    configured_pseudonym_key = os.environ.get("ANALYTICS_PSEUDONYM_KEY")
+    if configured_pseudonym_key and (
+        len(configured_pseudonym_key) < 32
+        or configured_pseudonym_key.startswith("replace-with-")
+    ):
+        raise RuntimeError(
+            "ANALYTICS_PSEUDONYM_KEY must be a non-example secret of at least 32 characters"
+        )
     parsed_public_url = urlsplit(PUBLIC_BASE_URL)
     if parsed_public_url.scheme != "https" or not parsed_public_url.netloc:
         raise RuntimeError(
@@ -94,7 +122,7 @@ app = Flask(__name__)
 app.config.update(
     SECRET_KEY=SECRET_KEY or secrets.token_hex(32),
     SEND_FILE_MAX_AGE_DEFAULT=3600,
-    MAX_CONTENT_LENGTH=64 * 1024,
+    MAX_CONTENT_LENGTH=256 * 1024,
 )
 if TRUST_PROXY_HEADERS:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
@@ -105,7 +133,7 @@ socketio = SocketIO(
     app,
     async_mode="threading",
     cors_allowed_origins=allowed_origins,
-    max_http_buffer_size=64 * 1024,
+    max_http_buffer_size=256 * 1024,
     ping_interval=25,
     ping_timeout=20,
 )
@@ -130,10 +158,11 @@ game_persistence_error_logged = False
 room_persistence_error_logged = False
 selfie_persistence_error_logged = False
 analytics_persistence_error_logged = False
+research_persistence_error_logged = False
 
 
 @app.after_request
-def no_cache(response):
+def apply_response_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -143,8 +172,13 @@ def no_cache(response):
         "script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
         "media-src 'self'; connect-src 'self' ws: wss:; form-action 'self'"
     )
-    if request.path.startswith(("/host", "/debug", "/dev")):
+    # The HTML shell must always be revalidated so a deployment cannot strand
+    # returning players on stale JavaScript URLs. Versioned static resources,
+    # including the large cinematic artwork, are safe to retain for a year.
+    if response.mimetype == "text/html" or request.path.startswith("/debug"):
         response.headers["Cache-Control"] = "no-store"
+    elif request.path.startswith("/static/") and request.args.get("v"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     if request.is_secure:
         response.headers["Strict-Transport-Security"] = (
             "max-age=31536000; includeSubDomains"
@@ -174,7 +208,7 @@ EVENT_LIMITS = {
     "claim_seat": (10, 60),
     "pair_display": (10, 60),
     "chat": (30, 60),
-    "analytics": (30, 60),
+    "analytics": (120, 60),
     "default": (120, 60),
 }
 MAX_CONNECTIONS = int(os.environ.get("MAX_CONNECTIONS", 100))
@@ -247,6 +281,326 @@ def emit_to_game(game_code: str, event: str, data: dict):
     socketio.emit(event, data, room=game_code)
 
 
+def research_subject_id(analytics_id: str | None) -> str | None:
+    return pseudonymous_subject_id(analytics_id, ANALYTICS_PSEUDONYM_KEY)
+
+
+def _research_elapsed(game: GameState | None) -> tuple[int | None, int | None]:
+    if not game:
+        return None, None
+    now = time.time()
+    game_elapsed_ms = None
+    if game.started_at is not None:
+        active_seconds = float(game.active_elapsed_seconds)
+        if game.active_since is not None:
+            active_seconds += max(0.0, now - game.active_since)
+        game_elapsed_ms = max(0, round(active_seconds * 1000))
+    phase_elapsed_ms = max(0, round((now - game.phase_started_at) * 1000))
+    return game_elapsed_ms, phase_elapsed_ms
+
+
+def research_participant_record(
+    game: GameState, participant_id: str, *, at: float | None = None
+) -> dict | None:
+    """Return one normalized player/spectator dimension row."""
+    if not game.game_id:
+        return None
+    timestamp = datetime.fromtimestamp(at or time.time(), timezone.utc)
+    timestamp_text = utc_timestamp(timestamp)
+    player = game.players.get(participant_id)
+    if player:
+        seat_index = (
+            game.player_order.index(participant_id)
+            if participant_id in game.player_order
+            else None
+        )
+        team = scalar(player.team)
+        won = None if not game.winner or not team else team == game.winner
+        return {
+            "game_id": game.game_id,
+            "participant_id": player.player_id,
+            "participant_type": "player",
+            "subject_id": research_subject_id(player.analytics_id),
+            "display_name": player.name,
+            "seat_index": seat_index,
+            "role": scalar(player.role),
+            "team": team,
+            "is_bot": player.is_bot,
+            "is_host_player": player.player_id == game.host_player_id,
+            "color_index": player.color_index,
+            "avatar_index": player.avatar_index,
+            "avatar_source": "selfie" if player.selfie_sha256 else "built_in",
+            "selfie_sha256": player.selfie_sha256,
+            "vision_mode": None,
+            "first_seen_at": utc_timestamp(
+                datetime.fromtimestamp(game.started_at or (at or time.time()), timezone.utc)
+            ),
+            "last_seen_at": timestamp_text,
+            "won": won,
+        }
+    spectator = game.spectators.get(participant_id)
+    if spectator:
+        return {
+            "game_id": game.game_id,
+            "participant_id": spectator.spectator_id,
+            "participant_type": "spectator",
+            "subject_id": research_subject_id(spectator.analytics_id),
+            "display_name": spectator.name,
+            "seat_index": None,
+            "role": None,
+            "team": None,
+            "is_bot": False,
+            "is_host_player": False,
+            "color_index": spectator.color_index,
+            "avatar_index": None,
+            "avatar_source": None,
+            "selfie_sha256": None,
+            "vision_mode": spectator.vision_mode,
+            "first_seen_at": timestamp_text,
+            "last_seen_at": timestamp_text,
+            "won": None,
+        }
+    return None
+
+
+def research_participant_records(
+    game: GameState, *, at: float | None = None
+) -> list[dict]:
+    records = [
+        research_participant_record(game, participant_id, at=at)
+        for participant_id in [*game.player_order, *sorted(game.spectators)]
+    ]
+    return [record for record in records if record]
+
+
+def record_research_event(
+    event_type: str,
+    *,
+    game: GameState | None = None,
+    source: str = "server",
+    category: str | None = None,
+    visibility: str = "private",
+    actor_type: str = "system",
+    actor_id: str | None = None,
+    analytics_id: str | None = None,
+    payload: dict | None = None,
+    state: dict | None = None,
+    event_id: str | None = None,
+    client: dict | None = None,
+) -> None:
+    """Append to the canonical stream without ever interrupting a live game."""
+    global research_persistence_error_logged
+    if not RESEARCH_TELEMETRY_ENABLED:
+        return
+    client = client or {}
+    if game and game.game_id:
+        stream_id = game.game_id
+        stream_type = "game"
+    elif game:
+        stream_id = game.party_id
+        stream_type = "party"
+    elif client.get("session_id"):
+        stream_id = client["session_id"]
+        stream_type = "client"
+    else:
+        return
+    try:
+        game_elapsed_ms, phase_elapsed_ms = _research_elapsed(game)
+        chat_store.save_research_event(
+            stream_id=stream_id,
+            stream_type=stream_type,
+            app_version=APP_VERSION,
+            event_type=event_type,
+            source=source,
+            category=category or classify_event(event_type, source),
+            visibility=visibility,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            subject_id=research_subject_id(analytics_id),
+            party_id=game.party_id if game else None,
+            room_code=game.code if game else None,
+            game_id=game.game_id if game else None,
+            phase=scalar(game.phase) if game else None,
+            mission_num=(game.current_mission + 1) if game and game.started_at else None,
+            proposal_attempt=(
+                game.consecutive_rejections + 1 if game and game.started_at else None
+            ),
+            game_elapsed_ms=game_elapsed_ms,
+            phase_elapsed_ms=phase_elapsed_ms,
+            payload=payload or {},
+            state=state,
+            event_id=event_id,
+            client=client,
+        )
+        research_persistence_error_logged = False
+    except Exception:
+        if not research_persistence_error_logged:
+            logger.exception("Could not persist canonical research telemetry")
+            research_persistence_error_logged = True
+        return
+    if (
+        game
+        and game.game_id
+        and actor_id
+        and event_type
+        in {
+            "player_joined",
+            "player_reconnected",
+            "spectator_joined",
+            "spectator_reconnected",
+            "seat_recovered",
+            "client_session_started",
+        }
+    ):
+        participant = research_participant_record(game, actor_id)
+        if participant:
+            try:
+                chat_store.upsert_research_participant(participant)
+            except Exception:
+                if not research_persistence_error_logged:
+                    logger.exception("Could not update research participant")
+                    research_persistence_error_logged = True
+
+
+def start_research_game(
+    game: GameState, *, initial_state_source: str = "game_start"
+) -> bool:
+    global research_persistence_error_logged
+    if not RESEARCH_TELEMETRY_ENABLED or not game.game_id or not game.started_at:
+        return False
+    try:
+        initial_state = replay_state(game, captured_at=game.started_at)
+        chat_store.start_research_game(
+            game={
+                "game_id": game.game_id,
+                "party_id": game.party_id,
+                "room_code": game.code,
+                "ruleset_version": RULESET_VERSION,
+                "app_version": APP_VERSION,
+                "started_at": utc_timestamp(
+                    datetime.fromtimestamp(game.started_at, timezone.utc)
+                ),
+                "started_at_unix": game.started_at,
+                "player_count": game.player_count(),
+                "human_count": sum(
+                    not player.is_bot for player in game.players.values()
+                ),
+                "spectator_count": len(game.spectators),
+                "settings": {
+                    "discussion_seconds": game.discussion_time,
+                    "proposal_seconds": game.proposal_time,
+                    "beta_test_mode": game.beta_test_mode,
+                    "beta_test_player_count": game.beta_test_player_count,
+                    "initial_state_source": initial_state_source,
+                },
+                "role_set": [
+                    {"role": scalar(player.role), "team": scalar(player.team)}
+                    for player in game.player_order_list()
+                ],
+                "initial_state": initial_state,
+            },
+            participants=research_participant_records(game, at=game.started_at),
+        )
+        research_persistence_error_logged = False
+        return True
+    except Exception:
+        if not research_persistence_error_logged:
+            logger.exception("Could not initialize normalized research game")
+            research_persistence_error_logged = True
+        return False
+
+
+def backfill_restored_research_game(game: GameState) -> None:
+    """Give pre-telemetry persisted games the normalized parent they lack."""
+    global research_persistence_error_logged
+    if not RESEARCH_TELEMETRY_ENABLED or not game.game_id or not game.started_at:
+        return
+    try:
+        if chat_store.research_game(game.game_id) is not None:
+            return
+    except Exception:
+        if not research_persistence_error_logged:
+            logger.exception("Could not inspect restored research game")
+            research_persistence_error_logged = True
+        return
+    if not start_research_game(
+        game, initial_state_source="first_available_restored_snapshot"
+    ):
+        return
+    record_research_event(
+        "research_game_backfilled",
+        game=game,
+        source="migration",
+        category="lifecycle",
+        visibility="research_secret",
+        payload={
+            "source": "durable_room_snapshot",
+            "initial_state_source": "first_available_restored_snapshot",
+        },
+    )
+    record_state_checkpoint(game, reason="restored_game_backfill")
+
+
+def finalize_research_game(
+    game: GameState, *, status: str, abandonment_reason: str | None = None
+) -> None:
+    global research_persistence_error_logged
+    if not RESEARCH_TELEMETRY_ENABLED or not game.game_id or not game.started_at:
+        return
+    ended_at = time.time()
+    active_seconds = float(game.active_elapsed_seconds)
+    if game.active_since is not None:
+        active_seconds += max(0.0, ended_at - game.active_since)
+    try:
+        final_state = replay_state(game, captured_at=ended_at)
+        chat_store.finalize_research_game(
+            game={
+                "game_id": game.game_id,
+                "status": status,
+                "ended_at": utc_timestamp(
+                    datetime.fromtimestamp(ended_at, timezone.utc)
+                ),
+                "ended_at_unix": ended_at,
+                "winner": game.winner,
+                "win_reason": game.win_reason,
+                "wall_duration_ms": max(0, round((ended_at - game.started_at) * 1000)),
+                "active_duration_ms": max(0, round(active_seconds * 1000)),
+                "mission_count": len(game.mission_results),
+                "proposal_count": len(game.proposal_history),
+                "successful_missions": game.good_wins(),
+                "failed_missions": game.evil_wins_count(),
+                "assassination_target_player_id": game.assassin_target,
+                "final_state": final_state,
+                "abandonment_reason": abandonment_reason,
+            },
+            participants=research_participant_records(game, at=ended_at),
+        )
+        research_persistence_error_logged = False
+    except Exception:
+        if not research_persistence_error_logged:
+            logger.exception("Could not finalize normalized research game")
+            research_persistence_error_logged = True
+
+
+def record_state_checkpoint(game: GameState, *, reason: str) -> None:
+    if not RESEARCH_CHECKPOINTS_ENABLED or not game.game_id:
+        return
+    try:
+        state = replay_state(game)
+    except Exception:
+        logger.exception("Could not build replay checkpoint")
+        return
+    record_research_event(
+        "state_checkpoint",
+        game=game,
+        source="state_checkpoint",
+        category="state",
+        visibility="research_secret",
+        payload={"reason": reason},
+        state=state,
+    )
+
+
 def log_game_event(game: GameState, event_type: str, payload: dict) -> None:
     global game_persistence_error_logged
     if not game.started_at:
@@ -263,6 +617,14 @@ def log_game_event(game: GameState, event_type: str, payload: dict) -> None:
         if not game_persistence_error_logged:
             logger.exception("Could not persist game event")
             game_persistence_error_logged = True
+    record_research_event(
+        event_type,
+        game=game,
+        source="gameplay",
+        category="gameplay",
+        visibility="research_secret",
+        payload=payload,
+    )
 
 
 def historical_game_summary(game: GameState) -> dict:
@@ -276,7 +638,7 @@ def historical_game_summary(game: GameState) -> dict:
 
 
 def log_completed_game(game: GameState) -> None:
-    """Write the compact durable summary and one terminal product event."""
+    """Write compact history, terminal telemetry, and normalized outcome facts."""
     log_game_event(game, "game_over", historical_game_summary(game))
     record_product_event(
         "game_completed",
@@ -290,6 +652,8 @@ def log_completed_game(game: GameState) -> None:
             ),
         },
     )
+    record_state_checkpoint(game, reason="game_completed")
+    finalize_research_game(game, status="completed")
 
 
 def record_product_event(
@@ -300,13 +664,17 @@ def record_product_event(
     actor_id: str | None = None,
     analytics_id: str | None = None,
     payload: dict | None = None,
+    event_id: str | None = None,
+    client: dict | None = None,
+    visibility: str = "private",
 ) -> None:
     """Persist one privacy-bounded analytics fact; never interrupt gameplay."""
     global analytics_persistence_error_logged
+    event_id = event_id or str(uuid.uuid4())
     try:
         phase = game.phase.value if game else None
         chat_store.save_product_event(
-            event_id=str(uuid.uuid4()),
+            event_id=event_id,
             schema_version=ANALYTICS_SCHEMA_VERSION,
             app_version=APP_VERSION,
             party_id=game.party_id if game else None,
@@ -327,6 +695,18 @@ def record_product_event(
         if not analytics_persistence_error_logged:
             logger.exception("Could not persist product analytics")
             analytics_persistence_error_logged = True
+    record_research_event(
+        event_type,
+        game=game,
+        source="client" if client else "product",
+        visibility=visibility,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        analytics_id=analytics_id,
+        payload=payload,
+        event_id=event_id,
+        client=client,
+    )
 
 
 def mark_phase_started(game: GameState, event_type: str, payload: dict | None = None) -> None:
@@ -604,6 +984,7 @@ def persist_game(game: GameState) -> None:
         if not room_persistence_error_logged:
             logger.exception("Could not persist active room")
             room_persistence_error_logged = True
+    record_state_checkpoint(game, reason="authoritative_state_changed")
 
 
 def load_persisted_games() -> None:
@@ -622,6 +1003,10 @@ def load_persisted_games() -> None:
                 continue
             games[code] = game
             game_activity[code] = time.monotonic()
+            # A room created by a release predating normalized research tables
+            # can still be resumed after this process restart. Establish its
+            # parent/dimension rows before reconnect events try to update them.
+            backfill_restored_research_game(game)
             for player in game.players.values():
                 if player.session_token_hash:
                     session_tokens[player.session_token_hash] = (code, player.player_id)
@@ -659,6 +1044,14 @@ def suspend_game(game: GameState) -> None:
         "room_suspended",
         {"expires_at": game.expires_at, "timer_remaining": game.timer_remaining},
     )
+    record_product_event(
+        "room_suspended",
+        game=game,
+        payload={
+            "timer_kind": game.timer_kind,
+            "timer_remaining_seconds": game.timer_remaining,
+        },
+    )
     persist_game(game)
 
 
@@ -684,6 +1077,7 @@ def resume_game(game: GameState) -> None:
             )
     game.timer_remaining = None
     emit_to_game(game.code, "room_resumed", {})
+    record_product_event("room_resumed", game=game)
     persist_game(game)
 
 
@@ -700,6 +1094,16 @@ def discard_game(
                 game=game,
                 payload={"reason": reason, "had_started": bool(game.started_at)},
             )
+            if game.started_at:
+                record_state_checkpoint(game, reason=event_type)
+                if game.phase == GamePhase.GAME_OVER:
+                    finalize_research_game(game, status="completed")
+                else:
+                    finalize_research_game(
+                        game,
+                        status="expired" if reason == "expired" else "abandoned",
+                        abandonment_reason=reason,
+                    )
         if notify:
             emit_to_game(game_code, "game_ended", {})
         # Remove still-connected clients from the Socket.IO room as well as
@@ -794,7 +1198,7 @@ def require_integer(data: dict, key: str, *, minimum: int, maximum: int) -> int:
     return value
 
 
-def event_game_lock(args):
+def event_game(args) -> GameState | None:
     """Resolve the room touched by an event without trusting its payload."""
     with state_lock:
         info = sid_to_info.get(request.sid)
@@ -812,8 +1216,30 @@ def event_game_lock(args):
             if not token_entry and isinstance(token, str):
                 token_entry = spectator_tokens.get(token_digest(token))
             game_code = token_entry[0] if token_entry else None
-        game = games.get(game_code)
-        return game.lock if game else nullcontext()
+        return games.get(game_code)
+
+
+def event_game_lock(args):
+    game = event_game(args)
+    return game.lock if game else nullcontext()
+
+
+def protocol_actor() -> tuple[str, str | None, str | None]:
+    info = sid_to_info.get(request.sid, {})
+    actor_type = (
+        "host_display"
+        if info.get("is_host_screen")
+        else "spectator"
+        if info.get("spectator_id")
+        else "player"
+        if info.get("player_id")
+        else "browser"
+    )
+    return (
+        actor_type,
+        info.get("player_id") or info.get("spectator_id"),
+        info.get("analytics_id"),
+    )
 
 
 def rate_limited(bucket: str = "default"):
@@ -851,6 +1277,18 @@ def rate_limited(bucket: str = "default"):
                     for identity, bucket_name, _ in keys
                 )
                 if len(rate_windows) + new_keys > MAX_RATE_KEYS:
+                    target_game = event_game(args)
+                    actor_type, actor_id, analytics_id = protocol_actor()
+                    record_research_event(
+                        "rate_limit_triggered",
+                        game=target_game,
+                        source="server_protocol",
+                        category="reliability",
+                        actor_type=actor_type,
+                        actor_id=actor_id,
+                        analytics_id=analytics_id,
+                        payload={"action": func.__name__, "bucket": bucket},
+                    )
                     emit(
                         "error",
                         {"message": "Server is busy. Please try again shortly."},
@@ -862,6 +1300,18 @@ def rate_limited(bucket: str = "default"):
                     while window and window[0] <= now - period:
                         window.popleft()
                     if len(window) >= key_limit:
+                        target_game = event_game(args)
+                        actor_type, actor_id, analytics_id = protocol_actor()
+                        record_research_event(
+                            "rate_limit_triggered",
+                            game=target_game,
+                            source="server_protocol",
+                            category="reliability",
+                            actor_type=actor_type,
+                            actor_id=actor_id,
+                            analytics_id=analytics_id,
+                            payload={"action": func.__name__, "bucket": bucket},
+                        )
                         emit(
                             "error",
                             {
@@ -874,7 +1324,29 @@ def rate_limited(bucket: str = "default"):
                     window.append(now)
             # Preserve ordering within one room without blocking other games.
             with event_game_lock(args):
+                started = time.perf_counter()
                 result = func(*args, **kwargs)
+                if bucket != "analytics":
+                    target_game = event_game(args)
+                    actor_type, actor_id, analytics_id = protocol_actor()
+                    data = args[0] if args and isinstance(args[0], dict) else {}
+                    record_research_event(
+                        "server_action_processed",
+                        game=target_game,
+                        source="server_protocol",
+                        category="interaction",
+                        actor_type=actor_type,
+                        actor_id=actor_id,
+                        analytics_id=analytics_id
+                        or valid_analytics_id(data.get("analytics_id")),
+                        payload={
+                            "action": func.__name__,
+                            "bucket": bucket,
+                            "duration_ms": max(
+                                0, round((time.perf_counter() - started) * 1000)
+                            ),
+                        },
+                    )
                 info = sid_to_info.get(request.sid)
                 game_code = info.get("game_code") if info else None
                 if game_code in games:
@@ -920,6 +1392,41 @@ def validate_host(sid: str, *, require_phase=None, allow_suspended: bool = False
 
 
 def emit_validation_error(error: Exception) -> None:
+    message = str(error).lower()
+    reason = (
+        "authorization"
+        if any(word in message for word in ("authorization", "not a player", "not connected"))
+        else "wrong_phase"
+        if "phase" in message
+        else "wrong_actor"
+        if any(word in message for word in ("not the current leader", "not the assassin"))
+        else "not_found"
+        if "not found" in message
+        else "capacity"
+        if any(word in message for word in ("full", "limit", "need 6-10"))
+        else "duplicate"
+        if any(word in message for word in ("already", "duplicate"))
+        else "invalid_input"
+    )
+    event_info = getattr(request, "event", {}) or {}
+    event_args = event_info.get("args", []) if isinstance(event_info, dict) else []
+    game = event_game(event_args)
+    actor_type, actor_id, analytics_id = protocol_actor()
+    record_research_event(
+        "server_validation_failed",
+        game=game,
+        source="server_protocol",
+        category="reliability",
+        actor_type=actor_type,
+        actor_id=actor_id,
+        analytics_id=analytics_id,
+        payload={
+            "action": str(event_info.get("message", "unknown"))[:64]
+            if isinstance(event_info, dict)
+            else "unknown",
+            "reason": reason,
+        },
+    )
     emit("error", {"message": str(error)})
 
 
@@ -1264,6 +1771,7 @@ def transition_to_team_proposal(game: GameState):
             "leader_id": leader.player_id if leader else None,
             "mission_size": game.mission_size(),
             "duration_seconds": game.proposal_time,
+            "forced": game.consecutive_rejections >= 4,
             "player_order": [game.players[pid].name for pid in game.player_order],
             "player_name_to_id": {
                 game.players[pid].name: pid for pid in game.player_order
@@ -1343,24 +1851,57 @@ def submit_team_proposal(
     game.timer_deadline = None
     game.timer_kind = None
     game.timer_remaining = None
-    game.phase = GamePhase.TEAM_VOTE
+    forced = game.consecutive_rejections >= 4
     record_product_event(
         "team_proposal_submitted",
         game=game,
         actor_type="player",
         actor_id=leader.player_id,
         analytics_id=leader.analytics_id,
-        payload={"decision_ms": decision_ms, "team_size": len(team_ids)},
+        payload={
+            "decision_ms": decision_ms,
+            "team_size": len(team_ids),
+            "team_ids": list(team_ids),
+            "forced": forced,
+        },
+        visibility="research_secret",
     )
-    mark_phase_started(game, "team_vote_started", {"team_size": len(team_ids)})
     team_names = [game.players[pid].name for pid in team_ids]
     payload = {
         "team": team_names,
         "team_ids": team_ids,
         "leader_name": leader.name,
+        "forced": forced,
     }
     log_game_event(game, "team_proposed", payload)
     emit_to_game(game.code, "team_proposed", payload)
+    if forced:
+        public_proposal = {
+            "mission_num": game.current_mission + 1,
+            "attempt": 5,
+            "leader_name": leader.name,
+            "team": team_names,
+            "approve_count": 0,
+            "reject_count": 0,
+            "approved": True,
+            "forced": True,
+        }
+        game.proposal_history.append(public_proposal)
+        log_game_event(game, "team_forced_after_four_rejections", public_proposal)
+        emit_to_game(
+            game.code,
+            "forced_team_selected",
+            {
+                "leader_name": leader.name,
+                "team": team_names,
+                "team_ids": team_ids,
+            },
+        )
+        begin_proposed_mission(game, forced=True)
+        return
+
+    game.phase = GamePhase.TEAM_VOTE
+    mark_phase_started(game, "team_vote_started", {"team_size": len(team_ids)})
     emit_to_game(game.code, "vote_start", payload)
     for bot in bot_players(game):
         record_vote(game, bot.player_id, secure_random.choice(("approve", "reject")))
@@ -1497,6 +2038,41 @@ def play_bot_mission_cards(game: GameState) -> None:
         finish_mission(game, result)
 
 
+def begin_proposed_mission(
+    game: GameState,
+    *,
+    forced: bool = False,
+    proposal_attempt: int | None = None,
+) -> None:
+    """Start the selected quest party, optionally bypassing the fifth vote."""
+    if proposal_attempt is None:
+        proposal_attempt = game.consecutive_rejections + 1
+    game.consecutive_rejections = 0
+    game.phase = GamePhase.MISSION
+    mark_phase_started(
+        game,
+        "mission_started",
+        {
+            "team_size": len(game.proposed_team),
+            "forced": forced,
+            "proposal_attempt": proposal_attempt,
+        },
+    )
+    emit_to_game(
+        game.code,
+        "mission_start",
+        {
+            "team": [game.players[pid].name for pid in game.proposed_team],
+            "team_ids": game.proposed_team,
+            "mission_num": game.current_mission + 1,
+            "forced": forced,
+            "proposal_attempt": proposal_attempt,
+        },
+    )
+    persist_game(game)
+    play_bot_mission_cards(game)
+
+
 def finish_vote(game: GameState, result: dict) -> None:
     game.phase = GamePhase.VOTE_REVEAL
     mark_phase_started(
@@ -1534,25 +2110,10 @@ def advance_after_vote(game: GameState) -> None:
     if not result:
         raise ValueError("No revealed vote is awaiting confirmation")
     game.pending_vote_result = None
+    proposal_attempt = game.consecutive_rejections + 1
     outcome = process_vote_result(game, result["approved"])
     if outcome == "mission":
-        mark_phase_started(game, "mission_started", {"team_size": len(game.proposed_team)})
-        emit_to_game(
-            game.code,
-            "mission_start",
-            {
-                "team": [game.players[pid].name for pid in game.proposed_team],
-                "team_ids": game.proposed_team,
-                "mission_num": game.current_mission + 1,
-            },
-        )
-        play_bot_mission_cards(game)
-    elif outcome == "evil_wins_by_rejection":
-        emit_to_game(game.code, "evil_wins_by_rejection", {})
-        persist_game(game)
-        pause(2)
-        emit_to_game(game.code, "game_over", get_game_summary(game))
-        log_completed_game(game)
+        begin_proposed_mission(game, proposal_attempt=proposal_attempt)
     else:
         emit_to_game(
             game.code,
@@ -1579,7 +2140,20 @@ def run_bot_assassination(game: GameState) -> None:
     targets = get_assassin_targets(game)
     if not targets:
         return
-    result = process_assassination(game, secure_random.choice(targets).player_id)
+    target_id = secure_random.choice(targets).player_id
+    result = process_assassination(game, target_id)
+    record_product_event(
+        "assassination_submitted",
+        game=game,
+        actor_type="bot",
+        actor_id=assassin.player_id,
+        payload={
+            "decision_ms": 0,
+            "target_player_id": target_id,
+            "was_merlin": bool(result["was_merlin"]),
+        },
+        visibility="research_secret",
+    )
     emit_to_game(game.code, "assassination_result", result)
     persist_game(game)
     pause(3)
@@ -1610,6 +2184,14 @@ def on_connect(auth=None):
 
 CLIENT_ANALYTICS_EVENTS = {
     "client_session_started",
+    "socket_reconnected",
+    "screen_viewed",
+    "visibility_changed",
+    "entry_mode_selected",
+    "ui_control_activated",
+    "wake_lock_acquired",
+    "wake_lock_released",
+    "wake_lock_failed",
     "help_opened",
     "role_card_opened",
     "chat_opened",
@@ -1635,6 +2217,26 @@ CLIENT_ANALYTICS_KEYS = {
     "unread_count",
     "camera_permission",
     "vision_mode",
+    "screen_id",
+    "previous_screen_id",
+    "visibility_state",
+    "reconnect_count",
+    "session_duration_ms",
+    "control_id",
+    "supported",
+}
+CLIENT_CONTEXT_KEYS = {
+    "screen_class",
+    "display_mode",
+    "viewport_width_bucket",
+    "viewport_height_bucket",
+    "timezone_offset_minutes",
+    "locale",
+    "color_scheme",
+    "reduced_motion",
+    "touch_capable",
+    "online",
+    "navigation_ms",
 }
 
 
@@ -1665,6 +2267,45 @@ def on_client_analytics(data):
         analytics_id = valid_analytics_id(data.get("analytics_id")) or info.get(
             "analytics_id"
         )
+        has_client_envelope = any(
+            key in data
+            for key in (
+                "client_session_id",
+                "client_event_id",
+                "client_sequence",
+                "client_occurred_at",
+                "page",
+            )
+        )
+        client_session_id = valid_analytics_id(data.get("client_session_id"))
+        client_event_id = valid_analytics_id(data.get("client_event_id"))
+        client_sequence = data.get("client_sequence")
+        client_occurred_at = data.get("client_occurred_at")
+        page = data.get("page")
+        if has_client_envelope and (
+            not client_session_id
+            or not client_event_id
+            or isinstance(client_sequence, bool)
+            or not isinstance(client_sequence, int)
+            or not 1 <= client_sequence <= 10_000_000
+            or not isinstance(client_occurred_at, str)
+            or not 20 <= len(client_occurred_at) <= 35
+            or page not in {"player", "host"}
+        ):
+            raise ValueError("Invalid client event envelope")
+        raw_context = data.get("client_context", {}) if has_client_envelope else {}
+        if not isinstance(raw_context, dict) or len(raw_context) > 16:
+            raise ValueError("Invalid client context")
+        client_context = {}
+        for key, value in raw_context.items():
+            if key not in CLIENT_CONTEXT_KEYS:
+                continue
+            if isinstance(value, bool):
+                client_context[key] = value
+            elif isinstance(value, int) and not isinstance(value, bool):
+                client_context[key] = max(-100_000, min(value, 1_000_000))
+            elif isinstance(value, str):
+                client_context[key] = value[:64]
         actor_type = "host_display" if info.get("is_host_screen") else (
             "spectator" if info.get("spectator_id") else (
                 "player" if info.get("player_id") else "browser"
@@ -1678,6 +2319,27 @@ def on_client_analytics(data):
             actor_id=actor_id,
             analytics_id=analytics_id,
             payload=payload,
+            event_id=client_event_id or None,
+            client={
+                "session_id": client_session_id,
+                "event_id": client_event_id,
+                "sequence": client_sequence,
+                "occurred_at": client_occurred_at,
+                "uptime_ms": max(
+                    0,
+                    min(
+                        int(data.get("client_uptime_ms", 0)),
+                        86_400_000,
+                    ),
+                )
+                if isinstance(data.get("client_uptime_ms", 0), (int, float))
+                and not isinstance(data.get("client_uptime_ms", 0), bool)
+                else None,
+                "page": page,
+                "context": client_context,
+            }
+            if has_client_envelope
+            else None,
         )
     except ValueError:
         return
@@ -1844,6 +2506,15 @@ def on_request_display_pairing():
         else:
             raise ValueError("Could not issue a display pairing code")
         game.display_pair_codes[digest] = now + 300
+        actor_type, actor_id, analytics_id = protocol_actor()
+        record_product_event(
+            "display_pairing_requested",
+            game=game,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            analytics_id=analytics_id,
+            payload={"expires_in_seconds": 300},
+        )
         emit(
             "display_pairing_code",
             {"room_code": game.code, "code": code, "expires_in": 300},
@@ -2461,6 +3132,16 @@ def on_request_seat_recovery(data):
         else:
             raise ValueError("Could not issue a recovery code")
         game.seat_recovery_codes[token_digest(code)] = (player_id, now + 300)
+        actor_type, actor_id, analytics_id = protocol_actor()
+        record_product_event(
+            "seat_recovery_issued",
+            game=game,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            analytics_id=analytics_id,
+            payload={"target_player_id": player_id, "expires_in_seconds": 300},
+            visibility="research_secret",
+        )
         emit(
             "seat_recovery_code",
             {"player_id": player_id, "player_name": player.name, "code": code, "expires_in": 300},
@@ -2478,6 +3159,7 @@ def on_claim_player_seat(data):
         data = require_object(data)
         game_code = require_string(data, "room_code", minimum=4, maximum=4).upper()
         recovery_code = require_string(data, "recovery_code", minimum=6, maximum=6)
+        analytics_id = valid_analytics_id(data.get("analytics_id"))
         if not recovery_code.isdigit():
             raise ValueError("Recovery code must contain six digits")
         game = games.get(game_code)
@@ -2500,13 +3182,24 @@ def on_claim_player_seat(data):
         player.session_token_hash = token_digest(new_token)
         player.sid = request.sid
         player.connected = True
+        if analytics_id:
+            player.analytics_id = analytics_id
         session_tokens[player.session_token_hash] = (game.code, player.player_id)
         join_room(game.code)
         sid_to_info[request.sid] = {
             "game_code": game.code,
             "player_id": player.player_id,
+            "analytics_id": player.analytics_id,
         }
         resume_game(game)
+        record_product_event(
+            "seat_recovered",
+            game=game,
+            actor_type="player",
+            actor_id=player.player_id,
+            analytics_id=player.analytics_id,
+            payload={"replaced_token": bool(old_token_hash)},
+        )
         snapshot = build_state_snapshot(game, player.player_id)
         snapshot["recent_chat"] = recent_chat_payload(game)
         emit(
@@ -2562,6 +3255,18 @@ def on_update_spectrum_ratings(data):
                 "y": round(float(y), 4),
             }
         game.spectrum_ratings[rater.player_id] = clean_positions
+        record_product_event(
+            "spectrum_ratings_updated",
+            game=game,
+            actor_type="player",
+            actor_id=rater.player_id,
+            analytics_id=rater.analytics_id,
+            payload={
+                "positions": clean_positions,
+                "target_count": len(clean_positions),
+            },
+            visibility="research_secret",
+        )
         emit_to_game(
             game.code,
             "public_spectrum_updated",
@@ -2579,6 +3284,13 @@ def on_reorder_players(data):
         data = require_object(data)
         ordered_names = require_string_list(data, "order")
         reorder_players(game, ordered_names)
+        record_product_event(
+            "roster_reordered",
+            game=game,
+            actor_type="host_display",
+            analytics_id=sid_to_info.get(request.sid, {}).get("analytics_id"),
+            payload={"player_order_ids": list(game.player_order)},
+        )
         emit_to_game(
             game.code,
             "lobby_update",
@@ -2620,7 +3332,7 @@ def on_select_selfie(data):
     try:
         game, player = validate_caller(request.sid, require_phase=GamePhase.LOBBY)
         data = require_object(data)
-        image = require_string(data, "image", minimum=100, maximum=50_000)
+        image = require_string(data, "image", minimum=100, maximum=200_000)
         if not image.startswith("data:image/jpeg;base64,"):
             raise ValueError("Selfie must be a resized JPEG image")
         try:
@@ -2631,7 +3343,7 @@ def on_select_selfie(data):
             raise ValueError("Selfie data is not a JPEG image")
         if not decoded.endswith(b"\xff\xd9"):
             raise ValueError("Selfie data is not a complete JPEG image")
-        if len(decoded) > 36_000:
+        if len(decoded) > 144_000:
             raise ValueError("Selfie is too large")
         try:
             digest, storage_name, byte_count = selfie_archive.save(decoded)
@@ -2792,6 +3504,13 @@ def on_set_beta_test_mode(data):
             sync_beta_bots(game, target_count)
         else:
             remove_beta_bots(game)
+        record_product_event(
+            "beta_test_mode_changed",
+            game=game,
+            actor_type="host_display",
+            analytics_id=sid_to_info.get(request.sid, {}).get("analytics_id"),
+            payload={"enabled": enabled, "target_count": target_count},
+        )
         emit_to_game(game.code, "lobby_update", lobby_payload(game))
         persist_game(game)
     except ValueError as error:
@@ -2816,6 +3535,22 @@ def on_preview_team(data):
             or not set(names) <= valid_names
         ):
             raise ValueError("Invalid team preview")
+        name_to_id = {candidate.name: candidate.player_id for candidate in game.players.values()}
+        record_product_event(
+            "team_preview_changed",
+            game=game,
+            actor_type="player",
+            actor_id=player.player_id,
+            analytics_id=player.analytics_id,
+            payload={
+                "team_ids": [name_to_id[name] for name in names],
+                "team_size": len(names),
+                "decision_ms": max(
+                    0, int((time.time() - game.phase_started_at) * 1000)
+                ),
+            },
+            visibility="research_secret",
+        )
         emit_to_game(game.code, "team_preview", {"team_names": names})
     except ValueError as error:
         emit_validation_error(error)
@@ -2857,6 +3592,7 @@ def on_start_game():
         game.game_id = str(uuid.uuid4())
         game.active_elapsed_seconds = 0.0
         game.active_since = game.started_at
+        start_research_game(game)
         log_game_event(
             game,
             "game_started",
@@ -2974,6 +3710,21 @@ def on_set_discussion_spotlight(data):
             raise ValueError("Player not found")
         game.spotlight_player_id = player_id
         target = game.players.get(player_id) if player_id else None
+        record_product_event(
+            "discussion_spotlight_changed",
+            game=game,
+            actor_type="player",
+            actor_id=leader.player_id,
+            analytics_id=leader.analytics_id,
+            payload={
+                "target_player_id": player_id,
+                "cleared": player_id is None,
+                "elapsed_ms": max(
+                    0, int((time.time() - game.phase_started_at) * 1000)
+                ),
+            },
+            visibility="research_secret",
+        )
         emit_to_game(
             game.code,
             "discussion_spotlight",
@@ -3231,14 +3982,7 @@ def on_assassinate(data):
     except ValueError as e:
         emit("error", {"message": str(e)})
         return
-    record_product_event(
-        "assassination_submitted",
-        game=game,
-        actor_type="player",
-        actor_id=player.player_id,
-        analytics_id=player.analytics_id,
-        payload={"decision_ms": max(0, int((time.time() - game.phase_started_at) * 1000))},
-    )
+    decision_ms = max(0, int((time.time() - game.phase_started_at) * 1000))
     try:
         data = require_object(data)
         target_id = require_string(data, "target_player_id", minimum=32, maximum=64)
@@ -3246,6 +3990,19 @@ def on_assassinate(data):
     except ValueError as e:
         emit("error", {"message": str(e)})
         return
+    record_product_event(
+        "assassination_submitted",
+        game=game,
+        actor_type="player",
+        actor_id=player.player_id,
+        analytics_id=player.analytics_id,
+        payload={
+            "decision_ms": decision_ms,
+            "target_player_id": target_id,
+            "was_merlin": bool(result["was_merlin"]),
+        },
+        visibility="research_secret",
+    )
     emit_to_game(game.code, "assassination_result", result)
     log_game_event(game, "assassination", result)
     persist_game(game)
@@ -3263,6 +4020,14 @@ def return_game_to_lobby(game: GameState, *, reason: str) -> None:
         game=game,
         payload={"reason": reason, "player_count": game.player_count()},
     )
+    if game.started_at:
+        if game.phase == GamePhase.GAME_OVER:
+            finalize_research_game(game, status="completed")
+        else:
+            record_state_checkpoint(game, reason="returned_to_lobby_before_completion")
+            finalize_research_game(
+                game, status="abandoned", abandonment_reason=reason
+            )
     game.reset()
     emit_to_game(
         game.code,
@@ -3381,12 +4146,25 @@ def on_send_chat(data):
         return
     created_at = datetime.now(timezone.utc)
     timestamp = created_at.isoformat(timespec="seconds").replace("+00:00", "Z")
+    message_id = str(uuid.uuid4())
+    participant_analytics_id = participant.analytics_id
     try:
         chat_store.save(
             room_code=game.code,
             game_started_at=game.started_at,
             player_name=participant.name,
             message=msg,
+            message_id=message_id,
+            party_id=game.party_id,
+            game_id=game.game_id,
+            actor_type="spectator" if spectator else "player",
+            actor_id=spectator.spectator_id if spectator else player.player_id,
+            subject_id=research_subject_id(participant_analytics_id),
+            phase=game.phase.value,
+            mission_num=(game.current_mission + 1) if game.started_at else None,
+            proposal_attempt=(
+                game.consecutive_rejections + 1 if game.started_at else None
+            ),
             created_at=created_at,
         )
         chat_persistence_error_logged = False
@@ -3412,8 +4190,14 @@ def on_send_chat(data):
         game=game,
         actor_type="spectator" if spectator else "player",
         actor_id=(spectator.spectator_id if spectator else player.player_id),
-        analytics_id=(spectator.analytics_id if spectator else player.analytics_id),
-        payload={"message_length": len(msg), "is_spectator": spectator is not None},
+        analytics_id=participant_analytics_id,
+        payload={
+            "message_id": message_id,
+            "message_length": len(msg),
+            "word_count": len(msg.split()),
+            "contains_url": "http://" in msg.lower() or "https://" in msg.lower(),
+            "is_spectator": spectator is not None,
+        },
     )
 
 

@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon — Host</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260824-round-table">
-<link rel="stylesheet" href="/static/css/host.css?v=20260824-saved-display-exit">
+<link rel="stylesheet" href="/static/css/common.css?v=20260826">
+<link rel="stylesheet" href="/static/css/host.css?v=20260826">
 <link rel="stylesheet" href="/static/css/entry.css?v=20260824-uniform-entry-4">
 <style>
 .reorder-label {
@@ -185,6 +185,9 @@
         <h2 class="proposal-title" id="proposal-leader-name">—</h2>
         <p class="proposal-subtitle">is assembling the quest party...</p>
         <p class="dim-text" id="proposal-mission-size" style="font-family:var(--font-heading);font-size:0.85rem;letter-spacing:0.1em"></p>
+        <div class="forced-proposal-note hidden" id="host-forced-proposal-note">
+            Fifth proposal · The chosen party proceeds without a vote.
+        </div>
         <div class="proposal-timer-host">Leader’s time: <strong id="proposal-timer-host">—</strong></div>
         <div class="proposed-players" id="proposed-players-display"></div>
     </div>
@@ -220,9 +223,17 @@
 
     <!-- ============ MISSION REVEAL ============ -->
     <div class="screen" id="screen-mission-reveal">
-        <h2 class="heading-font gold-text" style="font-size:1.2rem;letter-spacing:0.15em">THE QUEST RETURNS...</h2>
-        <div class="mission-cards-display" id="mission-cards-display"></div>
-        <div class="mission-result-banner hidden" id="mission-result-banner"></div>
+        <div class="cinematic-reveal host-quest-reveal" id="host-quest-reveal" role="status" aria-live="polite">
+            <img class="cinematic-reveal-backdrop" id="host-quest-reveal-backdrop" alt="" aria-hidden="true">
+            <img class="cinematic-reveal-art" id="host-quest-reveal-art" alt="">
+            <div class="cinematic-reveal-scrim" aria-hidden="true"></div>
+            <div class="cinematic-reveal-copy">
+                <p class="cinematic-reveal-eyebrow">The quest returns</p>
+                <div class="mission-cards-display" id="mission-cards-display"></div>
+                <h1 class="mission-result-banner hidden" id="mission-result-banner"></h1>
+                <p id="host-mission-reveal-detail"></p>
+            </div>
+        </div>
     </div>
 
     <!-- ============ ASSASSIN PHASE ============ -->
@@ -235,25 +246,37 @@
 
     <!-- ============ GAME OVER ============ -->
     <div class="screen" id="screen-game-over">
-        <div class="game-over-banner" id="game-over-banner"></div>
-        <p class="win-reason" id="win-reason-text"></p>
-        <section class="victory-group-card" id="victory-group-card-host" aria-label="Victory group portrait">
-            <div class="victory-card-kicker">THE CHRONICLE RECORDS</div>
-            <div class="victory-card-crest" aria-hidden="true">♜</div>
-            <h2 class="victory-card-title"></h2>
-            <p class="victory-card-subtitle"></p>
-            <div class="victory-card-party"></div>
-            <div class="victory-card-footer">AVALON · <span class="victory-card-room"></span></div>
-        </section>
-        <div class="roles-reveal-grid" id="roles-reveal-grid"></div>
-        <div class="game-chronicle host-chronicle">
-            <h3>Chronicle of Avalon</h3>
-            <div id="chronicle-host"></div>
+        <div class="cinematic-reveal game-outcome-announcement is-complete" id="game-outcome-announcement-host" role="status" aria-live="assertive" aria-hidden="true">
+            <img class="cinematic-reveal-backdrop" id="game-outcome-backdrop-host" alt="" aria-hidden="true">
+            <img class="cinematic-reveal-art" id="game-outcome-art-host" alt="">
+            <div class="cinematic-reveal-scrim" aria-hidden="true"></div>
+            <div class="cinematic-reveal-copy">
+                <p class="cinematic-reveal-eyebrow">The fate of Avalon is decided</p>
+                <h1 id="game-outcome-title-host"></h1>
+                <p id="game-outcome-detail-host"></p>
+            </div>
         </div>
-        <div class="game-over-actions">
-            <p class="shared-display-finale-note">The host can start a rematch from their phone.</p>
+        <div class="game-over-content">
+            <div class="game-over-banner" id="game-over-banner"></div>
+            <p class="win-reason" id="win-reason-text"></p>
+            <section class="victory-group-card" id="victory-group-card-host" aria-label="Victory group portrait">
+                <div class="victory-card-kicker">THE CHRONICLE RECORDS</div>
+                <div class="victory-card-crest" aria-hidden="true">♜</div>
+                <h2 class="victory-card-title"></h2>
+                <p class="victory-card-subtitle"></p>
+                <div class="victory-card-party"></div>
+                <div class="victory-card-footer">AVALON · <span class="victory-card-room"></span></div>
+            </section>
+            <div class="roles-reveal-grid" id="roles-reveal-grid"></div>
+            <div class="game-chronicle host-chronicle">
+                <h3>Chronicle of Avalon</h3>
+                <div id="chronicle-host"></div>
+            </div>
+            <div class="game-over-actions">
+                <p class="shared-display-finale-note">The host can start a rematch from their phone.</p>
+            </div>
+            <div class="rematch-status" id="rematch-status-host" aria-live="polite">Waiting for players to choose “Run It Back”…</div>
         </div>
-        <div class="rematch-status" id="rematch-status-host" aria-live="polite">Waiting for players to choose “Run It Back”…</div>
     </div>
 
 </div>
@@ -262,8 +285,8 @@
 
 <script src="/static/js/socket.io.min.js"></script>
 <script src="/static/js/presence.js?v=20260824-round-table"></script>
-<script src="/static/js/host.js?v=20260824-saved-display-exit"></script>
-<script src="/static/js/assassination-reveal.js?v=20260825"></script>
+<script src="/static/js/host.js?v=20260826"></script>
+<script src="/static/js/assassination-reveal.js?v=20260826"></script>
 <script src="/static/js/final-role-gallery.js?v=20260825"></script>
 </body>
 </html>

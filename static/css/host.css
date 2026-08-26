@@ -522,22 +522,6 @@ input[type="range"] {
 .host-mission-summary small { display: block; margin-top: 0.22rem; color: var(--text-dim); font-size: 0.58rem; }
 .host-mission-party { color: var(--gold-light); }
 
-@media (min-width: 901px) {
-    body.host-gameplay #screen-round,
-    body.host-gameplay #screen-proposal,
-    body.host-gameplay #screen-vote,
-    body.host-gameplay #screen-vote-reveal,
-    body.host-gameplay #screen-mission,
-    body.host-gameplay #screen-mission-reveal {
-        padding-left: calc(clamp(220px, 17vw, 285px) + var(--host-edge) + 0.75rem);
-    }
-    body.host-gameplay .presence-table.presence-host {
-        width: calc(100% - clamp(220px, 17vw, 285px) - var(--host-edge));
-        margin-left: auto;
-        margin-right: 0;
-    }
-}
-
 /* Mission tracker */
 .mission-tracker {
     display: flex;
@@ -856,7 +840,7 @@ input[type="range"] {
 #screen-vote .presence-game-panel .vote-team-banner { flex: 1 1 330px; }
 #screen-vote .presence-game-panel .vote-status-grid { flex: 1 1 360px; }
 #screen-vote-reveal .presence-game-panel .vote-cards-grid { max-width: none; }
-#screen-vote-reveal .presence-game-panel .vote-card { width: clamp(78px, 8vw, 110px); }
+#screen-vote-reveal .presence-game-panel .vote-avatar-card { width: clamp(64px, 6vw, 82px); }
 #screen-mission .presence-game-panel .mission-team-display { flex: 1 1 100%; }
 #screen-mission-reveal .presence-game-panel .mission-cards-display { flex: 1 1 auto; }
 #screen-assassin .presence-game-panel .assassin-title { flex-basis: 100%; }
@@ -1037,16 +1021,78 @@ input[type="range"] {
 .vote-card-back.reject  { background: linear-gradient(135deg, #6b1a1a, #3c0d0d); border: 2px solid var(--red-glow); }
 .vote-card-back .vote-label { font-size: 0.85rem; font-weight: 700; }
 .vote-card-back .player-name-label { font-size: 0.7rem; opacity: 0.8; }
+.vote-avatar-card {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 0.2rem;
+    width: clamp(64px, 6vw, 82px);
+    min-width: 0;
+    padding: 0.35rem 0.25rem 0.3rem;
+    overflow: hidden;
+    border: 1px solid rgba(201,168,76,0.28);
+    border-radius: var(--radius-md);
+    background: rgba(10,9,8,0.82);
+    color: var(--text-secondary);
+    opacity: 0.58;
+    transform: translateY(7px) scale(0.94);
+    transition: opacity 0.35s ease, transform 0.35s ease, border-color 0.35s ease;
+}
+.vote-avatar-card.revealed { opacity: 1; transform: none; }
+.vote-avatar-card.approve.revealed { border-color: rgba(80,165,235,0.7); }
+.vote-avatar-card.reject.revealed { border-color: rgba(225,82,72,0.7); }
+.vote-avatar-portrait { display: block; width: clamp(46px, 4.4vw, 60px); }
+.vote-avatar-portrait > * { width: 100%; height: auto; }
+.vote-avatar-name {
+    width: 100%;
+    overflow: hidden;
+    color: var(--text-secondary);
+    font: clamp(0.48rem, 0.65vw, 0.62rem) var(--font-heading);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.vote-avatar-stamp {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    color: #a5cceb;
+    text-shadow: 0 2px 8px #000;
+    opacity: 0;
+    transform: rotate(-8deg) scale(1.5);
+    transition: opacity 0.3s ease 0.08s, transform 0.32s cubic-bezier(.2,.9,.2,1.25) 0.08s;
+}
+.vote-avatar-card.reject .vote-avatar-stamp { color: #e4a29d; transform: rotate(8deg) scale(1.5); }
+.vote-avatar-card.revealed .vote-avatar-stamp { opacity: 0.94; transform: rotate(-8deg) scale(1); }
+.vote-avatar-card.reject.revealed .vote-avatar-stamp { transform: rotate(8deg) scale(1); }
+.vote-avatar-stamp b { font: 2.4rem/0.78 sans-serif; }
+.vote-avatar-stamp strong {
+    padding: 0.1rem 0.22rem;
+    border: 1px solid currentColor;
+    font: 0.42rem var(--font-heading);
+    letter-spacing: 0.08em;
+}
 .vote-result-banner {
     font-family: var(--font-title);
-    font-size: clamp(2rem, 5vw, 4rem);
-    padding: 1rem 3rem;
+    font-size: clamp(1.45rem, 3vw, 2.5rem);
+    padding: 0.65rem 1.6rem;
     border-radius: var(--radius-md);
     animation: slide-in-top 0.5s ease-out;
 }
 .vote-result-banner.approved { color: var(--gold-light); border: 2px solid var(--gold); text-shadow: 0 0 30px rgba(201,168,76,0.5); }
 .vote-result-banner.rejected { color: #ff8080; border: 2px solid var(--red-glow); text-shadow: 0 0 30px rgba(192,57,43,0.5); }
 #btn-confirm-vote-reveal { min-width: 12rem; }
+
+.forced-proposal-note {
+    padding: 0.45rem 0.8rem;
+    border: 1px solid rgba(201,168,76,0.55);
+    border-radius: var(--radius-pill);
+    background: rgba(201,168,76,0.09);
+    color: var(--gold-light);
+    font: 0.66rem/1.35 var(--font-heading);
+    letter-spacing: 0.06em;
+}
 
 /* ---- Mission ---- */
 #screen-mission {
@@ -1507,6 +1553,51 @@ body,
 @media (max-width: 800px) {
     #screen-lobby .room-code-block { grid-template-columns: 1fr; grid-template-areas: "label" "code" "url" "tools" "note"; text-align: center; }
     #screen-lobby .lobby-sidebar { width: 100%; }
+}
+
+/* Full-canvas quest and game outcome announcements. */
+body.host-cinematic-active #game-header,
+body.host-cinematic-active #host-mission-rail,
+body.host-cinematic-active #host-top-meta,
+body.host-cinematic-active #host-chat-strip,
+body.host-cinematic-active #connection-status {
+    display: none !important;
+}
+#screen-mission-reveal {
+    padding: 0 !important;
+    gap: 0;
+    overflow: hidden;
+    border: 0;
+    background: #030405;
+}
+#screen-mission-reveal .host-quest-reveal {
+    width: 100%;
+    height: 100%;
+}
+#screen-mission-reveal .cinematic-reveal-copy {
+    bottom: max(clamp(2rem, 5dvh, 3.75rem), env(safe-area-inset-bottom));
+}
+#screen-mission-reveal .mission-cards-display {
+    gap: clamp(0.4rem, 1vw, 0.8rem);
+}
+#screen-mission-reveal .mission-result-card {
+    width: clamp(64px, 7vw, 92px);
+    height: clamp(88px, 13dvh, 126px);
+    background: rgba(15,14,12,0.88);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+}
+#screen-mission-reveal .mission-result-card .card-icon {
+    font-size: clamp(1.7rem, 3vw, 2.5rem);
+}
+#screen-mission-reveal .mission-result-banner {
+    margin: 0;
+}
+#screen-game-over > .game-outcome-announcement {
+    position: fixed;
+    z-index: 600;
+}
+#screen-game-over > .game-over-content {
+    gap: 2rem;
 }
 
 /* Native-resolution TVs often report every physical pixel as a CSS pixel.

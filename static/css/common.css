@@ -410,6 +410,147 @@ body::after {
 .mission-history-clickable { cursor: pointer; }
 .mission-history-clickable:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
 
+/* ============================================================
+   CINEMATIC QUEST / GAME OUTCOME REVEALS
+   Shared by the phone and paired-display experiences.
+   ============================================================ */
+.cinematic-reveal {
+    position: absolute;
+    inset: 0;
+    isolation: isolate;
+    overflow: hidden;
+    background: #030405;
+    color: #d8ccb3;
+}
+.cinematic-reveal-backdrop,
+.cinematic-reveal-art {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-position: 50% 44%;
+    opacity: 0;
+}
+.cinematic-reveal-backdrop {
+    object-fit: cover;
+    transform: scale(1.09);
+    filter: brightness(0.32) saturate(0.62) contrast(1.08);
+    transition: opacity 1.5s ease, transform 4.2s cubic-bezier(.18,.72,.16,1);
+}
+.cinematic-reveal-art {
+    z-index: 1;
+    object-fit: cover;
+    transform: scale(1.065);
+    filter: brightness(0.72) saturate(0.82) contrast(1.04);
+    transition: opacity 1.85s ease 0.1s, transform 3.4s cubic-bezier(.18,.72,.16,1) 0.06s;
+}
+.cinematic-reveal.is-revealed .cinematic-reveal-backdrop {
+    opacity: 0.5;
+    transform: scale(1.025);
+}
+.cinematic-reveal.is-revealed .cinematic-reveal-art {
+    opacity: 1;
+    transform: scale(1);
+}
+.cinematic-reveal-scrim {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    background:
+        linear-gradient(180deg, rgba(2,3,4,0.16), rgba(2,3,4,0.04) 38%, rgba(2,3,4,0.94) 100%),
+        radial-gradient(circle at 50% 44%, transparent 22%, rgba(2,3,4,0.18) 76%, rgba(2,3,4,0.5) 100%);
+    pointer-events: none;
+}
+.cinematic-reveal-copy {
+    position: absolute;
+    z-index: 3;
+    right: max(clamp(1.3rem, 6vw, 4rem), env(safe-area-inset-right));
+    bottom: max(clamp(4.7rem, 10dvh, 7rem), calc(4.2rem + env(safe-area-inset-bottom)));
+    left: max(clamp(1.3rem, 6vw, 4rem), env(safe-area-inset-left));
+    display: grid;
+    justify-items: center;
+    gap: clamp(0.35rem, 1.2dvh, 0.7rem);
+    text-align: center;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 1s ease 0.88s, transform 1.1s cubic-bezier(.2,.75,.2,1) 0.8s;
+}
+.cinematic-reveal.is-revealed .cinematic-reveal-copy {
+    opacity: 1;
+    transform: translateY(0);
+}
+.cinematic-reveal-eyebrow {
+    margin: 0;
+    color: #b8ad97;
+    font: clamp(0.56rem, 1.25vw, 0.78rem) var(--font-heading);
+    letter-spacing: 0.23em;
+    text-transform: uppercase;
+}
+.cinematic-reveal-copy h1 {
+    max-width: 16ch;
+    margin: 0;
+    color: #e4d8bd;
+    font: 700 clamp(2.4rem, 8vw, 6.6rem)/0.98 var(--font-title);
+    text-wrap: balance;
+    text-shadow: 0 4px 24px rgba(0,0,0,0.96), 0 0 42px rgba(201,168,76,0.24);
+}
+.cinematic-reveal.fail .cinematic-reveal-copy h1,
+.cinematic-reveal.evil .cinematic-reveal-copy h1 {
+    color: #d7aaa4;
+    text-shadow: 0 4px 24px rgba(0,0,0,0.98), 0 0 42px rgba(179,49,41,0.3);
+}
+.cinematic-reveal-copy > p:last-child {
+    max-width: 46rem;
+    margin: 0;
+    color: #c0b7a7;
+    font-size: clamp(0.82rem, 1.75vw, 1.18rem);
+    line-height: 1.35;
+    text-wrap: balance;
+    text-shadow: 0 2px 12px #000;
+}
+.game-outcome-announcement {
+    position: fixed;
+    z-index: 600;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity 0.8s ease, visibility 0s linear 0s;
+}
+.game-outcome-announcement.is-complete {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.8s ease, visibility 0s linear 0.8s;
+}
+.game-over-content {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: inherit;
+}
+
+@media (min-aspect-ratio: 4 / 3) {
+    .cinematic-reveal-art {
+        object-fit: contain;
+        filter: brightness(0.76) saturate(0.84) contrast(1.04);
+    }
+    .cinematic-reveal-copy {
+        bottom: max(clamp(2rem, 6dvh, 4.5rem), env(safe-area-inset-bottom));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cinematic-reveal-backdrop,
+    .cinematic-reveal-art,
+    .cinematic-reveal-copy,
+    .game-outcome-announcement {
+        transition: none !important;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .presence-node,
     .presence-portrait { transition: none; }

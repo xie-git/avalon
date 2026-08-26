@@ -116,6 +116,9 @@
         if (!reveal) return;
         reveal.classList.add('is-complete');
         reveal.setAttribute('aria-hidden', 'true');
+        const content = document.querySelector('#screen-game-over .game-over-content');
+        content?.removeAttribute('aria-hidden');
+        if (content) content.inert = false;
         document.body.classList.remove('assassination-reveal-active');
         completionTimer = null;
     }
@@ -131,6 +134,9 @@
         lastRevealKey = key;
         window.clearTimeout(completionTimer);
         const reveal = revealElement();
+        const content = document.querySelector('#screen-game-over .game-over-content');
+        content?.setAttribute('aria-hidden', 'true');
+        if (content) content.inert = true;
         reveal.querySelector('.assassination-merlin-reveal-backdrop').src = ART_PATH;
         reveal.querySelector('.assassination-merlin-reveal-art').src = ART_PATH;
         reveal.className = 'assassination-merlin-reveal';

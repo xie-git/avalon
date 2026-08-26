@@ -21,6 +21,7 @@ def test_security_headers_and_development_routes_are_closed():
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["X-Frame-Options"] == "DENY"
     assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
+    assert response.headers["Cache-Control"] == "no-store"
     assert client.get("/dev").status_code == 404
     assert client.get("/debug/state/ABCDEF").status_code == 404
     assert client.get("/healthz").json == {"status": "ok"}
@@ -34,6 +35,12 @@ def test_security_headers_and_development_routes_are_closed():
     assert b'id="discussion-slider"' not in host_response.data
     assert b"Host a Game" in response.data
     assert b"Pair a Shared Display" in response.data
+
+    versioned_static = client.get("/static/css/common.css?v=release")
+    assert versioned_static.headers["Cache-Control"] == (
+        "public, max-age=31536000, immutable"
+    )
+    assert "immutable" not in client.get("/static/favicon.svg").headers["Cache-Control"]
 
     presence_script = client.get("/static/js/presence.js").data
     assert presence_script.index(b'data-view="order"') < presence_script.index(b'data-view="private"')
@@ -1051,7 +1058,7 @@ def test_complete_mission_waits_for_leader_before_advancing(socket_client, creat
         client.disconnect()
 
 
-def test_fifth_rejected_team_ends_game_without_another_proposal(
+def test_fifth_leader_selects_a_binding_team_without_a_vote(
     socket_client, create_game
 ):
     created, clients, _ = join_players(socket_client, create_game)
@@ -1064,7 +1071,7 @@ def test_fifth_rejected_team_ends_game_without_another_proposal(
     initial_leader_index = game.player_order.index(game.current_leader().player_id)
     clients[initial_leader_index].emit("skip_discussion", {"confirmed": True})
 
-    for attempt in range(1, 6):
+    for attempt in range(1, 5):
         assert game.phase == server.GamePhase.TEAM_PROPOSAL
         leader_index = game.player_order.index(game.current_leader().player_id)
         team = game.player_order[: game.mission_size()]
@@ -1075,13 +1082,26 @@ def test_fifth_rejected_team_ends_game_without_another_proposal(
         clients[leader_index].emit("confirm_vote_reveal")
         assert game.consecutive_rejections == attempt
 
-    assert game.phase == server.GamePhase.GAME_OVER
-    assert game.winner == "evil"
-    assert game.win_reason == "rejections"
-    final_packets = clients[0].get_received()
-    assert len([p for p in final_packets if p["name"] == "game_over"]) == 1
-    assert final_packets[-1]["name"] == "game_over"
-    assert final_packets[-1]["args"][0]["win_reason"] == "rejections"
+    assert game.phase == server.GamePhase.TEAM_PROPOSAL
+    fifth_leader_index = game.player_order.index(game.current_leader().player_id)
+    fifth_team = game.player_order[: game.mission_size()]
+    for client in clients:
+        client.get_received()
+    clients[fifth_leader_index].emit("propose_team", {"team": fifth_team})
+
+    assert game.phase == server.GamePhase.MISSION
+    assert game.proposed_team == fifth_team
+    assert game.consecutive_rejections == 0
+    assert game.winner is None
+    assert game.proposal_history[-1]["attempt"] == 5
+    assert game.proposal_history[-1]["forced"] is True
+    packets = clients[0].get_received()
+    assert "vote_start" not in [packet["name"] for packet in packets]
+    mission_packet = [packet for packet in packets if packet["name"] == "mission_start"][-1]
+    assert mission_packet["args"][0]["forced"] is True
+
+    clients[0].emit("cast_vote", {"vote": "reject"})
+    assert game.phase == server.GamePhase.MISSION
 
     for client in clients:
         client.disconnect()

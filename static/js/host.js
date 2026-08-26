@@ -12,28 +12,90 @@ const HOST_TOKEN_KEY = 'avalon-host-token';
 const PAIRED_DISPLAY_KEY = 'avalon-host-is-paired-display';
 const ANALYTICS_ID_KEY = 'avalon-analytics-id';
 
+function randomUuid() {
+    return crypto.randomUUID ? crypto.randomUUID() :
+        'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, character => {
+            const random = Math.random() * 16 | 0;
+            return (character === 'x' ? random : (random & 0x3 | 0x8)).toString(16);
+        });
+}
+
 function analyticsId() {
     let value = localStorage.getItem(ANALYTICS_ID_KEY);
     if (!value) {
-        value = crypto.randomUUID ? crypto.randomUUID() :
-            'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, character => {
-                const random = Math.random() * 16 | 0;
-                return (character === 'x' ? random : (random & 0x3 | 0x8)).toString(16);
-            });
+        value = randomUuid();
         localStorage.setItem(ANALYTICS_ID_KEY, value);
     }
     return value;
 }
 
 const ANALYTICS_ID = analyticsId();
+const CLIENT_SESSION_ID = randomUuid();
+let clientEventSequence = 0;
+let socketConnectionCount = 0;
+
+function dimensionBucket(value) {
+    if (value <= 430) return 'xs';
+    if (value <= 768) return 'sm';
+    if (value <= 1024) return 'md';
+    if (value <= 1440) return 'lg';
+    return 'xl';
+}
+
+function clientContext() {
+    const navigation = performance.getEntriesByType?.('navigation')?.[0];
+    return {
+        screen_class: window.innerWidth >= 1200 ? 'tv' : 'desktop',
+        display_mode: window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser',
+        viewport_width_bucket: dimensionBucket(window.innerWidth),
+        viewport_height_bucket: dimensionBucket(window.innerHeight),
+        timezone_offset_minutes: new Date().getTimezoneOffset(),
+        locale: (navigator.language || 'unknown').slice(0, 16),
+        color_scheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+        reduced_motion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+        touch_capable: navigator.maxTouchPoints > 0,
+        online: navigator.onLine,
+        navigation_ms: navigation ? Math.round(navigation.duration) : 0,
+    };
+}
 
 function track(eventType, payload = {}) {
     socket.emit('client_analytics', {
         analytics_id: ANALYTICS_ID,
+        client_session_id: CLIENT_SESSION_ID,
+        client_event_id: randomUuid(),
+        client_sequence: ++clientEventSequence,
+        client_occurred_at: new Date().toISOString(),
+        client_uptime_ms: Math.round(performance.now()),
+        page: 'host',
+        client_context: clientContext(),
         event_type: eventType,
         payload,
     });
 }
+
+document.addEventListener('click', event => {
+    const control = event.target.closest?.('button[id], a[id], [role="button"][id]');
+    if (!control || !/^[A-Za-z0-9_-]{1,64}$/.test(control.id)) return;
+    track('ui_control_activated', {
+        control_id: control.id,
+        context: document.querySelector('.screen.active')?.id || 'entry',
+    });
+});
+
+window.addEventListener('error', event => {
+    track('client_error', {
+        error_category: event.error?.name || 'script_error',
+        context: document.querySelector('.screen.active')?.id || 'unknown',
+    });
+});
+
+window.addEventListener('unhandledrejection', event => {
+    track('client_error', {
+        error_category: event.reason?.name || 'unhandled_promise',
+        context: document.querySelector('.screen.active')?.id || 'unknown',
+    });
+});
 const presenceScreenLabels = {
     'screen-night': 'Night Phase',
     'screen-round': 'Mission Discussion',
@@ -41,7 +103,6 @@ const presenceScreenLabels = {
     'screen-vote': 'Fellowship Vote',
     'screen-vote-reveal': 'The Votes Are Revealed',
     'screen-mission': 'The Quest Begins',
-    'screen-mission-reveal': 'The Quest Returns',
     'screen-assassin': 'The Final Choice',
 };
 
@@ -87,6 +148,19 @@ let tvChatMessages = [];
 const tvChatEnabled = true;
 let isPairedDisplay = localStorage.getItem(PAIRED_DISPLAY_KEY) === 'true';
 let chatAudioContext = null;
+let hostMissionRevealSequence = 0;
+let gameOutcomeTimer = null;
+let lastGameOutcomeAnnouncementKey = null;
+
+const QUEST_OUTCOME_ART = {
+    success: '/static/assets/quests/quest-successful.png?v=20260825-cinematic',
+    fail: '/static/assets/quests/quest-failed.png?v=20260825-cinematic',
+};
+
+const GAME_OUTCOME_ART = {
+    good: '/static/assets/results/good-wins.png?v=20260825-cinematic',
+    evil: '/static/assets/results/evil-wins.png?v=20260825-cinematic',
+};
 
 function hostSession() {
     const code = localStorage.getItem(HOST_CODE_KEY) || sessionStorage.getItem('host_game_code');
@@ -191,16 +265,28 @@ function renderNightPending(names = []) {
 // Screen management
 // ---------------------------------------------------------------------------
 function showScreen(id) {
+    const previousScreenId = document.querySelector('.screen.active')?.id || null;
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const target = document.getElementById(id);
     if (target) target.classList.add('active');
     currentPhase = id.replace('screen-', '');
+    document.body.classList.toggle(
+        'host-cinematic-active',
+        id === 'screen-mission-reveal' || id === 'screen-game-over',
+    );
     const topMeta = document.getElementById('host-top-meta');
     topMeta.classList.toggle('hidden', !gameCode || id === 'screen-title' || id === 'screen-lobby');
     const presenceLabel = presenceScreenLabels[id];
     if (id === 'screen-lobby' && players.length) renderRoundTable(players);
     else if (presenceLabel && players.length) presenceTable.show(target, presenceLabel);
     else presenceTable.hide();
+    if (target && previousScreenId !== id) {
+        track('screen_viewed', {
+            screen_id: id,
+            previous_screen_id: previousScreenId || 'none',
+            context: 'host_display',
+        });
+    }
 }
 
 function transition(id, delay = 0) {
@@ -518,22 +604,29 @@ function spawnStars() {
 // ---------------------------------------------------------------------------
 function animateVoteReveal(votes) {
     const container = document.getElementById('vote-cards-container');
-    container.innerHTML = '';
+    container.replaceChildren();
     const entries = Object.entries(votes);
     entries.forEach(([name, vote], i) => {
         const card = document.createElement('div');
-        card.className = 'vote-card';
-        card.innerHTML = `
-            <div class="vote-card-inner">
-                <div class="vote-card-front">?</div>
-                <div class="vote-card-back ${vote}">
-                    <span class="vote-label">${vote.toUpperCase()}</span>
-                    <span class="player-name-label">${escapeHtml(name)}</span>
-                </div>
-            </div>`;
+        card.className = `vote-avatar-card ${vote}`;
+        const player = players.find(candidate => candidate.name === name) || {};
+        const portrait = document.createElement('span');
+        portrait.className = 'vote-avatar-portrait';
+        portrait.appendChild(presenceTable.createPortraitElement(
+            player.avatar_index,
+            player.color_index,
+            player.avatar_image
+        ));
+        const label = document.createElement('span');
+        label.className = 'vote-avatar-name';
+        label.textContent = name;
+        const stamp = document.createElement('span');
+        stamp.className = 'vote-avatar-stamp';
+        stamp.innerHTML = `<b>${vote === 'approve' ? '✓' : '×'}</b><strong>${vote.toUpperCase()}</strong>`;
+        card.append(portrait, label, stamp);
         container.appendChild(card);
         setTimeout(() => {
-            card.classList.add('flipped');
+            card.classList.add('revealed');
             flash(vote === 'approve' ? 'blue' : 'red', 200);
         }, 500 + i * 350);
     });
@@ -551,21 +644,65 @@ function animateVoteReveal(votes) {
 // ---------------------------------------------------------------------------
 // Mission reveal animation
 // ---------------------------------------------------------------------------
-function animateMissionReveal(cards) {
+function animateMissionReveal(cards, { instant = false, onComplete = null } = {}) {
+    const sequence = ++hostMissionRevealSequence;
     const container = document.getElementById('mission-cards-display');
-    container.innerHTML = '';
+    container.replaceChildren();
+    const revealCard = (element, card) => {
+        if (sequence !== hostMissionRevealSequence) return;
+        element.className = `mission-result-card revealed-${card}`;
+        element.innerHTML = card === 'success'
+            ? '<span class="card-icon">☀</span><span>SUCCESS</span>'
+            : '<span class="card-icon">☠</span><span>FAIL</span>';
+        if (!instant) flash(card === 'success' ? 'blue' : 'red', 200);
+    };
     cards.forEach((card, i) => {
         const el = document.createElement('div');
         el.className = 'mission-result-card';
         el.innerHTML = '<span class="card-icon">?</span><span>SEALED</span>';
         container.appendChild(el);
-        setTimeout(() => {
-            el.className = `mission-result-card revealed-${card}`;
-            el.innerHTML = card === 'success'
-                ? `<span class="card-icon">☀</span><span>SUCCESS</span>`
-                : `<span class="card-icon">☠</span><span>FAIL</span>`;
-            flash(card === 'success' ? 'blue' : 'red', 200);
-        }, 800 + i * 600);
+        if (instant) revealCard(el, card);
+        else window.setTimeout(() => revealCard(el, card), 800 + i * 600);
+    });
+    const completeAfter = instant ? 0 : 800 + cards.length * 600 + 350;
+    window.setTimeout(() => {
+        if (sequence === hostMissionRevealSequence && onComplete) onComplete();
+    }, completeAfter);
+}
+
+function showHostMissionReveal(data, { instant = false } = {}) {
+    const passed = Boolean(data.passed);
+    const reveal = document.getElementById('host-quest-reveal');
+    const artPath = passed ? QUEST_OUTCOME_ART.success : QUEST_OUTCOME_ART.fail;
+    reveal.className = `cinematic-reveal host-quest-reveal ${passed ? 'success' : 'fail'}`;
+    document.getElementById('host-quest-reveal-backdrop').src = artPath;
+    const art = document.getElementById('host-quest-reveal-art');
+    art.src = artPath;
+    art.alt = passed
+        ? 'Knights celebrating a successful quest'
+        : 'Knights returning from a failed quest';
+
+    const successes = Math.max(0, Number(data.success_count) || 0);
+    const failures = Math.max(0, Number(data.fail_count) || 0);
+    document.getElementById('host-mission-reveal-detail').textContent =
+        `${successes} Success · ${failures} ${failures === 1 ? 'Fail' : 'Fails'}`;
+    const banner = document.getElementById('mission-result-banner');
+    banner.className = 'mission-result-banner hidden';
+    const cards = Array.isArray(data.cards_shuffled) && data.cards_shuffled.length
+        ? data.cards_shuffled
+        : [
+            ...Array(successes).fill('success'),
+            ...Array(failures).fill('fail'),
+        ];
+    void reveal.offsetWidth;
+    requestAnimationFrame(() => reveal.classList.add('is-revealed'));
+    animateMissionReveal(cards, {
+        instant,
+        onComplete: () => {
+            banner.className = `mission-result-banner ${passed ? 'pass' : 'fail'}`;
+            banner.textContent = passed ? 'Quest Successful' : 'Quest Failed';
+            if (!instant) flash(passed ? 'blue' : 'red', 600);
+        },
     });
 }
 
@@ -588,12 +725,19 @@ function renderChronicle(container, summary) {
             rejected.textContent = `Rejected proposal by ${item.leader_name}: ${item.approve_count}–${item.reject_count}`;
             section.appendChild(rejected);
         });
+        proposals.filter(item => item.mission_num === mission.mission_num && item.forced).forEach(item => {
+            const forced = document.createElement('small');
+            forced.textContent = `${item.leader_name} selected the binding fifth party`;
+            section.appendChild(forced);
+        });
         container.appendChild(section);
     });
     proposals.filter(item => !completedMissionNumbers.has(item.mission_num)).forEach(item => {
         const section = document.createElement('section');
-        section.className = 'chronicle-entry rejected';
-        section.textContent = `Mission ${item.mission_num}: ${item.leader_name}’s party was rejected ${item.approve_count}–${item.reject_count}`;
+        section.className = `chronicle-entry${item.forced ? '' : ' rejected'}`;
+        section.textContent = item.forced
+            ? `Mission ${item.mission_num}: ${item.leader_name} selected the binding fifth party`
+            : `Mission ${item.mission_num}: ${item.leader_name}’s party was rejected ${item.approve_count}–${item.reject_count}`;
         container.appendChild(section);
     });
 }
@@ -601,7 +745,80 @@ function renderChronicle(container, summary) {
 // ---------------------------------------------------------------------------
 // Game over: role reveal
 // ---------------------------------------------------------------------------
-function renderGameOver(summary) {
+function gameWinReason(summary) {
+    const reasons = {
+        missions: summary.winner === 'good' ? 'Good completed 3 quests' : 'Evil failed 3 quests',
+        assassination: 'The Assassin struck down Merlin',
+        assassination_failed: 'The Assassin missed Merlin',
+        rejections: 'Five consecutive teams were rejected',
+    };
+    return reasons[summary.win_reason] || summary.win_reason || 'The struggle for Avalon is over';
+}
+
+function completeGameOutcomeAnnouncement() {
+    const announcement = document.getElementById('game-outcome-announcement-host');
+    announcement.classList.add('is-complete');
+    announcement.setAttribute('aria-hidden', 'true');
+    const content = document.querySelector('#screen-game-over .game-over-content');
+    content?.removeAttribute('aria-hidden');
+    if (content) content.inert = false;
+    gameOutcomeTimer = null;
+}
+
+function showGameOutcomeAnnouncement(summary) {
+    const winner = summary.winner === 'evil' ? 'evil' : 'good';
+    if (
+        summary.win_reason === 'assassination'
+        && window.AVALON_ASSASSINATION_REVEAL_ENABLED
+    ) {
+        clearTimeout(gameOutcomeTimer);
+        gameOutcomeTimer = null;
+        const announcement = document.getElementById('game-outcome-announcement-host');
+        announcement.className = 'cinematic-reveal game-outcome-announcement is-complete';
+        announcement.setAttribute('aria-hidden', 'true');
+        return;
+    }
+    const key = `${gameCode || '----'}:${gameStartedAt || 'unknown'}:${winner}:${summary.win_reason || 'unknown'}`;
+    if (lastGameOutcomeAnnouncementKey === key) return;
+    lastGameOutcomeAnnouncementKey = key;
+    clearTimeout(gameOutcomeTimer);
+
+    const announcement = document.getElementById('game-outcome-announcement-host');
+    const artPath = GAME_OUTCOME_ART[winner];
+    const content = document.querySelector('#screen-game-over .game-over-content');
+    content?.setAttribute('aria-hidden', 'true');
+    if (content) content.inert = true;
+    announcement.className = `cinematic-reveal game-outcome-announcement ${winner}`;
+    announcement.setAttribute('aria-hidden', 'false');
+    document.getElementById('game-outcome-backdrop-host').src = artPath;
+    const art = document.getElementById('game-outcome-art-host');
+    art.src = artPath;
+    art.alt = winner === 'good'
+        ? 'Camelot illuminated after victory by the forces of good'
+        : 'Camelot fallen under the forces of evil';
+    document.getElementById('game-outcome-title-host').textContent = winner === 'good'
+        ? 'Good Wins'
+        : 'Evil Wins';
+    document.getElementById('game-outcome-detail-host').textContent = gameWinReason(summary);
+    void announcement.offsetWidth;
+    requestAnimationFrame(() => announcement.classList.add('is-revealed'));
+    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1200 : 4200;
+    gameOutcomeTimer = window.setTimeout(completeGameOutcomeAnnouncement, duration);
+}
+
+function resetGameOutcomeAnnouncement() {
+    clearTimeout(gameOutcomeTimer);
+    gameOutcomeTimer = null;
+    lastGameOutcomeAnnouncementKey = null;
+    const announcement = document.getElementById('game-outcome-announcement-host');
+    announcement.className = 'cinematic-reveal game-outcome-announcement is-complete';
+    announcement.setAttribute('aria-hidden', 'true');
+    const content = document.querySelector('#screen-game-over .game-over-content');
+    content?.removeAttribute('aria-hidden');
+    if (content) content.inert = false;
+}
+
+function renderGameOver(summary, { announce = true } = {}) {
     if (summary.win_reason === 'rejections') consecutiveRejections = 5;
     updateHostProposalTrack();
     const banner = document.getElementById('game-over-banner');
@@ -613,13 +830,7 @@ function renderGameOver(summary) {
     flash(summary.winner === 'good' ? 'blue' : 'red', 800);
     hideGameHeader();
 
-    const reasons = {
-        missions: 'by completing 3 quests',
-        assassination: 'by assassinating Merlin',
-        assassination_failed: 'Merlin survived the Assassin',
-        rejections: 'by 5 consecutive rejections',
-    };
-    reasonEl.textContent = reasons[summary.win_reason] || summary.win_reason;
+    reasonEl.textContent = gameWinReason(summary);
 
     grid.replaceChildren();
     grid.classList.add('hidden');
@@ -631,6 +842,7 @@ function renderGameOver(summary) {
         ready_names: [],
     });
     renderChronicle(document.getElementById('chronicle-host'), summary);
+    if (announce) showGameOutcomeAnnouncement(summary);
 }
 
 function renderVictoryCard(card, summary) {
@@ -707,11 +919,13 @@ function fmtTime(sec) {
 // ---------------------------------------------------------------------------
 
 socket.on('connect', () => {
-    track('client_session_started', {
+    track(socketConnectionCount ? 'socket_reconnected' : 'client_session_started', {
         screen_class: window.innerWidth >= 1200 ? 'tv' : 'desktop',
         display_mode: window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser',
         context: 'host_page',
+        reconnect_count: socketConnectionCount,
     });
+    socketConnectionCount += 1;
     const { code: stored, token: hostToken } = hostSession();
     if (stored && hostToken) {
         showConnectionStatus('Connected — restoring the host screen…');
@@ -721,6 +935,13 @@ socket.on('connect', () => {
             analytics_id: ANALYTICS_ID,
         });
     } else hideConnectionStatus();
+});
+
+document.addEventListener('visibilitychange', () => {
+    track('visibility_changed', {
+        visibility_state: document.visibilityState,
+        session_duration_ms: Math.round(performance.now()),
+    });
 });
 
 socket.on('disconnect', () => showConnectionStatus('Connection lost — reconnecting…'));
@@ -808,6 +1029,10 @@ socket.on('host_registered', data => {
             renderLeaderName('proposal-leader-name', currentLeaderName);
             document.getElementById('proposal-mission-size').textContent =
                 `Select ${missionSizes[currentMission] || '?'} members for the quest`;
+            document.getElementById('host-forced-proposal-note').classList.toggle(
+                'hidden',
+                consecutiveRejections < 4,
+            );
             document.getElementById('proposal-timer-host').textContent =
                 data.timer_remaining === null ? 'Take the time you need' : fmtTime(data.timer_remaining);
         } else if (data.phase === 'DISCUSSION') {
@@ -845,17 +1070,7 @@ socket.on('host_registered', data => {
             });
         } else if (data.phase === 'MISSION_REVEAL' && data.pending_mission_outcome) {
             const latest = data.latest_mission;
-            if (latest) {
-                const cards = [
-                    ...Array(latest.success_count).fill('success'),
-                    ...Array(latest.fail_count).fill('fail'),
-                ];
-                animateMissionReveal(cards);
-                const banner = document.getElementById('mission-result-banner');
-                banner.className = `mission-result-banner ${latest.passed ? 'pass' : 'fail'}`;
-                banner.textContent = latest.passed ? '⚔ The Quest Succeeds!' : '☠ The Quest Has Failed...';
-                banner.classList.remove('hidden');
-            }
+            if (latest) showHostMissionReveal(latest, { instant: true });
         } else if (data.phase === 'ASSASSIN_PHASE') {
             document.getElementById('assassin-choosing-text').textContent =
                 `${data.assassin_name} deliberates...`;
@@ -999,6 +1214,7 @@ socket.on('proposal_start', data => {
     renderLeaderName('proposal-leader-name', data.leader_name);
     document.getElementById('proposal-mission-size').textContent =
         `Select ${data.mission_size} members for the quest`;
+    document.getElementById('host-forced-proposal-note').classList.toggle('hidden', !data.forced);
     proposalDuration = Number(data.duration_seconds) || 0;
     document.getElementById('proposal-timer-host').textContent = proposalDuration ? fmtTime(proposalDuration) : 'No timer';
     document.getElementById('proposed-players-display').innerHTML = '';
@@ -1129,18 +1345,8 @@ function renderMissionStatus(data) {
 }
 
 socket.on('mission_reveal', data => {
-    document.getElementById('mission-result-banner').classList.add('hidden');
     transition('screen-mission-reveal');
-    setTimeout(() => {
-        animateMissionReveal(data.cards_shuffled);
-        setTimeout(() => {
-            const banner = document.getElementById('mission-result-banner');
-            banner.className = `mission-result-banner ${data.passed ? 'pass' : 'fail'}`;
-            banner.textContent = data.passed ? '⚔ The Quest Succeeds!' : '☠ The Quest Has Failed...';
-            banner.classList.remove('hidden');
-            flash(data.passed ? 'blue' : 'red', 600);
-        }, 800 + data.cards_shuffled.length * 600 + 500);
-    }, 400);
+    window.setTimeout(() => showHostMissionReveal(data), 320);
 });
 
 socket.on('mission_tracker_update', data => {
@@ -1171,8 +1377,9 @@ socket.on('assassination_result', data => {
 });
 
 socket.on('game_over', data => {
-    renderGameOver(data);
+    renderGameOver(data, { announce: false });
     transition('screen-game-over');
+    window.setTimeout(() => showGameOutcomeAnnouncement(data), 320);
     track('victory_screen_viewed', { context: data.win_reason || 'unknown' });
     track('rematch_prompt_viewed', { context: 'host_display' });
 });
@@ -1190,6 +1397,7 @@ socket.on('chat_message', data => {
 
 socket.on('return_to_lobby', data => {
     clearInterval(gameClockInterval); gameClockInterval = null; gameStartedAt = null;
+    resetGameOutcomeAnnouncement();
     document.getElementById('host-game-time').textContent = '00:00';
     players = data.players || [];
     currentMission = 0;
@@ -1212,6 +1420,7 @@ socket.on('return_to_lobby', data => {
 
 socket.on('game_ended', () => {
     clearInterval(gameClockInterval);
+    resetGameOutcomeAnnouncement();
     gameClockInterval = null;
     gameStartedAt = null;
     gameCode = null;

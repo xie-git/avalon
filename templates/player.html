@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260824-round-table">
-<link rel="stylesheet" href="/static/css/player.css?v=20260824-immersive-quests-2">
+<link rel="stylesheet" href="/static/css/common.css?v=20260826">
+<link rel="stylesheet" href="/static/css/player.css?v=20260826">
 <link rel="stylesheet" href="/static/css/entry.css?v=20260824-responsive-entry">
 </head>
 <body data-force-new="{{ 'true' if force_new else 'false' }}">
@@ -290,6 +290,9 @@
             Select <span id="proposal-required">?</span> members &nbsp;·&nbsp;
             <span id="proposal-selected-count" style="color:var(--gold-light)">0</span> chosen
         </div>
+        <div class="forced-proposal-note hidden" id="player-forced-proposal-note">
+            Fifth proposal · This party proceeds directly to the quest without a vote.
+        </div>
         <div class="proposal-timer-player">Leader’s time: <strong id="proposal-timer-player">—</strong></div>
         <div class="player-select-list" id="player-select-list"></div>
         <button class="btn btn-primary" id="btn-lock-team" disabled style="width:100%;margin-top:0.5rem">
@@ -300,11 +303,12 @@
 
     <!-- ============ MISSION REVEAL — all phones ============ -->
     <div class="screen" id="screen-mission-reveal-player">
-        <div class="quest-reveal-product" id="quest-reveal-product">
-            <img class="quest-reveal-art" id="quest-reveal-art" alt="">
-            <div class="quest-reveal-scrim" aria-hidden="true"></div>
-            <div class="quest-reveal-copy">
-                <p class="quest-reveal-eyebrow">The quest returns</p>
+        <div class="cinematic-reveal quest-reveal-product" id="quest-reveal-product" role="status" aria-live="polite">
+            <img class="cinematic-reveal-backdrop" id="quest-reveal-backdrop" alt="" aria-hidden="true">
+            <img class="cinematic-reveal-art quest-reveal-art" id="quest-reveal-art" alt="">
+            <div class="cinematic-reveal-scrim quest-reveal-scrim" aria-hidden="true"></div>
+            <div class="cinematic-reveal-copy quest-reveal-copy">
+                <p class="cinematic-reveal-eyebrow quest-reveal-eyebrow">The quest returns</p>
                 <h1 id="player-mission-reveal-result"></h1>
                 <p id="player-mission-reveal-detail"></p>
             </div>
@@ -374,27 +378,39 @@
 
     <!-- ============ GAME OVER SCREEN ============ -->
     <div class="screen" id="screen-game-over">
-        <div class="game-over-result" id="game-over-result-player"></div>
-        <div class="my-role-reveal" id="my-role-reveal-display"></div>
-        <p class="waiting-text" id="win-reason-player" style="font-size:0.9rem"></p>
-        <section class="victory-group-card" id="victory-group-card-player" aria-label="Victory group portrait">
-            <div class="victory-card-kicker">THE CHRONICLE RECORDS</div>
-            <div class="victory-card-crest" aria-hidden="true">♜</div>
-            <h2 class="victory-card-title"></h2>
-            <p class="victory-card-subtitle"></p>
-            <div class="victory-card-party"></div>
-            <div class="victory-card-footer">AVALON · <span class="victory-card-room"></span></div>
-        </section>
-        <p class="victory-card-hint">Frame this card on screen and take a screenshot to remember the game.</p>
-        <button type="button" class="btn btn-primary" id="btn-run-it-back" aria-pressed="false">↻ Run It Back</button>
-        <div class="rematch-status" id="rematch-status-player" aria-live="polite">0 players ready for another game</div>
-        <div class="game-over-roles">
-            <h3>Full Role Reveal</h3>
-            <div class="roles-list" id="roles-list-player"></div>
+        <div class="cinematic-reveal game-outcome-announcement is-complete" id="game-outcome-announcement-player" role="status" aria-live="assertive" aria-hidden="true">
+            <img class="cinematic-reveal-backdrop" id="game-outcome-backdrop-player" alt="" aria-hidden="true">
+            <img class="cinematic-reveal-art" id="game-outcome-art-player" alt="">
+            <div class="cinematic-reveal-scrim" aria-hidden="true"></div>
+            <div class="cinematic-reveal-copy">
+                <p class="cinematic-reveal-eyebrow">The fate of Avalon is decided</p>
+                <h1 id="game-outcome-title-player"></h1>
+                <p id="game-outcome-detail-player"></p>
+            </div>
         </div>
-        <div class="game-chronicle">
-            <h3>Chronicle of Avalon</h3>
-            <div id="chronicle-player"></div>
+        <div class="game-over-content">
+            <div class="game-over-result" id="game-over-result-player"></div>
+            <div class="my-role-reveal" id="my-role-reveal-display"></div>
+            <p class="waiting-text" id="win-reason-player" style="font-size:0.9rem"></p>
+            <section class="victory-group-card" id="victory-group-card-player" aria-label="Victory group portrait">
+                <div class="victory-card-kicker">THE CHRONICLE RECORDS</div>
+                <div class="victory-card-crest" aria-hidden="true">♜</div>
+                <h2 class="victory-card-title"></h2>
+                <p class="victory-card-subtitle"></p>
+                <div class="victory-card-party"></div>
+                <div class="victory-card-footer">AVALON · <span class="victory-card-room"></span></div>
+            </section>
+            <p class="victory-card-hint">Frame this card on screen and take a screenshot to remember the game.</p>
+            <button type="button" class="btn btn-primary" id="btn-run-it-back" aria-pressed="false">↻ Run It Back</button>
+            <div class="rematch-status" id="rematch-status-player" aria-live="polite">0 players ready for another game</div>
+            <div class="game-over-roles">
+                <h3>Full Role Reveal</h3>
+                <div class="roles-list" id="roles-list-player"></div>
+            </div>
+            <div class="game-chronicle">
+                <h3>Chronicle of Avalon</h3>
+                <div id="chronicle-player"></div>
+            </div>
         </div>
     </div>
 
@@ -599,8 +615,8 @@
 
 <script src="/static/js/socket.io.min.js"></script>
 <script src="/static/js/presence.js?v=20260824-round-table"></script>
-<script src="/static/js/player.js?v=20260824-immersive-quests"></script>
-<script src="/static/js/assassination-reveal.js?v=20260825"></script>
+<script src="/static/js/player.js?v=20260826"></script>
+<script src="/static/js/assassination-reveal.js?v=20260826"></script>
 <script src="/static/js/final-role-gallery.js?v=20260825"></script>
 </body>
 </html>

@@ -20,28 +20,90 @@ const ANALYTICS_ID_KEY = 'avalon-analytics-id';
 const FORCE_NEW = document.body.dataset.forceNew === 'true';
 const DEFAULT_TITLE = document.title;
 
+function randomUuid() {
+    return crypto.randomUUID ? crypto.randomUUID() :
+        'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, character => {
+            const random = Math.random() * 16 | 0;
+            return (character === 'x' ? random : (random & 0x3 | 0x8)).toString(16);
+        });
+}
+
 function analyticsId() {
     let value = localStorage.getItem(ANALYTICS_ID_KEY);
     if (!value) {
-        value = crypto.randomUUID ? crypto.randomUUID() :
-            'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, character => {
-                const random = Math.random() * 16 | 0;
-                return (character === 'x' ? random : (random & 0x3 | 0x8)).toString(16);
-            });
+        value = randomUuid();
         localStorage.setItem(ANALYTICS_ID_KEY, value);
     }
     return value;
 }
 
 const ANALYTICS_ID = analyticsId();
+const CLIENT_SESSION_ID = randomUuid();
+let clientEventSequence = 0;
+let socketConnectionCount = 0;
+
+function dimensionBucket(value) {
+    if (value <= 430) return 'xs';
+    if (value <= 768) return 'sm';
+    if (value <= 1024) return 'md';
+    if (value <= 1440) return 'lg';
+    return 'xl';
+}
+
+function clientContext() {
+    const navigation = performance.getEntriesByType?.('navigation')?.[0];
+    return {
+        screen_class: screenClass(),
+        display_mode: window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser',
+        viewport_width_bucket: dimensionBucket(window.innerWidth),
+        viewport_height_bucket: dimensionBucket(window.innerHeight),
+        timezone_offset_minutes: new Date().getTimezoneOffset(),
+        locale: (navigator.language || 'unknown').slice(0, 16),
+        color_scheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+        reduced_motion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+        touch_capable: navigator.maxTouchPoints > 0,
+        online: navigator.onLine,
+        navigation_ms: navigation ? Math.round(navigation.duration) : 0,
+    };
+}
 
 function track(eventType, payload = {}) {
     socket.emit('client_analytics', {
         analytics_id: ANALYTICS_ID,
+        client_session_id: CLIENT_SESSION_ID,
+        client_event_id: randomUuid(),
+        client_sequence: ++clientEventSequence,
+        client_occurred_at: new Date().toISOString(),
+        client_uptime_ms: Math.round(performance.now()),
+        page: 'player',
+        client_context: clientContext(),
         event_type: eventType,
         payload,
     });
 }
+
+document.addEventListener('click', event => {
+    const control = event.target.closest?.('button[id], a[id], [role="button"][id]');
+    if (!control || !/^[A-Za-z0-9_-]{1,64}$/.test(control.id)) return;
+    track('ui_control_activated', {
+        control_id: control.id,
+        context: document.querySelector('.screen.active')?.id || 'entry',
+    });
+});
+
+window.addEventListener('error', event => {
+    track('client_error', {
+        error_category: event.error?.name || 'script_error',
+        context: document.querySelector('.screen.active')?.id || 'unknown',
+    });
+});
+
+window.addEventListener('unhandledrejection', event => {
+    track('client_error', {
+        error_category: event.reason?.name || 'unhandled_promise',
+        context: document.querySelector('.screen.active')?.id || 'unknown',
+    });
+});
 
 function screenClass() {
     if (window.innerWidth <= 430) return 'phone';
@@ -56,7 +118,6 @@ const presenceScreenLabels = {
     'screen-vote': 'Fellowship Vote',
     'screen-vote-reveal-player': 'The Votes Are Revealed',
     'screen-mission': 'The Quest Begins',
-    'screen-mission-reveal-player': 'The Quest Returns',
     'screen-assassin': 'The Final Choice',
 };
 
@@ -115,6 +176,8 @@ let presencePlayers = [];
 let wakeLock = null;
 let joinedThisPage = false;
 let missionRevealSequence = 0;
+let gameOutcomeTimer = null;
+let lastGameOutcomeAnnouncementKey = null;
 
 function applySpectatorMode(enabled, visionMode = 'blind') {
     isSpectator = Boolean(enabled);
@@ -219,11 +282,24 @@ function clearReconnectSession() {
 }
 
 async function acquireWakeLock() {
-    if (!('wakeLock' in navigator) || wakeLock) return;
+    if (!('wakeLock' in navigator)) {
+        track('wake_lock_failed', { reason: 'unsupported', supported: false });
+        return;
+    }
+    if (wakeLock) return;
     try {
         wakeLock = await navigator.wakeLock.request('screen');
-        wakeLock.addEventListener('release', () => { wakeLock = null; });
-    } catch (_) { /* unsupported, denied, or not currently visible */ }
+        track('wake_lock_acquired', { supported: true });
+        wakeLock.addEventListener('release', () => {
+            wakeLock = null;
+            track('wake_lock_released', { context: document.visibilityState });
+        });
+    } catch (error) {
+        track('wake_lock_failed', {
+            reason: error?.name || 'request_failed',
+            supported: true,
+        });
+    }
 }
 
 function releaseWakeLock() {
@@ -243,6 +319,10 @@ function clearAttention() {
 }
 
 document.addEventListener('visibilitychange', () => {
+    track('visibility_changed', {
+        visibility_state: document.visibilityState,
+        session_duration_ms: Math.round(performance.now()),
+    });
     if (document.visibilityState === 'visible' && gameStartedAt) acquireWakeLock();
 });
 
@@ -250,17 +330,26 @@ document.addEventListener('visibilitychange', () => {
 // Screen management
 // ---------------------------------------------------------------------------
 function showScreen(id) {
+    const previousScreenId = document.querySelector('.screen.active')?.id || null;
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const target = document.getElementById(id);
     if (target) target.classList.add('active');
     document.body.classList.toggle('role-reveal-active', id === 'screen-role');
     document.body.classList.toggle('quest-reveal-active', id === 'screen-mission-reveal-player');
+    document.body.classList.toggle('game-over-active', id === 'screen-game-over');
     const label = presenceScreenLabels[id];
     if (label && gameCode && presencePlayers.length) presenceTable.show(target, label);
     else presenceTable.hide();
     const settingsButton = document.getElementById('btn-settings');
     if (settingsButton) {
         settingsButton.classList.toggle('hidden', !isHost || id === 'screen-join' || id === 'screen-lobby');
+    }
+    if (target && previousScreenId !== id) {
+        track('screen_viewed', {
+            screen_id: id,
+            previous_screen_id: previousScreenId || 'none',
+            context: isSpectator ? 'spectator' : (isHost ? 'player_host' : 'player'),
+        });
     }
 }
 
@@ -622,6 +711,16 @@ const LOYAL_SERVANT_ART = [
     '/static/assets/roles/loyal-servant-female.png?v=20260824',
 ];
 
+const QUEST_OUTCOME_ART = {
+    success: '/static/assets/quests/quest-successful.png?v=20260825-cinematic',
+    fail: '/static/assets/quests/quest-failed.png?v=20260825-cinematic',
+};
+
+const GAME_OUTCOME_ART = {
+    good: '/static/assets/results/good-wins.png?v=20260825-cinematic',
+    evil: '/static/assets/results/evil-wins.png?v=20260825-cinematic',
+};
+
 function chooseRoleArt(role) {
     if (role === 'Loyal Servant') {
         return LOYAL_SERVANT_ART[Math.floor(Math.random() * LOYAL_SERVANT_ART.length)];
@@ -975,17 +1074,18 @@ function showVoteReveal(data) {
 
 function showMissionReveal(data, canContinue = false) {
     const reveal = document.getElementById('quest-reveal-product');
-    const revealKey = JSON.stringify([Boolean(data.passed), data.success_count || 0, data.fail_count || 0, data.cards_shuffled || []]);
+    const revealKey = JSON.stringify([data.mission_num || null, Boolean(data.passed), data.success_count || 0, data.fail_count || 0, data.cards_shuffled || []]);
     const existingReveal = reveal.dataset.revealKey === revealKey;
     latestMissionReveal = data;
     if (!existingReveal) {
         const sequence = ++missionRevealSequence;
         reveal.dataset.revealKey = revealKey;
-        reveal.className = `quest-reveal-product ${data.passed ? 'success' : 'fail'}`;
+        reveal.className = `cinematic-reveal quest-reveal-product ${data.passed ? 'success' : 'fail'}`;
         const art = document.getElementById('quest-reveal-art');
-        art.src = data.passed
-            ? '/static/assets/quests/quest-successful.png?v=20260824'
-            : '/static/assets/quests/quest-failed.png?v=20260824';
+        const backdrop = document.getElementById('quest-reveal-backdrop');
+        const artPath = data.passed ? QUEST_OUTCOME_ART.success : QUEST_OUTCOME_ART.fail;
+        art.src = artPath;
+        backdrop.src = artPath;
         art.alt = data.passed ? 'Knights celebrating a successful quest' : 'Knights returning from a failed quest';
         document.getElementById('player-mission-reveal-result').textContent =
             data.passed ? 'Quest Successful' : 'Quest Failed';
@@ -1011,11 +1111,13 @@ function showMissionReveal(data, canContinue = false) {
 // ---------------------------------------------------------------------------
 function showProposalScreen(data) {
     const iAmLeader = myPlayerId === data.leader_id;
+    const forcedProposal = Boolean(data.forced || pbConsecutiveRejections >= 4);
     missionRequiredSize = data.mission_size;
     selectedTeamIds = [];
 
     document.getElementById('proposal-required').textContent = data.mission_size;
     document.getElementById('proposal-selected-count').textContent = 0;
+    document.getElementById('player-forced-proposal-note').classList.toggle('hidden', !forcedProposal);
 
     const list = document.getElementById('player-select-list');
     list.innerHTML = '';
@@ -1207,14 +1309,84 @@ function renderChronicle(container, summary) {
             rejected.textContent = `Rejected proposal by ${item.leader_name}: ${item.approve_count}–${item.reject_count}`;
             section.appendChild(rejected);
         });
+        attempts.filter(item => item.forced).forEach(item => {
+            const forced = document.createElement('small');
+            forced.textContent = `${item.leader_name} selected the binding fifth party`;
+            section.appendChild(forced);
+        });
         container.appendChild(section);
     });
     proposals.filter(item => !completedMissionNumbers.has(item.mission_num)).forEach(item => {
         const section = document.createElement('section');
-        section.className = 'chronicle-entry rejected';
-        section.textContent = `Mission ${item.mission_num}: ${item.leader_name}’s party was rejected ${item.approve_count}–${item.reject_count}`;
+        section.className = `chronicle-entry${item.forced ? '' : ' rejected'}`;
+        section.textContent = item.forced
+            ? `Mission ${item.mission_num}: ${item.leader_name} selected the binding fifth party`
+            : `Mission ${item.mission_num}: ${item.leader_name}’s party was rejected ${item.approve_count}–${item.reject_count}`;
         container.appendChild(section);
     });
+}
+
+function completeGameOutcomeAnnouncement() {
+    const announcement = document.getElementById('game-outcome-announcement-player');
+    announcement.classList.add('is-complete');
+    announcement.setAttribute('aria-hidden', 'true');
+    const content = document.querySelector('#screen-game-over .game-over-content');
+    content?.removeAttribute('aria-hidden');
+    if (content) content.inert = false;
+    gameOutcomeTimer = null;
+}
+
+function showGameOutcomeAnnouncement(summary, detail) {
+    const winner = summary.winner === 'evil' ? 'evil' : 'good';
+    if (
+        summary.win_reason === 'assassination'
+        && window.AVALON_ASSASSINATION_REVEAL_ENABLED
+    ) {
+        clearTimeout(gameOutcomeTimer);
+        gameOutcomeTimer = null;
+        const announcement = document.getElementById('game-outcome-announcement-player');
+        announcement.className = 'cinematic-reveal game-outcome-announcement is-complete';
+        announcement.setAttribute('aria-hidden', 'true');
+        return;
+    }
+    const key = `${gameCode || '----'}:${gameStartedAt || 'unknown'}:${winner}:${summary.win_reason || 'unknown'}`;
+    if (lastGameOutcomeAnnouncementKey === key) return;
+    lastGameOutcomeAnnouncementKey = key;
+    clearTimeout(gameOutcomeTimer);
+
+    const announcement = document.getElementById('game-outcome-announcement-player');
+    const artPath = GAME_OUTCOME_ART[winner];
+    const content = document.querySelector('#screen-game-over .game-over-content');
+    content?.setAttribute('aria-hidden', 'true');
+    if (content) content.inert = true;
+    announcement.className = `cinematic-reveal game-outcome-announcement ${winner}`;
+    announcement.setAttribute('aria-hidden', 'false');
+    document.getElementById('game-outcome-backdrop-player').src = artPath;
+    const art = document.getElementById('game-outcome-art-player');
+    art.src = artPath;
+    art.alt = winner === 'good'
+        ? 'Camelot illuminated after victory by the forces of good'
+        : 'Camelot fallen under the forces of evil';
+    document.getElementById('game-outcome-title-player').textContent = winner === 'good'
+        ? 'Good Wins'
+        : 'Evil Wins';
+    document.getElementById('game-outcome-detail-player').textContent = detail;
+    void announcement.offsetWidth;
+    requestAnimationFrame(() => announcement.classList.add('is-revealed'));
+    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1200 : 4200;
+    gameOutcomeTimer = window.setTimeout(completeGameOutcomeAnnouncement, duration);
+}
+
+function resetGameOutcomeAnnouncement() {
+    clearTimeout(gameOutcomeTimer);
+    gameOutcomeTimer = null;
+    lastGameOutcomeAnnouncementKey = null;
+    const announcement = document.getElementById('game-outcome-announcement-player');
+    announcement.className = 'cinematic-reveal game-outcome-announcement is-complete';
+    announcement.setAttribute('aria-hidden', 'true');
+    const content = document.querySelector('#screen-game-over .game-over-content');
+    content?.removeAttribute('aria-hidden');
+    if (content) content.inert = false;
 }
 
 function showGameOver(summary) {
@@ -1241,7 +1413,8 @@ function showGameOver(summary) {
         assassination_failed: 'The Assassin missed Merlin',
         rejections: '5 consecutive team rejections',
     };
-    document.getElementById('win-reason-player').textContent = reasons[summary.win_reason] || summary.win_reason;
+    const winReason = reasons[summary.win_reason] || summary.win_reason || 'The struggle for Avalon is over';
+    document.getElementById('win-reason-player').textContent = winReason;
     renderVictoryCard(document.getElementById('victory-group-card-player'), summary);
     rematchReady = false;
     const rematchButton = document.getElementById('btn-run-it-back');
@@ -1271,6 +1444,7 @@ function showGameOver(summary) {
     presenceTable.hide();
     hidePlayerBoard();
     hideChat();
+    showGameOutcomeAnnouncement(summary, winReason);
 }
 
 function renderVictoryCard(card, summary) {
@@ -1420,6 +1594,7 @@ function applyStateSnapshot(snap) {
                 player_order: snap.player_order,
                 player_name_to_id: snap.player_name_to_id,
                 duration_seconds: snap.timer_remaining ?? snap.settings.proposal_time,
+                forced: (snap.consecutive_rejections || 0) >= 4,
             });
             document.getElementById('proposal-timer-player').textContent = (snap.timer_remaining ?? snap.settings.proposal_time)
                 ? fmtTime(snap.timer_remaining ?? snap.settings.proposal_time)
@@ -1865,6 +2040,7 @@ socket.on('rematch_status', data => {
 
 socket.on('return_to_lobby', data => {
     stopGameClock();
+    resetGameOutcomeAnnouncement();
     myRole = null;
     myTeam = null;
     myRoleArt = null;
@@ -1898,6 +2074,7 @@ socket.on('return_to_lobby', data => {
 
 socket.on('game_ended', () => {
     stopGameClock();
+    resetGameOutcomeAnnouncement();
     clearReconnectSession();
     releaseWakeLock();
     clearAttention();
@@ -1940,11 +2117,13 @@ socket.on('error', data => {
 });
 
 socket.on('connect', () => {
-    track('client_session_started', {
+    track(socketConnectionCount ? 'socket_reconnected' : 'client_session_started', {
         screen_class: screenClass(),
         display_mode: window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser',
         context: 'player_page',
+        reconnect_count: socketConnectionCount,
     });
+    socketConnectionCount += 1;
     if (joinedThisPage && reconnectToken()) {
         showConnectionStatus('Connected — restoring your seat…');
         socket.emit('reconnect_game', { session_token: reconnectToken(), analytics_id: ANALYTICS_ID });
@@ -1958,6 +2137,7 @@ socket.on('connect_error', () => showConnectionStatus('Unable to reach the game 
 // ---------------------------------------------------------------------------
 
 function showEntryFlow(mode) {
+    track('entry_mode_selected', { context: mode });
     const chooser = document.getElementById('entry-mode-chooser');
     const panel = document.getElementById('entry-flow-panel');
     const resume = document.getElementById('resume-card');
@@ -2124,7 +2304,11 @@ document.getElementById('btn-recover-seat').addEventListener('click', () => {
     const button = document.getElementById('btn-recover-seat');
     button.disabled = true;
     button.textContent = 'Recovering…';
-    socket.emit('claim_player_seat', { room_code: roomCode, recovery_code: recoveryCode });
+    socket.emit('claim_player_seat', {
+        room_code: roomCode,
+        recovery_code: recoveryCode,
+        analytics_id: ANALYTICS_ID,
+    });
 });
 
 document.getElementById('btn-ready').addEventListener('click', event => {

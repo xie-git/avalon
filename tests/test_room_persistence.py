@@ -123,6 +123,36 @@ def test_room_snapshot_survives_runtime_reload(tmp_path, monkeypatch):
     display.disconnect()
 
 
+def test_legacy_started_room_backfills_research_parent_on_reload(
+    tmp_path, monkeypatch
+):
+    store = ChatStore(str(tmp_path / "legacy-research.sqlite3"))
+    store.initialize()
+    monkeypatch.setattr(server, "chat_store", store)
+    monkeypatch.setitem(server.app.config, "PERSIST_ROOMS_IN_TESTS", True)
+    game = populated_game("LEGC")
+    game.game_id = "legacy-game-1"
+    server.games[game.code] = game
+
+    server.persist_game(game)
+    assert store.research_game(game.game_id) is None
+
+    server.games.clear()
+    server.session_tokens.clear()
+    server.load_persisted_games()
+
+    restored_game = store.research_game(game.game_id)
+    assert restored_game["status"] == "in_progress"
+    assert len(store.research_participants(game.game_id)) == 6
+    settings = json.loads(restored_game["settings_json"])
+    assert settings["initial_state_source"] == "first_available_restored_snapshot"
+    event_types = [
+        row["event_type"] for row in store.research_events(game_id=game.game_id)
+    ]
+    assert "research_game_backfilled" in event_types
+    assert "state_checkpoint" in event_types
+
+
 def test_full_disconnect_freezes_and_each_resume_renews_expiry(monkeypatch):
     now = [10_000.0]
     monkeypatch.setattr(server.time, "time", lambda: now[0])

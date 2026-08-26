@@ -157,9 +157,10 @@ def test_nine_player_merlin_cannot_see_mordred():
     )["sees"]
 
 
-def test_regular_minion_knows_other_non_oberon_evil_players():
-    game = make_game(7)
-    roles = [role for team in PLAYER_COUNT_ROLES[7] for role in team]
+@pytest.mark.parametrize("count", [7, 8])
+def test_seven_and_eight_player_games_use_mordred(count):
+    game = make_game(count)
+    roles = [role for team in PLAYER_COUNT_ROLES[count] for role in team]
     for player_id, role in zip(game.player_order, roles):
         player = game.players[player_id]
         player.role = role
@@ -169,13 +170,18 @@ def test_regular_minion_knows_other_non_oberon_evil_players():
             Role.LOYAL_SERVANT,
         } else Team.EVIL
     by_role = {player.role: player for player in game.players.values()}
-    minion_info = get_night_phase_info(
-        game, by_role[Role.MINION_OF_MORDRED].player_id
-    )
-    assert set(minion_info["sees"]) == {
+    assert set(PLAYER_COUNT_ROLES[count][1]) == {
+        Role.ASSASSIN,
+        Role.MORGANA,
+        Role.MORDRED,
+    }
+    mordred_info = get_night_phase_info(game, by_role[Role.MORDRED].player_id)
+    assert set(mordred_info["sees"]) == {
         by_role[Role.ASSASSIN].name,
         by_role[Role.MORGANA].name,
     }
+    merlin_info = get_night_phase_info(game, by_role[Role.MERLIN].player_id)
+    assert by_role[Role.MORDRED].name not in merlin_info["sees"]
 
 
 def test_vote_and_mission_flow():
@@ -198,7 +204,7 @@ def test_vote_and_mission_flow():
     assert process_mission_result(game, True) == "next_mission"
 
 
-def test_tied_team_vote_is_rejected_and_five_rejections_end_game():
+def test_tied_team_vote_is_rejected_and_fifth_party_is_binding():
     game = make_game(6)
     game.phase = GamePhase.TEAM_VOTE
     result = None
@@ -206,14 +212,15 @@ def test_tied_team_vote_is_rejected_and_five_rejections_end_game():
         result = record_vote(game, player_id, "approve" if index < 3 else "reject")
     assert result["approved"] is False
 
-    for rejection in range(1, 6):
+    for rejection in range(1, 5):
         outcome = process_vote_result(game, False)
-        if rejection < 5:
-            assert outcome == "next_proposal"
-            game.phase = GamePhase.TEAM_VOTE
-        else:
-            assert outcome == "evil_wins_by_rejection"
-            assert game.winner == "evil"
+        assert outcome == "next_proposal"
+        game.phase = GamePhase.TEAM_VOTE
+
+    assert process_vote_result(game, False) == "mission"
+    assert game.consecutive_rejections == 0
+    assert game.phase == GamePhase.MISSION
+    assert game.winner is None
 
 
 @pytest.mark.parametrize(
