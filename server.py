@@ -841,7 +841,12 @@ def serialize_game(game: GameState) -> dict:
         "votes": game.votes,
         "pending_vote_result": game.pending_vote_result,
         "mission_cards": game.mission_cards,
+        "pending_mission_reveal": game.pending_mission_reveal,
         "night_acks": sorted(game.night_acks),
+        "vote_reveal_acks": sorted(game.vote_reveal_acks),
+        "mission_intro_acks": sorted(game.mission_intro_acks),
+        "mission_reveal_acks": sorted(game.mission_reveal_acks),
+        "mission_choices_open": game.mission_choices_open,
         "assassin_target": game.assassin_target,
         "winner": game.winner,
         "win_reason": game.win_reason,
@@ -925,7 +930,12 @@ def deserialize_game(state: dict, *, saved_at: float) -> GameState:
     game.votes = dict(state.get("votes", {}))
     game.pending_vote_result = state.get("pending_vote_result")
     game.mission_cards = dict(state.get("mission_cards", {}))
+    game.pending_mission_reveal = state.get("pending_mission_reveal")
     game.night_acks = set(state.get("night_acks", []))
+    game.vote_reveal_acks = set(state.get("vote_reveal_acks", []))
+    game.mission_intro_acks = set(state.get("mission_intro_acks", []))
+    game.mission_reveal_acks = set(state.get("mission_reveal_acks", []))
+    game.mission_choices_open = bool(state.get("mission_choices_open", False))
     game.assassin_target = state.get("assassin_target")
     game.winner = state.get("winner")
     game.win_reason = state.get("win_reason")
@@ -1955,27 +1965,43 @@ def emit_mission_waiting(game: GameState) -> None:
     )
 
 
+def human_player_ids(game: GameState) -> set[str]:
+    return {
+        player.player_id for player in game.players.values() if not player.is_bot
+    }
+
+
+def reveal_ack_payload(game: GameState, acknowledgements: set[str]) -> dict:
+    required = human_player_ids(game)
+    acknowledged = required & acknowledgements
+    return {
+        "acknowledged_ids": sorted(acknowledged),
+        "acknowledged_names": [
+            game.players[pid].name for pid in game.player_order if pid in acknowledged
+        ],
+        "acknowledged_count": len(acknowledged),
+        "required_count": len(required),
+        "complete": required <= acknowledgements,
+    }
+
+
+def vote_reveal_seconds(game: GameState) -> float:
+    """Minimum time needed for every avatar stamp and result beat to finish."""
+    return 2.2 + game.player_count() * 0.7
+
+
+def open_mission_choices(game: GameState) -> None:
+    if game.mission_choices_open:
+        return
+    game.mission_choices_open = True
+    emit_to_game(game.code, "mission_choices_open", {})
+    persist_game(game)
+    play_bot_mission_cards(game)
+
+
 def finish_mission(game: GameState, result: dict) -> None:
     game.phase = GamePhase.MISSION_REVEAL
-    mark_phase_started(
-        game,
-        "mission_reveal_started",
-        {"passed": bool(result["passed"]), "fail_count": result["fail_count"]},
-    )
-    emit_to_game(
-        game.code,
-        "mission_reveal",
-        {
-            "cards_shuffled": result["cards_shuffled"],
-            "fail_count": result["fail_count"],
-            "success_count": result["success_count"],
-            "passed": result["passed"],
-            "mission_num": game.current_mission + 1,
-            "requires_double_fail": game.requires_double_fail(),
-        },
-    )
-    persist_game(game)
-    pause(4)
+    game.mission_reveal_acks = set()
     history_item = {
         "mission_num": game.current_mission + 1,
         "leader_name": game.current_leader().name if game.current_leader() else "Unknown",
@@ -1983,7 +2009,29 @@ def finish_mission(game: GameState, result: dict) -> None:
         "success_count": result["success_count"],
         "fail_count": result["fail_count"],
         "passed": result["passed"],
+        "cards_shuffled": result["cards_shuffled"],
     }
+    reveal_payload = {
+        "cards_shuffled": result["cards_shuffled"],
+        "fail_count": result["fail_count"],
+        "success_count": result["success_count"],
+        "passed": result["passed"],
+        "mission_num": game.current_mission + 1,
+        "requires_double_fail": game.requires_double_fail(),
+        "team": [game.players[pid].name for pid in game.proposed_team],
+        "team_ids": list(game.proposed_team),
+    }
+    game.pending_mission_reveal = reveal_payload
+    mark_phase_started(
+        game,
+        "mission_reveal_started",
+        {"passed": bool(result["passed"]), "fail_count": result["fail_count"]},
+    )
+    emit_to_game(game.code, "mission_reveal", reveal_payload)
+    persist_game(game)
+    # Keep the card suspense on its own screen long enough for every card to
+    # turn and breathe before the separate outcome artwork is announced.
+    pause((1200 + len(result["cards_shuffled"]) * 1100 + 1500) / 1000)
     game.mission_history.append(history_item)
     log_game_event(
         game,
@@ -2018,9 +2066,12 @@ def finish_mission(game: GameState, result: dict) -> None:
             "evil_wins": game.evil_wins_count(),
         },
     )
-    leader = game.current_leader()
-    if leader and leader.is_bot:
-        advance_after_mission(game)
+    emit_to_game(
+        game.code,
+        "mission_reveal_ack_status",
+        reveal_ack_payload(game, game.mission_reveal_acks),
+    )
+    persist_game(game)
 
 
 def play_bot_mission_cards(game: GameState) -> None:
@@ -2049,6 +2100,8 @@ def begin_proposed_mission(
         proposal_attempt = game.consecutive_rejections + 1
     game.consecutive_rejections = 0
     game.phase = GamePhase.MISSION
+    game.mission_intro_acks = set()
+    game.mission_choices_open = False
     mark_phase_started(
         game,
         "mission_started",
@@ -2070,11 +2123,18 @@ def begin_proposed_mission(
         },
     )
     persist_game(game)
-    play_bot_mission_cards(game)
+    emit_to_game(
+        game.code,
+        "mission_intro_status",
+        reveal_ack_payload(game, game.mission_intro_acks),
+    )
+    if not human_player_ids(game):
+        open_mission_choices(game)
 
 
 def finish_vote(game: GameState, result: dict) -> None:
     game.phase = GamePhase.VOTE_REVEAL
+    game.vote_reveal_acks = set()
     mark_phase_started(
         game,
         "vote_reveal_started",
@@ -2100,9 +2160,12 @@ def finish_vote(game: GameState, result: dict) -> None:
         },
     )
     emit_to_game(game.code, "vote_reveal", {**result, "team": public_vote["team"]})
-    leader = game.current_leader()
-    if leader and leader.is_bot:
-        advance_after_vote(game)
+    emit_to_game(
+        game.code,
+        "vote_reveal_ack_status",
+        reveal_ack_payload(game, game.vote_reveal_acks),
+    )
+    persist_game(game)
 
 
 def advance_after_vote(game: GameState) -> None:
@@ -2110,6 +2173,7 @@ def advance_after_vote(game: GameState) -> None:
     if not result:
         raise ValueError("No revealed vote is awaiting confirmation")
     game.pending_vote_result = None
+    game.vote_reveal_acks = set()
     proposal_attempt = game.consecutive_rejections + 1
     outcome = process_vote_result(game, result["approved"])
     if outcome == "mission":
@@ -2648,6 +2712,10 @@ def on_register_host_screen(data):
                 "night_pending_names": night_pending_names(game),
                 "spectator_count": connected_spectator_count(game),
                 "pending_mission_outcome": game.pending_mission_outcome,
+                "mission_choices_open": game.mission_choices_open,
+                "mission_intro_ack_ids": sorted(game.mission_intro_acks),
+                "vote_reveal_ack_ids": sorted(game.vote_reveal_acks),
+                "mission_reveal_ack_ids": sorted(game.mission_reveal_acks),
                 "spotlight_player_id": game.spotlight_player_id,
                 "rematch_ready_ids": sorted(game.rematch_ready),
                 "vote_reveal_pending": game.pending_vote_result is not None,
@@ -2673,7 +2741,11 @@ def on_register_host_screen(data):
                     pid for pid in game.proposed_team if pid in game.mission_cards
                 ],
                 "latest_mission": (
-                    game.mission_history[-1] if game.mission_history else None
+                    game.pending_mission_reveal
+                    if game.phase == GamePhase.MISSION_REVEAL
+                    else game.mission_history[-1]
+                    if game.mission_history
+                    else None
                 ),
                 "recent_chat": recent_chat_payload(game),
                 "summary": get_game_summary(game)
@@ -3853,8 +3925,17 @@ def on_confirm_vote_reveal():
         game, player = validate_caller(
             request.sid,
             require_phase=GamePhase.VOTE_REVEAL,
-            require_leader=True,
         )
+        reveal_elapsed = max(0.0, time.time() - game.phase_started_at)
+        reveal_remaining = vote_reveal_seconds(game) - reveal_elapsed
+        if reveal_remaining > 0:
+            emit(
+                "error",
+                {"message": "The court is still revealing its votes."},
+                room=request.sid,
+            )
+            return
+        game.vote_reveal_acks.add(player.player_id)
         record_product_event(
             "vote_reveal_confirmed",
             game=game,
@@ -3863,12 +3944,34 @@ def on_confirm_vote_reveal():
             analytics_id=player.analytics_id,
             payload={"elapsed_ms": max(0, int((time.time() - game.phase_started_at) * 1000))},
         )
-        advance_after_vote(game)
+        status = reveal_ack_payload(game, game.vote_reveal_acks)
+        emit_to_game(game.code, "vote_reveal_ack_status", status)
+        persist_game(game)
+        if status["complete"]:
+            advance_after_vote(game)
     except ValueError as error:
         emit_validation_error(error)
 
 
 # --- Mission ---
+
+
+@socketio.on("ack_mission_intro")
+@rate_limited()
+def on_ack_mission_intro():
+    try:
+        game, player = validate_caller(
+            request.sid,
+            require_phase=GamePhase.MISSION,
+        )
+        game.mission_intro_acks.add(player.player_id)
+        status = reveal_ack_payload(game, game.mission_intro_acks)
+        emit_to_game(game.code, "mission_intro_status", status)
+        persist_game(game)
+        if status["complete"]:
+            open_mission_choices(game)
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 @socketio.on("play_mission_card")
@@ -3881,6 +3984,8 @@ def on_play_mission_card(data):
         emit("error", {"message": str(e)})
         return
     try:
+        if not game.mission_choices_open:
+            raise ValueError("The fellowship is still entering the quest")
         data = require_object(data)
         card = require_string(data, "card", minimum=4, maximum=7)
         result = record_mission_card(game, player.player_id, card)
@@ -3912,6 +4017,8 @@ def advance_after_mission(game: GameState) -> None:
     if not outcome:
         raise ValueError("No completed mission is awaiting advancement")
     game.pending_mission_outcome = None
+    game.pending_mission_reveal = None
+    game.mission_reveal_acks = set()
     if outcome == "assassin_phase":
         game.phase = GamePhase.ASSASSIN_PHASE
         mark_phase_started(game, "assassin_phase_started")
@@ -3943,6 +4050,9 @@ def advance_after_mission(game: GameState) -> None:
         game.proposed_team = []
         game.votes = {}
         game.mission_cards = {}
+        game.mission_intro_acks = set()
+        game.mission_reveal_acks = set()
+        game.mission_choices_open = False
         start_round(game)
 
 
@@ -3953,8 +4063,8 @@ def on_advance_after_mission():
         game, player = validate_caller(
             request.sid,
             require_phase=GamePhase.MISSION_REVEAL,
-            require_leader=True,
         )
+        game.mission_reveal_acks.add(player.player_id)
         record_product_event(
             "mission_reveal_confirmed",
             game=game,
@@ -3963,7 +4073,11 @@ def on_advance_after_mission():
             analytics_id=player.analytics_id,
             payload={"elapsed_ms": max(0, int((time.time() - game.phase_started_at) * 1000))},
         )
-        advance_after_mission(game)
+        status = reveal_ack_payload(game, game.mission_reveal_acks)
+        emit_to_game(game.code, "mission_reveal_ack_status", status)
+        persist_game(game)
+        if status["complete"]:
+            advance_after_mission(game)
     except ValueError as error:
         emit_validation_error(error)
 

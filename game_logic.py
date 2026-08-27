@@ -213,7 +213,12 @@ class GameState:
         self.votes: dict[str, str] = {}  # player_id -> "approve"/"reject"
         self.pending_vote_result: dict | None = None
         self.mission_cards: dict[str, str] = {}  # player_id -> "success"/"fail"
+        self.pending_mission_reveal: dict | None = None
         self.night_acks: set[str] = set()
+        self.vote_reveal_acks: set[str] = set()
+        self.mission_intro_acks: set[str] = set()
+        self.mission_reveal_acks: set[str] = set()
+        self.mission_choices_open = False
 
         # End state
         self.assassin_target: str | None = None
@@ -300,7 +305,12 @@ class GameState:
         self.votes = {}
         self.pending_vote_result = None
         self.mission_cards = {}
+        self.pending_mission_reveal = None
         self.night_acks = set()
+        self.vote_reveal_acks = set()
+        self.mission_intro_acks = set()
+        self.mission_reveal_acks = set()
+        self.mission_choices_open = False
         self.assassin_target = None
         self.winner = None
         self.win_reason = None
@@ -699,6 +709,7 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
         "mission_history": game.mission_history,
         "consecutive_rejections": game.consecutive_rejections,
         "pending_mission_outcome": game.pending_mission_outcome,
+        "pending_mission_reveal": game.pending_mission_reveal,
         "game_started_at": game.started_at,
         "game_elapsed_seconds": int(
             game.active_elapsed_seconds
@@ -729,6 +740,16 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
         ),
         "spotlight_player_id": game.spotlight_player_id,
         "rematch_ready_ids": sorted(game.rematch_ready),
+        "voted_names": [
+            game.players[pid].name for pid in game.player_order if pid in game.votes
+        ],
+        "mission_cards_played_ids": [
+            pid for pid in game.proposed_team if pid in game.mission_cards
+        ],
+        "vote_reveal_ack_ids": sorted(game.vote_reveal_acks),
+        "mission_intro_ack_ids": sorted(game.mission_intro_acks),
+        "mission_reveal_ack_ids": sorted(game.mission_reveal_acks),
+        "mission_choices_open": game.mission_choices_open,
     }
     if game.player_count() in MISSION_SIZES:
         snap["mission_size"] = game.mission_size()
@@ -779,7 +800,7 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
     if game.phase == GamePhase.VOTE_REVEAL and game.pending_vote_result:
         snap["revealed_votes"] = game.pending_vote_result["votes"]
 
-    if game.phase == GamePhase.MISSION_REVEAL and game.mission_history:
-        snap["latest_mission"] = game.mission_history[-1]
+    if game.phase == GamePhase.MISSION_REVEAL and game.pending_mission_reveal:
+        snap["latest_mission"] = game.pending_mission_reveal
 
     return snap

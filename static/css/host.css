@@ -577,11 +577,20 @@ input[type="range"] {
     border-radius: 3px;
 }
 
-.game-stats { display:flex; flex-direction:column; gap:0.15rem; }
-.game-stats div { display:flex; align-items:baseline; justify-content:space-between; gap:0.75rem; min-width:8rem; }
+.game-stats { display:flex; flex-direction:column; gap:0.25rem; }
+.game-stats > div { display:flex; align-items:center; justify-content:space-between; gap:0.75rem; min-width:8rem; min-height:1.2rem; }
 .game-stats span { font-family:var(--font-heading); font-size:0.65rem; color:var(--text-secondary); letter-spacing:.1em; }
 .game-stats strong { font-family:var(--font-heading); font-size:0.9rem; color:var(--gold-light); white-space:nowrap; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1; }
 #host-game-time { display:inline-block; width:7ch; text-align:right; }
+.host-fail-tokens { display:flex; align-items:center; gap:0.25rem; margin-left:auto; }
+.host-fail-tokens i {
+    width: clamp(9px, 1vw, 13px);
+    height: clamp(9px, 1vw, 13px);
+    border: 1.5px solid rgba(232,91,77,0.68);
+    border-radius: 50%;
+    background: transparent;
+}
+.host-fail-tokens i.active { background:#e85b4d; border-color:#ff9a90; box-shadow:0 0 7px rgba(232,91,77,0.55); }
 .proposal-track {
     display: grid;
     grid-template-columns: auto auto;
@@ -1084,6 +1093,25 @@ input[type="range"] {
 .vote-result-banner.rejected { color: #ff8080; border: 2px solid var(--red-glow); text-shadow: 0 0 30px rgba(192,57,43,0.5); }
 #btn-confirm-vote-reveal { min-width: 12rem; }
 
+.host-quest-continue {
+    position: absolute;
+    z-index: 5;
+    left: 50%;
+    bottom: clamp(1rem, 3vh, 2.25rem);
+    margin: 0;
+    padding: 0.65rem 1.15rem;
+    transform: translate(-50%, 12px);
+    border: 1px solid rgba(201,168,76,0.42);
+    border-radius: var(--radius-pill);
+    background: rgba(8,7,5,0.78);
+    color: var(--gold-light);
+    font: 0.72rem var(--font-heading);
+    letter-spacing: 0.07em;
+    opacity: 0;
+    transition: opacity 0.9s ease, transform 0.9s ease;
+}
+.host-quest-continue.is-ready { opacity: 1; transform: translate(-50%, 0); }
+
 .forced-proposal-note {
     padding: 0.45rem 0.8rem;
     border: 1px solid rgba(201,168,76,0.55);
@@ -1563,6 +1591,43 @@ body.host-cinematic-active #host-chat-strip,
 body.host-cinematic-active #connection-status {
     display: none !important;
 }
+
+/* Shared-display cinematic mission flow */
+#screen-mission,
+#screen-mission-reveal {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    max-width: none;
+    height: 100vh;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+    background: #030405;
+}
+.host-mission-begins,
+.host-quest-reveal { position: absolute; inset: 0; }
+.host-mission-begins .cinematic-reveal-art { object-position: 50% 47%; }
+.host-mission-begins .cinematic-reveal-copy { bottom: clamp(7rem, 14vh, 9rem); }
+.host-quest-reveal .cinematic-reveal-copy { bottom: clamp(7rem, 15vh, 10rem); }
+.host-mission-begins .cinematic-party-member,
+.host-quest-reveal .cinematic-party-member { width: min(9vw, 110px); }
+.host-mission-begins .identity-avatar-portrait,
+.host-quest-reveal .identity-avatar-portrait { width: clamp(54px, 6vw, 82px); height: clamp(54px, 6vw, 82px); }
+.host-card-reveal-stage { position: absolute; inset: 0; }
+.host-card-reveal-stage .mission-result-card {
+    width: clamp(92px, 10vw, 150px);
+    height: clamp(132px, 15vw, 210px);
+}
+#host-mission-intro-status { z-index: 12; }
+.vote-result-banner[data-ready-status]::after {
+    content: attr(data-ready-status);
+    display: block;
+    margin-top: 0.35rem;
+    color: var(--text-secondary);
+    font: 0.58rem var(--font-heading);
+    letter-spacing: 0.08em;
+}
 #screen-mission-reveal {
     padding: 0 !important;
     gap: 0;
@@ -1575,7 +1640,7 @@ body.host-cinematic-active #connection-status {
     height: 100%;
 }
 #screen-mission-reveal .cinematic-reveal-copy {
-    bottom: max(clamp(2rem, 5dvh, 3.75rem), env(safe-area-inset-bottom));
+    bottom: max(clamp(7rem, 15dvh, 10rem), env(safe-area-inset-bottom));
 }
 #screen-mission-reveal .mission-cards-display {
     gap: clamp(0.4rem, 1vw, 0.8rem);
@@ -1591,6 +1656,98 @@ body.host-cinematic-active #connection-status {
 }
 #screen-mission-reveal .mission-result-banner {
     margin: 0;
+}
+
+/* Mission cards are their own main-display beat; outcome art lives only on
+   the following cinematic screen. */
+#screen-mission-cards {
+    min-height: 100dvh;
+    padding-top: calc(var(--host-header-height) + clamp(0.75rem, 2dvh, 1.5rem));
+    overflow: hidden;
+    background: #050505;
+}
+#screen-mission-cards .host-card-reveal-stage {
+    top: var(--host-header-height);
+}
+#screen-mission-cards .mission-cards-display {
+    gap: clamp(0.75rem, 1.8vw, 1.4rem);
+}
+#screen-mission-cards .mission-result-card {
+    width: clamp(92px, 10vw, 150px);
+    height: clamp(132px, 15vw, 210px);
+}
+
+/* A dedicated landscape finale composition for paired TVs. */
+#screen-game-over.winner-good,
+#screen-game-over.winner-evil {
+    position: fixed;
+    inset: 0;
+    isolation: isolate;
+    background: #050607;
+    justify-content: flex-start;
+    padding: clamp(0.75rem, 2dvh, 1.5rem);
+}
+#screen-game-over.winner-good::before,
+#screen-game-over.winner-evil::before,
+#screen-game-over.winner-good::after,
+#screen-game-over.winner-evil::after {
+    content: '';
+    position: fixed;
+    z-index: 0;
+    inset: 0;
+    pointer-events: none;
+}
+#screen-game-over.winner-good::before {
+    background: center / cover no-repeat url('/static/assets/results/good-wins-wide.png?v=20260827');
+}
+#screen-game-over.winner-evil::before {
+    background: center / cover no-repeat url('/static/assets/results/evil-wins-wide.png?v=20260827');
+}
+#screen-game-over.winner-good::after,
+#screen-game-over.winner-evil::after {
+    background:
+        linear-gradient(180deg, rgba(3,4,5,0.3), rgba(3,4,5,0.76)),
+        radial-gradient(circle at 50% 35%, transparent 18%, rgba(3,4,5,0.54) 82%);
+}
+#screen-game-over > .game-over-content {
+    position: relative;
+    z-index: 2;
+    width: min(94vw, 1500px);
+    display: grid;
+    grid-template-columns: minmax(0, 1.18fr) minmax(340px, 0.82fr);
+    align-items: start;
+    gap: clamp(0.75rem, 2vw, 1.6rem);
+    padding: clamp(1rem, 2.5dvh, 2rem);
+    border: 1px solid rgba(218,190,110,0.32);
+    border-radius: clamp(1rem, 2vw, 1.5rem);
+    background: linear-gradient(145deg, rgba(8,10,13,0.5), rgba(5,5,7,0.72));
+    box-shadow: 0 24px 90px rgba(0,0,0,0.55);
+    backdrop-filter: blur(5px);
+}
+#screen-game-over .game-over-banner { font-size: clamp(2.7rem, 6vw, 5rem); }
+#screen-game-over .game-over-banner,
+#screen-game-over .win-reason { grid-column: 1 / -1; margin: 0; }
+#screen-game-over .victory-group-card { grid-column: 1; grid-row: 3 / span 4; }
+#screen-game-over .host-chronicle { grid-column: 2; max-height: min(47dvh, 430px); overflow: auto; }
+#screen-game-over .final-role-gallery-section { grid-column: 1 / -1; }
+#screen-game-over .game-over-actions,
+#screen-game-over .rematch-status { grid-column: 2; margin: 0; }
+#screen-game-over.winner-good .victory-group-card {
+    background:
+        linear-gradient(180deg, rgba(9,14,18,0.22), rgba(5,7,10,0.9)),
+        center / cover no-repeat url('/static/assets/results/good-wins-wide.png?v=20260827');
+}
+#screen-game-over.winner-evil .victory-group-card {
+    background:
+        linear-gradient(180deg, rgba(15,5,7,0.24), rgba(7,4,6,0.92)),
+        center / cover no-repeat url('/static/assets/results/evil-wins-wide.png?v=20260827');
+}
+@media (max-width: 900px), (max-height: 650px) {
+    #screen-game-over > .game-over-content { grid-template-columns: 1fr; }
+    #screen-game-over .victory-group-card,
+    #screen-game-over .host-chronicle,
+    #screen-game-over .game-over-actions,
+    #screen-game-over .rematch-status { grid-column: 1; grid-row: auto; }
 }
 #screen-game-over > .game-outcome-announcement {
     position: fixed;

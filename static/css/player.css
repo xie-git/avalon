@@ -545,6 +545,12 @@ body.game-over-active #player-utility-dock,
 body.game-over-active #connection-status {
     display: none !important;
 }
+body.mission-cinematic-active #player-board,
+body.mission-cinematic-active #chat-container,
+body.mission-cinematic-active #player-utility-dock,
+body.mission-cinematic-active #connection-status {
+    display: none !important;
+}
 .role-reveal-product {
     position: absolute;
     inset: 0;
@@ -946,6 +952,7 @@ body.game-over-active #connection-status {
 .player-reveal-card.reject { border-color: rgba(201,168,76,0.28); background: rgba(12,11,10,0.78); color: #c9c0ad; }
 
 /* Immersive quest outcome reveal */
+#screen-mission-cards-player,
 #screen-mission-reveal-player {
     left: 50%;
     width: 100vw;
@@ -957,6 +964,10 @@ body.game-over-active #connection-status {
     scrollbar-gutter: auto;
     background: #030405;
 }
+.quest-card-reveal-stage { min-height: 100dvh; }
+.quest-card-reveal-grid { max-width: min(92vw, 700px); }
+.quest-reveal-copy { bottom: calc(5.6rem + env(safe-area-inset-bottom)); }
+.quest-reveal-copy .cinematic-party { margin-top: 0.25rem; }
 .quest-reveal-product.success .cinematic-reveal-art { object-position: 50% 43%; }
 .quest-reveal-product.fail .cinematic-reveal-art { object-position: 50% 48%; }
 .quest-reveal-copy {
@@ -1001,20 +1012,34 @@ body.game-over-active #connection-status {
 }
 #screen-discussion.presence-active .presence-player-panel,
 #screen-vote-reveal-player.presence-active .presence-player-panel {
-    flex: 1 1 0;
+    flex: 0 0 auto;
     height: auto;
     max-height: none;
     min-height: 0;
 }
-#screen-discussion.presence-active .presence-table.presence-player,
+#screen-discussion.presence-active .presence-player-panel {
+    max-height: none;
+    overflow: visible;
+}
 #screen-vote-reveal-player.presence-active .presence-table.presence-player {
     flex: 0 0 clamp(155px, 22dvh, 190px);
     min-height: 155px;
 }
-#screen-discussion.presence-active .presence-field,
 #screen-vote-reveal-player.presence-active .presence-field {
     min-height: 135px;
 }
+#screen-discussion.presence-active .presence-table.presence-player {
+    flex: 1 1 clamp(245px, 35dvh, 310px);
+    min-height: 235px;
+}
+#screen-discussion.presence-active .presence-field { min-height: 215px; }
+#screen-discussion .presence-player-panel > .hidden { display: none !important; }
+#screen-discussion .presence-player-panel {
+    gap: clamp(0.28rem, 0.75dvh, 0.5rem);
+    padding-block: clamp(0.55rem, 1.15dvh, 0.75rem);
+}
+#screen-discussion .presence-player-panel .screen-header,
+#screen-discussion .presence-player-panel .waiting-text { margin: 0; }
 .presence-player-panel {
     flex: 0 0 clamp(300px, calc(43dvh + 20px), 350px);
     width: 100%;
@@ -1032,6 +1057,54 @@ body.game-over-active #connection-status {
     background: linear-gradient(145deg, rgba(28,21,11,0.95), rgba(8,8,9,0.97));
     box-shadow: inset 0 0 22px rgba(0,0,0,0.35), 0 6px 20px rgba(0,0,0,0.38);
 }
+
+/* Full-screen quest entry and live card choice */
+#screen-mission {
+    left: 50%;
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+    background: #030405;
+}
+.mission-begins-product { position: absolute; inset: 0; }
+.mission-begins-product .cinematic-reveal-art { object-position: 50% 47%; }
+.mission-begins-copy {
+    bottom: calc(5.6rem + env(safe-area-inset-bottom));
+    gap: 0.38rem;
+}
+.mission-begins-copy h1 { font-size: clamp(2.8rem, 13vw, 4.4rem); }
+#screen-mission > .quest-reveal-action { opacity: 0; }
+#screen-mission > .mission-begins-product.is-action-ready ~ .quest-reveal-action:not(.hidden) {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+.mission-choice-overlay {
+    position: absolute;
+    z-index: 10;
+    left: max(1rem, env(safe-area-inset-left));
+    right: max(1rem, env(safe-area-inset-right));
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.9rem;
+    border: 1px solid rgba(201,168,76,0.48);
+    border-radius: var(--radius-lg);
+    background: rgba(5,5,7,0.9);
+    backdrop-filter: blur(12px);
+    animation: fade-in-scale 0.65s ease both;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.mission-choice-overlay.is-submitted { opacity: 0; transform: translateY(18px); pointer-events: none; }
+.mission-choice-btn.selected-card { opacity: 1 !important; transform: scale(1.025); box-shadow: 0 0 30px currentColor; }
+.mission-choice-overlay .mission-card-choices { margin: 0; }
+.mission-choice-overlay .mission-choice-btn {
+    min-height: 132px;
+    background: linear-gradient(145deg, rgba(29,24,17,0.96), rgba(6,7,9,0.98));
+}
+#screen-mission .quest-reveal-waiting { opacity: 1; }
 .presence-player-panel .screen-header { margin-bottom: 0.25rem; }
 .presence-player-panel .screen-title-small { font-size: clamp(1rem, 5vw, 1.35rem) !important; }
 .presence-player-panel .waiting-text { margin-top: 0 !important; font-size: clamp(0.82rem, 3.7vw, 1rem) !important; }
@@ -1508,20 +1581,21 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
     align-items: center;
     justify-content: center;
     gap: 0.28rem;
-    margin-bottom: 0.08rem;
-    padding: 0.12rem 0.35rem;
-    border: 1px solid rgba(232,212,139,0.58);
-    border-radius: var(--radius-pill);
-    background: linear-gradient(135deg, rgba(201,168,76,0.18), rgba(201,168,76,0.06));
-    color: var(--gold-light);
+    align-self: flex-end;
+    margin: 0 0 0.08rem;
+    padding: 0.1rem 0.22rem;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-secondary);
     font: 0.48rem var(--font-heading);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     cursor: pointer;
-    box-shadow: 0 0 10px rgba(201,168,76,0.1);
+    box-shadow: none;
 }
-.pb-role-peek span { color: #fff0bd; font-size: 0.62rem; }
-.pb-role-peek:active { transform: scale(0.96); background: rgba(201,168,76,0.22); }
+.pb-role-peek span { color: var(--gold-dim); font-size: 0.58rem; }
+.pb-role-peek:active { transform: scale(0.96); background: rgba(201,168,76,0.09); }
 .pb-stat {
     display: flex;
     align-items: baseline;
@@ -1901,6 +1975,13 @@ body.chat-visible .screen {
     .presence-table.presence-player { flex-basis: 205px; min-height: 185px; }
     .presence-player .presence-field { min-height: 162px; }
     .presence-game-panel { transform: translateY(clamp(0.2rem, 1dvh, 0.55rem)); }
+}
+
+/* Cinematic mission rules intentionally live last to override legacy mission layout. */
+#screen-mission {
+    gap: 0;
+    justify-content: stretch;
+    padding: 0;
 }
 
 @media (max-width: 390px) {

@@ -102,7 +102,6 @@ const presenceScreenLabels = {
     'screen-proposal': 'Quest Party',
     'screen-vote': 'Fellowship Vote',
     'screen-vote-reveal': 'The Votes Are Revealed',
-    'screen-mission': 'The Quest Begins',
     'screen-assassin': 'The Final Choice',
 };
 
@@ -149,6 +148,7 @@ const tvChatEnabled = true;
 let isPairedDisplay = localStorage.getItem(PAIRED_DISPLAY_KEY) === 'true';
 let chatAudioContext = null;
 let hostMissionRevealSequence = 0;
+let latestHostMissionReveal = null;
 let gameOutcomeTimer = null;
 let lastGameOutcomeAnnouncementKey = null;
 
@@ -158,8 +158,8 @@ const QUEST_OUTCOME_ART = {
 };
 
 const GAME_OUTCOME_ART = {
-    good: '/static/assets/results/good-wins.png?v=20260825-cinematic',
-    evil: '/static/assets/results/evil-wins.png?v=20260825-cinematic',
+    good: '/static/assets/results/good-wins-wide.png?v=20260827',
+    evil: '/static/assets/results/evil-wins-wide.png?v=20260827',
 };
 
 function hostSession() {
@@ -272,7 +272,7 @@ function showScreen(id) {
     currentPhase = id.replace('screen-', '');
     document.body.classList.toggle(
         'host-cinematic-active',
-        id === 'screen-mission-reveal' || id === 'screen-game-over',
+        id === 'screen-mission' || id === 'screen-mission-reveal' || id === 'screen-game-over',
     );
     const topMeta = document.getElementById('host-top-meta');
     topMeta.classList.toggle('hidden', !gameCode || id === 'screen-title' || id === 'screen-lobby');
@@ -405,7 +405,11 @@ function formatElapsed(seconds) {
     return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 function updateGameStats() {
-    document.getElementById('host-fails').textContent = `${missionResults.filter(r => r === 'fail').length}/3`;
+    const failCount = missionResults.filter(r => r === 'fail').length;
+    document.getElementById('host-fails').textContent = `${failCount}/3`;
+    document.querySelectorAll('.host-fail-tokens i').forEach((token, index) => {
+        token.classList.toggle('active', index < failCount);
+    });
     updateHostProposalTrack();
     if (gameStartedAt) document.getElementById('host-game-time').textContent = formatElapsed(Math.max(0, Math.floor((Date.now() - gameStartedAt) / 1000)));
 }
@@ -519,6 +523,7 @@ function renderReorderList(playerList) {
 
 function renderLobbyPlayers(playerList) {
     players = playerList;
+    presenceTable.setGameStatus({ mode: 'lobby' });
     syncPresencePlayers(playerList);
     renderRoundTable(playerList);
     renderReorderList(playerList);
@@ -627,8 +632,7 @@ function animateVoteReveal(votes) {
         container.appendChild(card);
         setTimeout(() => {
             card.classList.add('revealed');
-            flash(vote === 'approve' ? 'blue' : 'red', 200);
-        }, 500 + i * 350);
+        }, 650 + i * 700);
     });
     setTimeout(() => {
         const approved = entries.filter(([,v]) => v === 'approve').length;
@@ -638,7 +642,26 @@ function animateVoteReveal(votes) {
         banner.className = `vote-result-banner ${isApproved ? 'approved' : 'rejected'}`;
         banner.textContent = isApproved ? 'The Quest Party Rides Forth!' : 'The Court Dissents!';
         banner.classList.remove('hidden');
-    }, 500 + entries.length * 350 + 500);
+    }, 650 + entries.length * 700 + 900);
+}
+
+function renderHostCinematicParty(container, names = []) {
+    if (!container) return;
+    container.replaceChildren();
+    container.dataset.count = String(names.length);
+    names.forEach(name => {
+        const player = players.find(candidate => candidate.name === name) || {};
+        const member = document.createElement('div');
+        member.className = 'cinematic-party-member';
+        const portrait = document.createElement('span');
+        portrait.className = 'identity-avatar-portrait';
+        portrait.appendChild(presenceTable.createPortraitElement(player.avatar_index, player.color_index, player.avatar_image));
+        const label = document.createElement('span');
+        label.className = 'identity-avatar-name';
+        label.textContent = name;
+        member.append(portrait, label);
+        container.appendChild(member);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -654,7 +677,6 @@ function animateMissionReveal(cards, { instant = false, onComplete = null } = {}
         element.innerHTML = card === 'success'
             ? '<span class="card-icon">☀</span><span>SUCCESS</span>'
             : '<span class="card-icon">☠</span><span>FAIL</span>';
-        if (!instant) flash(card === 'success' ? 'blue' : 'red', 200);
     };
     cards.forEach((card, i) => {
         const el = document.createElement('div');
@@ -662,17 +684,38 @@ function animateMissionReveal(cards, { instant = false, onComplete = null } = {}
         el.innerHTML = '<span class="card-icon">?</span><span>SEALED</span>';
         container.appendChild(el);
         if (instant) revealCard(el, card);
-        else window.setTimeout(() => revealCard(el, card), 800 + i * 600);
+        else window.setTimeout(() => revealCard(el, card), 1200 + i * 1100);
     });
-    const completeAfter = instant ? 0 : 800 + cards.length * 600 + 350;
+    const completeAfter = instant ? 0 : 1200 + cards.length * 1100 + 900;
     window.setTimeout(() => {
         if (sequence === hostMissionRevealSequence && onComplete) onComplete();
     }, completeAfter);
 }
 
-function showHostMissionReveal(data, { instant = false } = {}) {
+function showHostMissionCards(data, { instant = false } = {}) {
+    latestHostMissionReveal = data;
+    const cardStage = document.getElementById('host-card-reveal-stage');
+    const successes = Math.max(0, Number(data.success_count) || 0);
+    const failures = Math.max(0, Number(data.fail_count) || 0);
+    const cards = Array.isArray(data.cards_shuffled) && data.cards_shuffled.length
+        ? data.cards_shuffled
+        : [
+            ...Array(successes).fill('success'),
+            ...Array(failures).fill('fail'),
+        ];
+    cardStage.classList.remove('hidden', 'is-complete');
+    animateMissionReveal(cards, {
+        instant,
+        onComplete: () => cardStage.classList.add('is-complete'),
+    });
+}
+
+function showHostMissionOutcome(data, { instant = false } = {}) {
     const passed = Boolean(data.passed);
     const reveal = document.getElementById('host-quest-reveal');
+    const continuePrompt = document.getElementById('host-quest-continue');
+    continuePrompt.textContent = 'Continue on your phones when ready';
+    continuePrompt.classList.remove('is-ready');
     const artPath = passed ? QUEST_OUTCOME_ART.success : QUEST_OUTCOME_ART.fail;
     reveal.className = `cinematic-reveal host-quest-reveal ${passed ? 'success' : 'fail'}`;
     document.getElementById('host-quest-reveal-backdrop').src = artPath;
@@ -686,24 +729,14 @@ function showHostMissionReveal(data, { instant = false } = {}) {
     const failures = Math.max(0, Number(data.fail_count) || 0);
     document.getElementById('host-mission-reveal-detail').textContent =
         `${successes} Success · ${failures} ${failures === 1 ? 'Fail' : 'Fails'}`;
+    renderHostCinematicParty(document.getElementById('host-mission-result-party'), data.team || proposedTeam);
     const banner = document.getElementById('mission-result-banner');
     banner.className = 'mission-result-banner hidden';
-    const cards = Array.isArray(data.cards_shuffled) && data.cards_shuffled.length
-        ? data.cards_shuffled
-        : [
-            ...Array(successes).fill('success'),
-            ...Array(failures).fill('fail'),
-        ];
+    banner.className = `mission-result-banner ${passed ? 'pass' : 'fail'}`;
+    banner.textContent = passed ? 'Quest Successful' : 'Quest Failed';
     void reveal.offsetWidth;
     requestAnimationFrame(() => reveal.classList.add('is-revealed'));
-    animateMissionReveal(cards, {
-        instant,
-        onComplete: () => {
-            banner.className = `mission-result-banner ${passed ? 'pass' : 'fail'}`;
-            banner.textContent = passed ? 'Quest Successful' : 'Quest Failed';
-            if (!instant) flash(passed ? 'blue' : 'red', 600);
-        },
-    });
+    window.setTimeout(() => continuePrompt.classList.add('is-ready'), instant ? 0 : 3200);
 }
 
 function renderChronicle(container, summary) {
@@ -802,7 +835,7 @@ function showGameOutcomeAnnouncement(summary) {
     document.getElementById('game-outcome-detail-host').textContent = gameWinReason(summary);
     void announcement.offsetWidth;
     requestAnimationFrame(() => announcement.classList.add('is-revealed'));
-    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1200 : 4200;
+    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1200 : 5800;
     gameOutcomeTimer = window.setTimeout(completeGameOutcomeAnnouncement, duration);
 }
 
@@ -824,6 +857,9 @@ function renderGameOver(summary, { announce = true } = {}) {
     const banner = document.getElementById('game-over-banner');
     const reasonEl = document.getElementById('win-reason-text');
     const grid = document.getElementById('roles-reveal-grid');
+    const gameOverScreen = document.getElementById('screen-game-over');
+    gameOverScreen.classList.toggle('winner-good', summary.winner === 'good');
+    gameOverScreen.classList.toggle('winner-evil', summary.winner !== 'good');
 
     banner.className = `game-over-banner ${summary.winner === 'good' ? 'good-wins' : 'evil-wins'}`;
     banner.textContent = summary.winner === 'good' ? 'GOOD WINS' : 'EVIL WINS';
@@ -993,6 +1029,15 @@ socket.on('host_registered', data => {
     syncPresencePlayers(players);
     presenceTable.setPublicPositions(data.public_spectrum || {});
     presenceTable.setRoleManifest(data.role_manifest || []);
+    if (data.phase !== 'LOBBY') {
+        const status = {
+            mode: data.phase === 'TEAM_VOTE' ? 'vote' : data.phase === 'MISSION' ? 'mission' : 'game',
+            leaderName: currentLeaderName,
+        };
+        if (data.phase === 'TEAM_VOTE') status.completedNames = Object.keys(data.votes || {});
+        if (data.phase === 'MISSION') status.completedIds = data.mission_cards_played_ids || [];
+        presenceTable.setGameStatus(status);
+    }
     renderTvChat();
 
     if (data.phase === 'LOBBY') {
@@ -1012,7 +1057,7 @@ socket.on('host_registered', data => {
             'TEAM_VOTE': 'screen-vote',
             'VOTE_REVEAL': 'screen-vote-reveal',
             'MISSION': 'screen-mission',
-            'MISSION_REVEAL': 'screen-mission-reveal',
+            'MISSION_REVEAL': 'screen-mission-cards',
             'ASSASSIN_PHASE': 'screen-assassin',
             'GAME_OVER': 'screen-game-over',
             'NIGHT_PHASE': 'screen-night',
@@ -1068,9 +1113,24 @@ socket.on('host_registered', data => {
                 total: proposedTeam.length,
                 played_player_ids: data.mission_cards_played_ids || [],
             });
+            renderHostCinematicParty(document.getElementById('host-mission-party'), proposedTeam);
+            document.getElementById('host-mission-begins').classList.add('is-revealed');
+            const acknowledged = (data.mission_intro_ack_ids || []).length;
+            const required = players.filter(player => !player.is_bot).length;
+            const introStatus = document.getElementById('host-mission-intro-status');
+            introStatus.textContent = data.mission_choices_open
+                ? 'Quest cards are being sealed'
+                : `${acknowledged} of ${required} have entered the quest`;
+            introStatus.classList.add('is-ready');
         } else if (data.phase === 'MISSION_REVEAL' && data.pending_mission_outcome) {
             const latest = data.latest_mission;
-            if (latest) showHostMissionReveal(latest, { instant: true });
+            if (latest) {
+                showScreen('screen-mission-reveal');
+                showHostMissionOutcome(latest, { instant: true });
+            }
+        } else if (data.phase === 'MISSION_REVEAL') {
+            const latest = data.latest_mission;
+            if (latest) showHostMissionCards(latest, { instant: true });
         } else if (data.phase === 'ASSASSIN_PHASE') {
             document.getElementById('assassin-choosing-text').textContent =
                 `${data.assassin_name} deliberates...`;
@@ -1142,12 +1202,14 @@ socket.on('public_spectrum_updated', data => {
 
 socket.on('game_starting', data => {
     players = players; // keep
+    presenceTable.setGameStatus({ mode: 'game' });
     startGameClock(data.game_started_at);
     flash('white', 500);
     renderTvChat();
 });
 
 socket.on('night_phase_start', data => {
+    presenceTable.setGameStatus({ mode: 'game' });
     spawnStars();
     document.getElementById('night-total').textContent = data.total_players;
     document.getElementById('night-confirmed').textContent = data.confirmed || 0;
@@ -1169,6 +1231,7 @@ socket.on('night_phase_complete', () => {
 socket.on('round_start', data => {
     currentMission = data.mission_num - 1;
     currentLeaderName = data.leader_name;
+    presenceTable.setGameStatus({ mode: 'game', leaderName: data.leader_name });
     consecutiveRejections = data.reject_count;
     missionResults = data.mission_results || [];
     missionHistory = data.mission_history || missionHistory;
@@ -1209,6 +1272,7 @@ socket.on('discussion_spotlight', data => {
 
 socket.on('proposal_start', data => {
     currentLeaderName = data.leader_name;
+    presenceTable.setGameStatus({ mode: 'game', leaderId: data.leader_id, leaderName: data.leader_name });
     updateLeaderDisplay(data.leader_name);
     proposedTeam = [];
     renderLeaderName('proposal-leader-name', data.leader_name);
@@ -1260,6 +1324,7 @@ socket.on('vote_start', data => {
     document.getElementById('vote-result-banner').classList.add('hidden');
     proposedTeam = data.team || [];
     pendingVoters = players.map(p => p.name);
+    presenceTable.setGameStatus({ mode: 'vote', leaderName: currentLeaderName });
     document.getElementById('vote-team-names').textContent = proposedTeam.join(', ');
     document.getElementById('vote-leader-label').textContent = `${currentLeaderName} proposes:`;
     renderVoteStatus([], pendingVoters);
@@ -1268,6 +1333,11 @@ socket.on('vote_start', data => {
 
 socket.on('vote_waiting', data => {
     renderVoteStatus(data.voted || [], data.remaining || []);
+    presenceTable.setGameStatus({
+        mode: 'vote',
+        leaderName: currentLeaderName,
+        completedNames: data.voted || [],
+    });
 });
 
 function renderVoteStatus(voted, remaining) {
@@ -1311,6 +1381,7 @@ socket.on('mission_start', data => {
     consecutiveRejections = 0;
     updateHostProposalTrack();
     proposedTeam = data.team || [];
+    presenceTable.setGameStatus({ mode: 'mission', leaderName: currentLeaderName });
     const display = document.getElementById('mission-team-display');
     display.innerHTML = '';
     const teamIds = data.team_ids || [];
@@ -1324,7 +1395,38 @@ socket.on('mission_start', data => {
     });
     document.getElementById('mission-played').textContent = 0;
     document.getElementById('mission-total').textContent = proposedTeam.length;
+    renderHostCinematicParty(document.getElementById('host-mission-party'), proposedTeam);
+    const product = document.getElementById('host-mission-begins');
+    product.classList.remove('is-revealed');
+    document.getElementById('host-mission-intro-status').classList.remove('is-ready');
     transition('screen-mission');
+    window.setTimeout(() => product.classList.add('is-revealed'), 320);
+    window.setTimeout(() => document.getElementById('host-mission-intro-status').classList.add('is-ready'), 2200);
+});
+
+socket.on('mission_intro_status', data => {
+    const status = document.getElementById('host-mission-intro-status');
+    status.textContent = data.complete
+        ? 'The fellowship has entered · quest cards await'
+        : `${data.acknowledged_count} of ${data.required_count} have entered the quest`;
+});
+
+socket.on('mission_choices_open', () => {
+    document.getElementById('host-mission-intro-status').textContent = 'Quest cards are being sealed';
+});
+
+socket.on('vote_reveal_ack_status', data => {
+    const banner = document.getElementById('vote-result-banner');
+    if (!banner.classList.contains('hidden')) {
+        banner.dataset.readyStatus = `${data.acknowledged_count} of ${data.required_count} ready`;
+    }
+});
+
+socket.on('mission_reveal_ack_status', data => {
+    const prompt = document.getElementById('host-quest-continue');
+    prompt.textContent = data.complete
+        ? 'The fellowship rides onward'
+        : `${data.acknowledged_count} of ${data.required_count} ready to continue`;
 });
 
 socket.on('mission_waiting', data => {
@@ -1336,6 +1438,12 @@ function renderMissionStatus(data) {
     document.getElementById('mission-total').textContent = data.total;
     const playedIds = new Set(data.played_player_ids || []);
     const playedNames = new Set(data.played_players || []);
+    presenceTable.setGameStatus({
+        mode: 'mission',
+        leaderName: currentLeaderName,
+        completedIds: data.played_player_ids || [],
+        completedNames: data.played_players || [],
+    });
     document.querySelectorAll('.mission-member-card').forEach(card => {
         card.classList.toggle(
             'played',
@@ -1345,8 +1453,9 @@ function renderMissionStatus(data) {
 }
 
 socket.on('mission_reveal', data => {
-    transition('screen-mission-reveal');
-    window.setTimeout(() => showHostMissionReveal(data), 320);
+    latestHostMissionReveal = data;
+    transition('screen-mission-cards');
+    window.setTimeout(() => showHostMissionCards(data), 420);
 });
 
 socket.on('mission_tracker_update', data => {
@@ -1359,7 +1468,11 @@ socket.on('mission_tracker_update', data => {
     }
 });
 
-socket.on('mission_complete', () => {});
+socket.on('mission_complete', () => {
+    if (!latestHostMissionReveal) return;
+    transition('screen-mission-reveal');
+    window.setTimeout(() => showHostMissionOutcome(latestHostMissionReveal), 520);
+});
 
 socket.on('assassin_phase_start', data => {
     document.getElementById('assassin-choosing-text').textContent =

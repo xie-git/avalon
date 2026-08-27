@@ -117,7 +117,6 @@ const presenceScreenLabels = {
     'screen-proposal': 'Quest Party',
     'screen-vote': 'Fellowship Vote',
     'screen-vote-reveal-player': 'The Votes Are Revealed',
-    'screen-mission': 'The Quest Begins',
     'screen-assassin': 'The Final Choice',
 };
 
@@ -149,6 +148,10 @@ let nightInfo = null;
 let assassinTargetId = null;
 let discussionTimerMax = 300;
 let latestMissionReveal = null;
+let currentMissionTeamNames = [];
+let currentMissionTeamIds = [];
+let missionIntroAcknowledged = false;
+let missionChoicesAreOpen = false;
 let phoneDiscussionDuration = 60;
 let phoneProposalDuration = 60;
 let phoneBetaMode = false;
@@ -178,6 +181,20 @@ let joinedThisPage = false;
 let missionRevealSequence = 0;
 let gameOutcomeTimer = null;
 let lastGameOutcomeAnnouncementKey = null;
+let voteRevealSequence = 0;
+const VOTE_REVEAL_STEP_MS = 700;
+const AVALON_CONTINUE_LABELS = [
+    'Continue Avalon',
+    'Ride Forth',
+    'Call the Next Council',
+    'Turn the Chronicle',
+    'Onward to Camelot',
+    'Begin the Next Chapter',
+    'Let the Quest Continue',
+    'Summon the Round Table',
+    'Carry On, Fellowship',
+    'Advance the Legend',
+];
 
 function applySpectatorMode(enabled, visionMode = 'blind') {
     isSpectator = Boolean(enabled);
@@ -335,7 +352,11 @@ function showScreen(id) {
     const target = document.getElementById(id);
     if (target) target.classList.add('active');
     document.body.classList.toggle('role-reveal-active', id === 'screen-role');
-    document.body.classList.toggle('quest-reveal-active', id === 'screen-mission-reveal-player');
+    document.body.classList.toggle(
+        'quest-reveal-active',
+        id === 'screen-mission-cards-player' || id === 'screen-mission-reveal-player',
+    );
+    document.body.classList.toggle('mission-cinematic-active', id === 'screen-mission');
     document.body.classList.toggle('game-over-active', id === 'screen-game-over');
     const label = presenceScreenLabels[id];
     if (label && gameCode && presencePlayers.length) presenceTable.show(target, label);
@@ -373,6 +394,13 @@ function createIdentityAvatar(name, className = 'identity-avatar') {
     label.textContent = name;
     identity.append(portrait, label);
     return identity;
+}
+
+function renderCinematicParty(container, names = []) {
+    if (!container) return;
+    container.replaceChildren();
+    container.dataset.count = String(names.length);
+    names.forEach(name => container.appendChild(createIdentityAvatar(name, 'cinematic-party-member')));
 }
 
 function transition(id, delay = 0) {
@@ -756,6 +784,7 @@ function chooseRoleArt(role) {
 // ---------------------------------------------------------------------------
 function renderLobbyPlayers(playerList) {
     presencePlayers = playerList || [];
+    presenceTable.setGameStatus({ mode: 'lobby' });
     presenceTable.setPlayers(presencePlayers, window._playerOrder || []);
     const me = presencePlayers.find(player => player.player_id === myPlayerId || player.name === myName);
     const readyButton = document.getElementById('btn-ready');
@@ -1039,6 +1068,7 @@ function renderDiscussionSpotlight(data = {}) {
 }
 
 function showVoteReveal(data) {
+    const sequence = ++voteRevealSequence;
     const votes = data.votes || {};
     const entries = Object.entries(votes);
     const cards = document.getElementById('player-vote-reveal-cards');
@@ -1051,7 +1081,7 @@ function showVoteReveal(data) {
     entries.forEach(([name, vote], index) => {
         const card = document.createElement('div');
         card.className = `player-reveal-card ${vote}`;
-        card.style.setProperty('--reveal-delay', `${index * 0.38}s`);
+        card.style.setProperty('--reveal-delay', `${index * (VOTE_REVEAL_STEP_MS / 1000)}s`);
         card.appendChild(createIdentityAvatar(name, 'vote-reveal-identity'));
         const stamp = document.createElement('span');
         stamp.className = 'vote-reveal-stamp';
@@ -1061,49 +1091,84 @@ function showVoteReveal(data) {
     });
     const approvals = entries.filter(([, vote]) => vote === 'approve').length;
     const approved = approvals > entries.length - approvals;
-    document.getElementById('player-vote-reveal-result').textContent = approved
+    const resultBanner = document.getElementById('player-vote-reveal-result');
+    resultBanner.textContent = approved
         ? 'The Quest Party Rides Forth!'
         : 'The Court Dissents!';
-    const amLeader = myPlayerId === currentLeaderId;
+    resultBanner.classList.add('hidden');
     const continueButton = document.getElementById('btn-player-confirm-vote');
-    continueButton.disabled = false;
-    continueButton.classList.toggle('hidden', !amLeader);
-    document.getElementById('player-vote-reveal-waiting').classList.toggle('hidden', amLeader);
+    const waiting = document.getElementById('player-vote-reveal-waiting');
+    continueButton.disabled = true;
+    continueButton.classList.add('hidden');
+    waiting.classList.remove('hidden');
+    waiting.textContent = 'The court’s judgment is being revealed…';
     showScreen('screen-vote-reveal-player');
+    const revealDuration = entries.length * VOTE_REVEAL_STEP_MS + 2450;
+    window.setTimeout(() => {
+        if (sequence === voteRevealSequence) resultBanner.classList.remove('hidden');
+    }, Math.max(1100, entries.length * VOTE_REVEAL_STEP_MS + 1100));
+    window.setTimeout(() => {
+        if (sequence !== voteRevealSequence) return;
+        continueButton.disabled = false;
+        continueButton.classList.toggle('hidden', isSpectator);
+        waiting.classList.toggle('hidden', !isSpectator);
+        waiting.textContent = isSpectator ? 'Waiting for the fellowship to continue…' : 'Continue when you are ready.';
+    }, revealDuration);
 }
 
-function showMissionReveal(data, canContinue = false) {
-    const reveal = document.getElementById('quest-reveal-product');
-    const revealKey = JSON.stringify([data.mission_num || null, Boolean(data.passed), data.success_count || 0, data.fail_count || 0, data.cards_shuffled || []]);
-    const existingReveal = reveal.dataset.revealKey === revealKey;
+function showMissionCardReveal(data, instant = false) {
+    const cardStage = document.getElementById('player-quest-card-stage');
+    const cardGrid = document.getElementById('player-quest-card-grid');
+    const revealKey = JSON.stringify([data.mission_num || null, Boolean(data.passed), data.cards_shuffled || []]);
     latestMissionReveal = data;
-    if (!existingReveal) {
-        const sequence = ++missionRevealSequence;
-        reveal.dataset.revealKey = revealKey;
-        reveal.className = `cinematic-reveal quest-reveal-product ${data.passed ? 'success' : 'fail'}`;
-        const art = document.getElementById('quest-reveal-art');
-        const backdrop = document.getElementById('quest-reveal-backdrop');
-        const artPath = data.passed ? QUEST_OUTCOME_ART.success : QUEST_OUTCOME_ART.fail;
-        art.src = artPath;
-        backdrop.src = artPath;
-        art.alt = data.passed ? 'Knights celebrating a successful quest' : 'Knights returning from a failed quest';
-        document.getElementById('player-mission-reveal-result').textContent =
-            data.passed ? 'Quest Successful' : 'Quest Failed';
-        const failures = Number(data.fail_count || 0);
-        document.getElementById('player-mission-reveal-detail').textContent = data.passed
-            ? 'The fellowship returns with honor. Avalon endures.'
-            : `${failures} ${failures === 1 ? 'act' : 'acts'} of betrayal doomed the quest.`;
-        requestAnimationFrame(() => reveal.classList.add('is-revealed'));
-        window.setTimeout(() => {
-            if (sequence === missionRevealSequence) reveal.classList.add('is-action-ready');
-        }, 2000);
-    }
-    const leaderCanContinue = canContinue && myPlayerId === currentLeaderId;
+    showScreen('screen-mission-cards-player');
+    if (cardStage.dataset.revealKey === revealKey) return;
+
+    const sequence = ++missionRevealSequence;
+    cardStage.dataset.revealKey = revealKey;
+    cardGrid.replaceChildren();
+    cardStage.classList.remove('hidden', 'is-complete');
+    const cards = data.cards_shuffled || [];
+    cards.forEach((card, index) => {
+        const element = document.createElement('div');
+        element.className = 'cinematic-quest-card sealed';
+        element.innerHTML = '<span>✦</span><strong>SEALED</strong>';
+        cardGrid.appendChild(element);
+        const revealCard = () => {
+            if (sequence !== missionRevealSequence) return;
+            element.className = `cinematic-quest-card ${card}`;
+            element.innerHTML = card === 'success'
+                ? '<span>☀</span><strong>SUCCESS</strong>'
+                : '<span>☠</span><strong>FAIL</strong>';
+        };
+        if (instant) revealCard();
+        else window.setTimeout(revealCard, 1200 + index * 1100);
+    });
+}
+
+function showMissionOutcome(data, canContinue = false, instant = false) {
+    const reveal = document.getElementById('quest-reveal-product');
+    latestMissionReveal = data;
     const continueButton = document.getElementById('btn-player-next-round');
     continueButton.disabled = false;
-    continueButton.classList.toggle('hidden', !leaderCanContinue);
-    document.getElementById('player-mission-reveal-waiting').classList.toggle('hidden', leaderCanContinue);
+    continueButton.classList.toggle('hidden', isSpectator || !canContinue);
+    document.getElementById('player-mission-reveal-waiting').classList.toggle('hidden', !isSpectator && canContinue);
     showScreen('screen-mission-reveal-player');
+
+    reveal.className = `cinematic-reveal quest-reveal-product ${data.passed ? 'success' : 'fail'}`;
+    const artPath = data.passed ? QUEST_OUTCOME_ART.success : QUEST_OUTCOME_ART.fail;
+    document.getElementById('quest-reveal-art').src = artPath;
+    document.getElementById('quest-reveal-backdrop').src = artPath;
+    document.getElementById('player-mission-reveal-result').textContent = data.passed ? 'Quest Successful' : 'Quest Failed';
+    const failures = Number(data.fail_count || 0);
+    document.getElementById('player-mission-reveal-detail').textContent = data.passed
+        ? 'The fellowship returns with honor. Avalon endures.'
+        : `${failures} ${failures === 1 ? 'act' : 'acts'} of betrayal doomed the quest.`;
+    renderCinematicParty(document.getElementById('player-mission-result-party'), data.team || currentMissionTeamNames);
+    continueButton.textContent = AVALON_CONTINUE_LABELS[Math.floor(Math.random() * AVALON_CONTINUE_LABELS.length)];
+    void reveal.offsetWidth;
+    requestAnimationFrame(() => reveal.classList.add('is-revealed'));
+    window.setTimeout(() => reveal.classList.add('is-action-ready'), instant ? 0 : 3200);
 }
 
 // ---------------------------------------------------------------------------
@@ -1205,40 +1270,39 @@ function showVoteScreen(data) {
 // Mission card play
 // ---------------------------------------------------------------------------
 function showMissionScreen(data) {
-    const team = data.team || [];
-    const teamIds = data.team_ids || [];
-    const onTeam = teamIds.includes(myPlayerId) || team.includes(myName);
-
-    const onTeamDiv = document.getElementById('mission-on-team');
-    const notOnTeamP = document.getElementById('mission-not-on-team');
-    const cardPlayedP = document.getElementById('mission-card-played');
-    const autoMsg = document.getElementById('auto-success-msg');
-    const choices = document.getElementById('mission-card-choices');
-
-    cardPlayedP.classList.add('hidden');
-
-    if (onTeam) {
-        onTeamDiv.classList.remove('hidden');
-        notOnTeamP.classList.add('hidden');
-        const failBtn = document.getElementById('btn-fail');
-        if (myTeam === 'good') {
-            failBtn.disabled = true;
-            failBtn.style.opacity = '0.3';
-            autoMsg.classList.remove('hidden');
-            choices.classList.remove('hidden');
-        } else {
-            failBtn.disabled = false;
-            failBtn.style.opacity = '';
-            autoMsg.classList.add('hidden');
-            choices.classList.remove('hidden');
-        }
-        document.getElementById('btn-success').disabled = false;
-    } else {
-        onTeamDiv.classList.add('hidden');
-        notOnTeamP.classList.remove('hidden');
-        presenceTable.show(document.getElementById('screen-mission'), 'The Quest is Underway');
-    }
+    currentMissionTeamNames = data.team || [];
+    currentMissionTeamIds = data.team_ids || [];
+    missionIntroAcknowledged = false;
+    missionChoicesAreOpen = Boolean(data.choices_open);
+    ['mission-on-team', 'mission-not-on-team', 'mission-card-played', 'mission-intro-waiting']
+        .forEach(id => document.getElementById(id).classList.add('hidden'));
+    document.querySelectorAll('.mission-choice-btn').forEach(button => button.classList.remove('selected-card'));
+    const button = document.getElementById('btn-enter-quest');
+    button.disabled = false;
+    button.classList.toggle('hidden', isSpectator);
+    renderCinematicParty(document.getElementById('player-mission-begins-party'), currentMissionTeamNames);
+    const product = document.getElementById('mission-begins-product');
+    product.classList.remove('is-revealed', 'is-action-ready');
+    requestAnimationFrame(() => product.classList.add('is-revealed'));
+    window.setTimeout(() => product.classList.add('is-action-ready'), 1900);
     showScreen('screen-mission');
+}
+
+function openMissionCardChoices() {
+    missionChoicesAreOpen = true;
+    if (!missionIntroAcknowledged) return;
+    document.getElementById('mission-intro-waiting').classList.add('hidden');
+    const onTeam = currentMissionTeamIds.includes(myPlayerId) || currentMissionTeamNames.includes(myName);
+    if (!onTeam || isSpectator) {
+        document.getElementById('mission-not-on-team').classList.remove('hidden');
+        return;
+    }
+    const failButton = document.getElementById('btn-fail');
+    failButton.disabled = myTeam === 'good';
+    failButton.style.opacity = myTeam === 'good' ? '0.3' : '';
+    document.getElementById('auto-success-msg').classList.toggle('hidden', myTeam !== 'good');
+    document.getElementById('btn-success').disabled = false;
+    document.getElementById('mission-on-team').classList.remove('hidden');
 }
 
 // ---------------------------------------------------------------------------
@@ -1513,6 +1577,16 @@ function applyStateSnapshot(snap) {
     renderLobbyPlayers(snap.players || []);
     presenceTable.setPublicPositions(snap.public_spectrum || {});
     presenceTable.setRoleManifest(snap.role_manifest || []);
+    if (snap.phase !== 'LOBBY') {
+        const status = {
+            mode: snap.phase === 'TEAM_VOTE' ? 'vote' : snap.phase === 'MISSION' ? 'mission' : 'game',
+            leaderId: currentLeaderId,
+            leaderName: snap.current_leader,
+        };
+        if (snap.phase === 'TEAM_VOTE') status.completedNames = snap.voted_names || [];
+        if (snap.phase === 'MISSION') status.completedIds = snap.mission_cards_played_ids || [];
+        presenceTable.setGameStatus(status);
+    }
     renderPhoneDiscussionSetting(snap.settings?.discussion_time);
     renderPhoneProposalSetting(snap.settings?.proposal_time);
     renderPhoneBetaSetting(snap.settings?.beta_test_mode, snap.settings?.beta_test_player_count);
@@ -1620,7 +1694,14 @@ function applyStateSnapshot(snap) {
             showMissionScreen({
                 team: snap.proposed_team || [],
                 team_ids: snap.proposed_team_ids || [],
+                choices_open: snap.mission_choices_open,
             });
+            if ((snap.mission_intro_ack_ids || []).includes(myPlayerId)) {
+                missionIntroAcknowledged = true;
+                document.getElementById('btn-enter-quest').classList.add('hidden');
+                document.getElementById('mission-intro-waiting').classList.remove('hidden');
+            }
+            if (snap.mission_choices_open) openMissionCardChoices();
             if (snap.my_mission_card) {
                 document.getElementById('mission-on-team').classList.add('hidden');
                 document.getElementById('mission-not-on-team').classList.add('hidden');
@@ -1628,7 +1709,11 @@ function applyStateSnapshot(snap) {
             } else if ((snap.proposed_team_ids || []).includes(myPlayerId)) requestAttention('Play your quest card');
             break;
         case 'MISSION_REVEAL':
-            showMissionReveal(snap.latest_mission || {}, Boolean(snap.pending_mission_outcome));
+            if (snap.pending_mission_outcome) {
+                showMissionOutcome(snap.latest_mission || {}, true, true);
+            } else {
+                showMissionCardReveal(snap.latest_mission || {}, true);
+            }
             break;
         case 'ASSASSIN_PHASE':
             showAssassinScreen(snap);
@@ -1840,6 +1925,7 @@ function updateHostStartButton(playerListOrCount) {
 
 socket.on('game_starting', data => {
     pbConsecutiveRejections = 0;
+    presenceTable.setGameStatus({ mode: 'game' });
     startGameClock(data.game_started_at);
     acquireWakeLock();
     flash('white', 400);
@@ -1856,6 +1942,7 @@ socket.on('role_assigned', data => {
 });
 
 socket.on('night_phase_start', () => {
+    presenceTable.setGameStatus({ mode: 'game' });
     if (isSpectator) showSpectatorNight();
 });
 
@@ -1872,6 +1959,7 @@ socket.on('round_start', data => {
     window._playerNameToId = data.player_name_to_id || window._playerNameToId || {};
     window._currentLeaderName = data.leader_name;
     currentLeaderId = data.leader_id;
+    presenceTable.setGameStatus({ mode: 'game', leaderId: data.leader_id, leaderName: data.leader_name });
     missionRequiredSize = data.mission_size;
     // Board state
     pbMissionSizes    = data.mission_sizes || pbMissionSizes;
@@ -1892,6 +1980,7 @@ socket.on('round_start', data => {
 socket.on('discussion_start', data => {
     window._currentLeaderName = data.leader_name || window._currentLeaderName;
     currentLeaderId = data.leader_id || currentLeaderId;
+    presenceTable.setGameStatus({ mode: 'game', leaderId: currentLeaderId, leaderName: data.leader_name });
     discussionTimerMax = Number(data.duration_seconds);
     document.getElementById('discussion-timer-player').textContent = discussionTimerMax
         ? fmtTime(discussionTimerMax)
@@ -1925,6 +2014,7 @@ socket.on('discussion_spotlight', data => {
 socket.on('proposal_start', data => {
     window._currentLeaderName = data.leader_name;
     currentLeaderId = data.leader_id;
+    presenceTable.setGameStatus({ mode: 'game', leaderId: data.leader_id, leaderName: data.leader_name });
     if (data.player_order) window._playerOrder = data.player_order;
     if (data.player_name_to_id) window._playerNameToId = data.player_name_to_id;
     showProposalScreen(data);
@@ -1948,6 +2038,7 @@ socket.on('team_proposed', data => {
 });
 
 socket.on('vote_start', data => {
+    presenceTable.setGameStatus({ mode: 'vote', leaderId: currentLeaderId, leaderName: window._currentLeaderName });
     showVoteScreen(data);
     if (!isSpectator) requestAttention('Vote now');
 });
@@ -1958,10 +2049,26 @@ socket.on('vote_cast_ack', () => {
     presenceTable.show(document.getElementById('screen-vote'), 'Awaiting the Court');
 });
 
-socket.on('vote_waiting', () => {});
+socket.on('vote_waiting', data => {
+    presenceTable.setGameStatus({
+        mode: 'vote',
+        leaderId: currentLeaderId,
+        leaderName: window._currentLeaderName,
+        completedNames: data.voted || [],
+    });
+});
 
 socket.on('vote_reveal', data => {
     showVoteReveal(data);
+});
+
+socket.on('vote_reveal_ack_status', data => {
+    const acknowledged = (data.acknowledged_ids || []).includes(myPlayerId);
+    if (!acknowledged) return;
+    document.getElementById('btn-player-confirm-vote').classList.add('hidden');
+    const waiting = document.getElementById('player-vote-reveal-waiting');
+    waiting.classList.remove('hidden');
+    waiting.textContent = `${data.acknowledged_count} of ${data.required_count} ready to continue…`;
 });
 
 socket.on('rejection_warning', data => {
@@ -1988,25 +2095,63 @@ socket.on('evil_wins_by_rejection', () => {
 socket.on('mission_start', data => {
     pbConsecutiveRejections = 0;
     updatePlayerProposalTrack();
+    presenceTable.setGameStatus({ mode: 'mission', leaderId: currentLeaderId, leaderName: window._currentLeaderName });
     showMissionScreen(data);
-    const onTeam = (data.team_ids || []).includes(myPlayerId) || (data.team || []).includes(myName);
-    if (onTeam && !isSpectator) requestAttention('Play your quest card');
+    if (!isSpectator) requestAttention('The quest begins');
+});
+
+socket.on('mission_intro_status', data => {
+    const acknowledged = (data.acknowledged_ids || []).includes(myPlayerId);
+    if (!acknowledged) return;
+    missionIntroAcknowledged = true;
+    document.getElementById('btn-enter-quest').classList.add('hidden');
+    const waiting = document.getElementById('mission-intro-waiting');
+    waiting.classList.remove('hidden');
+    waiting.textContent = `${data.acknowledged_count} of ${data.required_count} have entered…`;
+    if (missionChoicesAreOpen) openMissionCardChoices();
+});
+
+socket.on('mission_choices_open', () => {
+    openMissionCardChoices();
+    const onTeam = currentMissionTeamIds.includes(myPlayerId) || currentMissionTeamNames.includes(myName);
+    if (onTeam && !isSpectator) requestAttention('Choose your quest card');
 });
 
 socket.on('mission_card_ack', () => {
-    document.getElementById('mission-on-team').classList.add('hidden');
-    document.getElementById('mission-card-played').classList.remove('hidden');
-    presenceTable.show(document.getElementById('screen-mission'), 'The Quest is Underway');
+    const overlay = document.getElementById('mission-on-team');
+    overlay.classList.add('is-submitted');
+    window.setTimeout(() => {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('is-submitted');
+        document.getElementById('mission-card-played').classList.remove('hidden');
+    }, 520);
 });
 
-socket.on('mission_waiting', () => {});
+socket.on('mission_waiting', data => {
+    presenceTable.setGameStatus({
+        mode: 'mission',
+        leaderId: currentLeaderId,
+        leaderName: window._currentLeaderName,
+        completedIds: data.played_player_ids || [],
+        completedNames: data.played_players || [],
+    });
+});
 
 socket.on('mission_reveal', data => {
-    showMissionReveal(data, false);
+    showMissionCardReveal(data);
 });
 
 socket.on('mission_complete', () => {
-    if (latestMissionReveal) showMissionReveal(latestMissionReveal, true);
+    if (latestMissionReveal) showMissionOutcome(latestMissionReveal, true);
+});
+
+socket.on('mission_reveal_ack_status', data => {
+    const acknowledged = (data.acknowledged_ids || []).includes(myPlayerId);
+    if (!acknowledged) return;
+    document.getElementById('btn-player-next-round').classList.add('hidden');
+    const waiting = document.getElementById('player-mission-reveal-waiting');
+    waiting.classList.remove('hidden');
+    waiting.textContent = `${data.acknowledged_count} of ${data.required_count} ready to continue…`;
 });
 
 socket.on('mission_tracker_update', data => {
@@ -2419,6 +2564,15 @@ document.getElementById('btn-player-next-round').addEventListener('click', event
     socket.emit('advance_after_mission');
 });
 
+document.getElementById('btn-enter-quest').addEventListener('click', event => {
+    event.currentTarget.disabled = true;
+    missionIntroAcknowledged = true;
+    event.currentTarget.classList.add('hidden');
+    document.getElementById('mission-intro-waiting').classList.remove('hidden');
+    socket.emit('ack_mission_intro');
+    if (missionChoicesAreOpen) openMissionCardChoices();
+});
+
 document.getElementById('btn-confirm-role').addEventListener('click', () => {
     track('role_card_opened', { role: myRole || 'unknown', context: 'night_confirm' });
     clearAttention();
@@ -2536,6 +2690,7 @@ document.getElementById('btn-reject').addEventListener('click', () => {
 document.getElementById('btn-success').addEventListener('click', () => {
     document.getElementById('btn-success').disabled = true;
     document.getElementById('btn-fail').disabled = true;
+    document.getElementById('btn-success').classList.add('selected-card');
     socket.emit('play_mission_card', { card: 'success' });
     clearAttention();
 });
@@ -2543,6 +2698,7 @@ document.getElementById('btn-success').addEventListener('click', () => {
 document.getElementById('btn-fail').addEventListener('click', () => {
     document.getElementById('btn-success').disabled = true;
     document.getElementById('btn-fail').disabled = true;
+    document.getElementById('btn-fail').classList.add('selected-card');
     socket.emit('play_mission_card', { card: 'fail' });
     clearAttention();
 });

@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260826">
-<link rel="stylesheet" href="/static/css/player.css?v=20260826">
+<link rel="stylesheet" href="/static/css/common.css?v=20260827-cinematics3">
+<link rel="stylesheet" href="/static/css/player.css?v=20260827-cinematics3">
 <link rel="stylesheet" href="/static/css/entry.css?v=20260824-responsive-entry">
 </head>
 <body data-force-new="{{ 'true' if force_new else 'false' }}">
@@ -24,7 +24,7 @@
     <div class="pb-shields" id="pb-shields"></div>
     <div class="pb-stats">
         <button type="button" class="pb-role-peek role-reminder-trigger" aria-haspopup="dialog" aria-label="Open my role card">
-            <span aria-hidden="true">◈</span> My Role
+            <span aria-hidden="true">◈</span> Role
         </button>
         <div class="pb-stat pb-proposal-stat role-reminder-trigger" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Team proposal 1 of 5; show my role">
             <span>PROPOSAL</span>
@@ -278,7 +278,7 @@
         <div class="player-reveal-cards" id="player-vote-reveal-cards"></div>
         <div class="player-reveal-banner" id="player-vote-reveal-result"></div>
         <button class="btn btn-primary hidden" id="btn-player-confirm-vote" style="width:100%">Continue</button>
-        <p class="waiting-text" id="player-vote-reveal-waiting">Waiting for the leader to continue…</p>
+        <p class="waiting-text" id="player-vote-reveal-waiting">The court’s judgment is being revealed…</p>
     </div>
 
     <!-- ============ TEAM PROPOSAL — leader ============ -->
@@ -301,9 +301,18 @@
         <p class="waiting-text hidden" id="proposal-waiting-text">Waiting for the leader...</p>
     </div>
 
-    <!-- ============ MISSION REVEAL — all phones ============ -->
+    <!-- ============ MISSION CARDS — suspense before the outcome ============ -->
+    <div class="screen" id="screen-mission-cards-player">
+        <div class="quest-card-reveal-stage" id="player-quest-card-stage" role="status" aria-live="polite">
+            <p class="cinematic-reveal-eyebrow">The fellowship returns</p>
+            <h1>The cards are unsealed</h1>
+            <div class="quest-card-reveal-grid" id="player-quest-card-grid"></div>
+        </div>
+    </div>
+
+    <!-- ============ MISSION OUTCOME — all phones ============ -->
     <div class="screen" id="screen-mission-reveal-player">
-        <div class="cinematic-reveal quest-reveal-product" id="quest-reveal-product" role="status" aria-live="polite">
+        <div class="cinematic-reveal quest-reveal-product hidden" id="quest-reveal-product" role="status" aria-live="polite">
             <img class="cinematic-reveal-backdrop" id="quest-reveal-backdrop" alt="" aria-hidden="true">
             <img class="cinematic-reveal-art quest-reveal-art" id="quest-reveal-art" alt="">
             <div class="cinematic-reveal-scrim quest-reveal-scrim" aria-hidden="true"></div>
@@ -311,10 +320,11 @@
                 <p class="cinematic-reveal-eyebrow quest-reveal-eyebrow">The quest returns</p>
                 <h1 id="player-mission-reveal-result"></h1>
                 <p id="player-mission-reveal-detail"></p>
+                <div class="cinematic-party" id="player-mission-result-party" aria-label="Quest party"></div>
             </div>
         </div>
         <button class="btn quest-reveal-action hidden" id="btn-player-next-round">Continue</button>
-        <p class="quest-reveal-waiting" id="player-mission-reveal-waiting">Waiting for the leader to continue…</p>
+        <p class="quest-reveal-waiting" id="player-mission-reveal-waiting">The chronicle is still unfolding…</p>
     </div>
 
     <!-- ============ VOTE SCREEN ============ -->
@@ -343,10 +353,21 @@
 
     <!-- ============ MISSION SCREEN ============ -->
     <div class="screen" id="screen-mission">
-        <div class="screen-header">
-            <div class="screen-title-small" style="font-size:1.2rem">The Quest Begins</div>
+        <div class="cinematic-reveal mission-begins-product" id="mission-begins-product" role="status" aria-live="polite">
+            <img class="cinematic-reveal-backdrop" src="/static/assets/quests/quest-begins-v2.png?v=20260827" alt="" aria-hidden="true">
+            <img class="cinematic-reveal-art" src="/static/assets/quests/quest-begins-v2.png?v=20260827" alt="A fellowship setting out toward Avalon">
+            <div class="cinematic-reveal-scrim"></div>
+            <div class="cinematic-reveal-copy mission-begins-copy">
+                <p class="cinematic-reveal-eyebrow">The fate of Avalon rests with you</p>
+                <h1>Quest Begins</h1>
+                <p id="mission-begins-flavor">A fellowship has been chosen. Trust travels beside betrayal.</p>
+                <div class="cinematic-party" id="player-mission-begins-party" aria-label="Quest party"></div>
+            </div>
         </div>
-        <div id="mission-on-team">
+        <button class="btn quest-reveal-action" id="btn-enter-quest">Enter the Quest</button>
+        <p class="quest-reveal-waiting hidden" id="mission-intro-waiting">Waiting for the fellowship to enter…</p>
+        <div class="mission-choice-overlay hidden" id="mission-on-team">
+            <p class="cinematic-reveal-eyebrow">Choose your quest card</p>
             <div class="mission-card-choices" id="mission-card-choices">
                 <button class="mission-choice-btn success" id="btn-success">
                     <span class="choice-icon">☀</span>
@@ -359,8 +380,8 @@
             </div>
             <p class="auto-success-msg hidden" id="auto-success-msg">As a knight of the realm, you must play SUCCESS.</p>
         </div>
-        <p class="waiting-text" id="mission-not-on-team" style="margin-top:2rem">The quest is underway... await their return.</p>
-        <p class="waiting-text hidden" id="mission-card-played">Your card has been played. Awaiting others...</p>
+        <p class="quest-reveal-waiting hidden" id="mission-not-on-team">The chosen party rides forth. Await their return…</p>
+        <p class="quest-reveal-waiting hidden" id="mission-card-played">Your card is sealed. Awaiting the others…</p>
     </div>
 
     <!-- ============ ASSASSIN SCREEN ============ -->
@@ -614,8 +635,8 @@
 </style>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/presence.js?v=20260824-round-table"></script>
-<script src="/static/js/player.js?v=20260826"></script>
+<script src="/static/js/presence.js?v=20260827-cinematics3"></script>
+<script src="/static/js/player.js?v=20260827-cinematics3"></script>
 <script src="/static/js/assassination-reveal.js?v=20260826"></script>
 <script src="/static/js/final-role-gallery.js?v=20260825"></script>
 </body>

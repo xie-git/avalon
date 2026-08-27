@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon — Host</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260826">
-<link rel="stylesheet" href="/static/css/host.css?v=20260826">
+<link rel="stylesheet" href="/static/css/common.css?v=20260827-cinematics3">
+<link rel="stylesheet" href="/static/css/host.css?v=20260827-cinematics3">
 <link rel="stylesheet" href="/static/css/entry.css?v=20260824-uniform-entry-4">
 <style>
 .reorder-label {
@@ -82,7 +82,10 @@
             </div>
             <strong id="host-proposal-count" class="sr-only">1 / 5</strong>
         </div>
-        <div class="game-stats"><div><span>FAILED</span><strong id="host-fails">0/3</strong></div><div><span>TIME</span><strong id="host-game-time">00:00</strong></div></div>
+        <div class="game-stats">
+            <div class="host-fail-stat"><span>FAILED</span><div class="host-fail-tokens" aria-hidden="true"><i></i><i></i><i></i></div><strong id="host-fails" class="sr-only">0/3</strong></div>
+            <div><span>TIME</span><strong id="host-game-time">00:00</strong></div>
+        </div>
     </div>
 </div>
 
@@ -214,14 +217,32 @@
 
     <!-- ============ MISSION ============ -->
     <div class="screen" id="screen-mission">
-        <h2 class="heading-font gold-text" style="font-size:1.5rem;letter-spacing:0.1em">QUEST IN PROGRESS</h2>
-        <div class="mission-team-display" id="mission-team-display"></div>
-        <div class="mission-progress">
-            Cards played: <span id="mission-played">0</span> / <span id="mission-total">0</span>
+        <div class="cinematic-reveal host-mission-begins" id="host-mission-begins">
+            <img class="cinematic-reveal-backdrop" src="/static/assets/quests/quest-begins-v2.png?v=20260827" alt="" aria-hidden="true">
+            <img class="cinematic-reveal-art" src="/static/assets/quests/quest-begins-v2.png?v=20260827" alt="A fellowship setting out toward Avalon">
+            <div class="cinematic-reveal-scrim"></div>
+            <div class="cinematic-reveal-copy">
+                <p class="cinematic-reveal-eyebrow">The fate of Avalon rests with them</p>
+                <h1>Quest Begins</h1>
+                <p>A fellowship has been chosen. Trust travels beside betrayal.</p>
+                <div class="cinematic-party" id="host-mission-party"></div>
+                <div class="mission-progress">Cards sealed: <span id="mission-played">0</span> / <span id="mission-total">0</span></div>
+            </div>
+        </div>
+        <p class="host-quest-continue" id="host-mission-intro-status">Continue on your phones</p>
+        <div class="mission-team-display hidden" id="mission-team-display"></div>
+    </div>
+
+    <!-- ============ MISSION CARDS — suspense on the main display ============ -->
+    <div class="screen" id="screen-mission-cards">
+        <div class="host-card-reveal-stage" id="host-card-reveal-stage">
+            <p class="cinematic-reveal-eyebrow">The fellowship returns</p>
+            <h1>The cards are unsealed</h1>
+            <div class="mission-cards-display" id="mission-cards-display"></div>
         </div>
     </div>
 
-    <!-- ============ MISSION REVEAL ============ -->
+    <!-- ============ MISSION OUTCOME ============ -->
     <div class="screen" id="screen-mission-reveal">
         <div class="cinematic-reveal host-quest-reveal" id="host-quest-reveal" role="status" aria-live="polite">
             <img class="cinematic-reveal-backdrop" id="host-quest-reveal-backdrop" alt="" aria-hidden="true">
@@ -229,11 +250,12 @@
             <div class="cinematic-reveal-scrim" aria-hidden="true"></div>
             <div class="cinematic-reveal-copy">
                 <p class="cinematic-reveal-eyebrow">The quest returns</p>
-                <div class="mission-cards-display" id="mission-cards-display"></div>
                 <h1 class="mission-result-banner hidden" id="mission-result-banner"></h1>
                 <p id="host-mission-reveal-detail"></p>
+                <div class="cinematic-party" id="host-mission-result-party"></div>
             </div>
         </div>
+        <p class="host-quest-continue" id="host-quest-continue">Continue on your phones when ready</p>
     </div>
 
     <!-- ============ ASSASSIN PHASE ============ -->
@@ -284,8 +306,8 @@
 <div id="host-chat-strip" class="host-chat-strip hidden" aria-live="polite"></div>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/presence.js?v=20260824-round-table"></script>
-<script src="/static/js/host.js?v=20260826"></script>
+<script src="/static/js/presence.js?v=20260827-cinematics3"></script>
+<script src="/static/js/host.js?v=20260827-cinematics3"></script>
 <script src="/static/js/assassination-reveal.js?v=20260826"></script>
 <script src="/static/js/final-role-gallery.js?v=20260825"></script>
 </body>

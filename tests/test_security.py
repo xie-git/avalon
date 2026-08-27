@@ -14,6 +14,11 @@ def packets_for(client, name):
     ]
 
 
+def complete_vote_reveal_animation(game):
+    """Advance the test clock beyond the server-enforced stamp sequence."""
+    game.phase_started_at -= server.vote_reveal_seconds(game) + 0.1
+
+
 def test_security_headers_and_development_routes_are_closed():
     client = server.app.test_client()
     response = client.get("/")
@@ -328,14 +333,19 @@ def test_phone_only_game_reaches_first_mission_without_host_display(socket_clien
         client.emit("cast_vote", {"vote": "approve"})
     reveal = packets_for(clients[leader_index], "vote_reveal")[-1]
     assert reveal["team"] == [game.players[player_id].name for player_id in team]
-    clients[leader_index].emit("confirm_vote_reveal")
+    complete_vote_reveal_animation(game)
+    for client in clients:
+        client.emit("confirm_vote_reveal")
 
     assert game.phase == server.GamePhase.MISSION
+    for client in clients:
+        client.emit("ack_mission_intro")
     for player_id in team:
         clients[game.player_order.index(player_id)].emit(
             "play_mission_card", {"card": "success"}
         )
-    clients[leader_index].emit("advance_after_mission")
+    for client in clients:
+        client.emit("advance_after_mission")
 
     assert game.current_mission == 1
     assert game.phase == server.GamePhase.DISCUSSION
@@ -751,7 +761,7 @@ def test_join_attempts_are_rate_limited(socket_client):
     assert "Too many requests. Please wait and try again." in messages
 
 
-def test_only_current_leader_can_advance_completed_mission(socket_client, create_game):
+def test_all_players_acknowledge_completed_mission_before_advancing(socket_client, create_game):
     created = create_game(socket_client)
     player = server.socketio.test_client(server.app)
     player.emit(
@@ -768,8 +778,9 @@ def test_only_current_leader_can_advance_completed_mission(socket_client, create
     game.current_leader_index = 1
     game.pending_mission_outcome = "next_mission"
     player.emit("advance_after_mission")
-    assert packets_for(player, "error")[0]["message"] == "You are not the current leader"
     assert game.pending_mission_outcome == "next_mission"
+    other.emit("advance_after_mission")
+    assert game.pending_mission_outcome is None
     player.disconnect()
     other.disconnect()
 
@@ -1020,9 +1031,14 @@ def test_complete_mission_waits_for_leader_before_advancing(socket_client, creat
     non_leader_index = next(index for index in range(len(clients)) if index != leader_index)
     clients[non_leader_index].emit("confirm_vote_reveal")
     assert game.phase == server.GamePhase.VOTE_REVEAL
-    assert packets_for(clients[non_leader_index], "error")[-1]["message"] == "You are not the current leader"
+    assert game.vote_reveal_acks == set()
+    assert packets_for(clients[non_leader_index], "error")[-1]["message"] == (
+        "The court is still revealing its votes."
+    )
 
-    clients[leader_index].emit("confirm_vote_reveal")
+    complete_vote_reveal_animation(game)
+    for client in clients:
+        client.emit("confirm_vote_reveal")
     assert game.phase == server.GamePhase.MISSION
     assert game.pending_vote_result is None
     assert game.proposal_history[0]["approved"] is True
@@ -1030,6 +1046,8 @@ def test_complete_mission_waits_for_leader_before_advancing(socket_client, creat
 
     # Progress identifies the player who actually submitted, even when the
     # second displayed team member plays first.
+    for client in clients:
+        client.emit("ack_mission_intro")
     socket_client.get_received()
     first_player_id = team[-1]
     first_client = clients[game.player_order.index(first_player_id)]
@@ -1051,7 +1069,8 @@ def test_complete_mission_waits_for_leader_before_advancing(socket_client, creat
     assert game.pending_mission_outcome == "next_mission"
     assert game.current_mission == 0
 
-    clients[leader_index].emit("advance_after_mission")
+    for client in clients:
+        client.emit("advance_after_mission")
     assert game.phase == server.GamePhase.DISCUSSION
     assert game.current_mission == 1
     for client in clients:
@@ -1079,7 +1098,9 @@ def test_fifth_leader_selects_a_binding_team_without_a_vote(
         for client in clients:
             client.emit("cast_vote", {"vote": "reject"})
         assert game.phase == server.GamePhase.VOTE_REVEAL
-        clients[leader_index].emit("confirm_vote_reveal")
+        complete_vote_reveal_animation(game)
+        for client in clients:
+            client.emit("confirm_vote_reveal")
         assert game.consecutive_rejections == attempt
 
     assert game.phase == server.GamePhase.TEAM_PROPOSAL
@@ -1192,7 +1213,9 @@ def test_every_supported_party_size_reaches_first_mission(
     for client in clients:
         client.emit("cast_vote", {"vote": "approve"})
     assert game.phase == server.GamePhase.VOTE_REVEAL
-    clients[leader_index].emit("confirm_vote_reveal")
+    complete_vote_reveal_animation(game)
+    for client in clients:
+        client.emit("confirm_vote_reveal")
     assert game.phase == server.GamePhase.MISSION
     assert len(game.proposed_team) == server.MISSION_SIZES[player_count][0]
 

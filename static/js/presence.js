@@ -128,6 +128,9 @@
             this.view = 'order';
             this.revealedRoles = null;
             this.roleManifest = [];
+            this.statusMode = 'lobby';
+            this.completedPlayerKeys = new Set();
+            this.leaderKey = '';
             this.contributesToAverage = true;
             this.drag = null;
             this.mountedScreen = null;
@@ -239,6 +242,16 @@
             this.render();
             this.save();
             this.notifyPrivateChange();
+        }
+
+        setGameStatus({ mode = 'game', completedIds = [], completedNames = [], leaderId = '', leaderName = '' } = {}) {
+            this.statusMode = mode;
+            this.completedPlayerKeys = new Set([
+                ...completedIds.map(String),
+                ...completedNames.map(String),
+            ]);
+            this.leaderKey = String(leaderId || leaderName || '');
+            this.render();
         }
 
         defaultPosition(index, count) {
@@ -433,7 +446,14 @@
                 const reveal = this.revealedRoles && this.revealedRoles[player.name];
                 const team = reveal && String(reveal.team || '').toLowerCase();
                 const node = document.createElement('div');
-                node.className = `presence-node${player.connected === false ? ' disconnected' : ''}${player.ready ? ' ready' : ''}${reveal ? ` role-revealed team-${team}` : ''}`;
+                const isLobbyReady = this.statusMode === 'lobby' && player.ready;
+                const hasCompletedAction = this.statusMode !== 'lobby' && (
+                    this.completedPlayerKeys.has(key) || this.completedPlayerKeys.has(String(player.name))
+                );
+                const isLeader = this.statusMode !== 'lobby' && (
+                    this.leaderKey === key || this.leaderKey === String(player.name)
+                );
+                node.className = `presence-node${player.connected === false ? ' disconnected' : ''}${isLobbyReady || hasCompletedAction ? ' ready' : ''}${hasCompletedAction ? ' action-complete' : ''}${isLeader ? ' current-leader' : ''}${reveal ? ` role-revealed team-${team}` : ''}`;
                 node.dataset.playerKey = key;
                 node.style.setProperty('--player-color-dark', palette[0]);
                 node.style.setProperty('--player-color', palette[1]);
@@ -461,12 +481,19 @@
                 order.textContent = String(this.players.indexOf(player) + 1);
                 order.setAttribute('aria-hidden', 'true');
                 portrait.appendChild(order);
-                if (player.ready && !reveal) {
+                if ((isLobbyReady || hasCompletedAction) && !reveal) {
                     const ready = document.createElement('span');
                     ready.className = 'presence-ready';
                     ready.textContent = '✓';
-                    ready.setAttribute('aria-label', 'ready');
+                    ready.setAttribute('aria-label', isLobbyReady ? 'ready' : 'decision submitted');
                     portrait.appendChild(ready);
+                }
+                if (isLeader && !reveal) {
+                    const leader = document.createElement('span');
+                    leader.className = 'presence-leader';
+                    leader.textContent = '♛';
+                    leader.setAttribute('aria-label', 'current leader');
+                    portrait.appendChild(leader);
                 }
 
                 const name = document.createElement('span');
