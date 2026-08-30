@@ -8,12 +8,7 @@ let isSpectator = false;
 let entryAsSpectator = false;
 let spectatorVisionMode = 'blind';
 let spectatorRoles = [];
-const presenceTable = new AvalonPresenceTable({
-    mode: 'player',
-    onPrivateChange: update => {
-        if (!isSpectator) socket.emit('update_spectrum_ratings', update);
-    },
-});
+const presenceTable = new AvalonPresenceTable({ mode: 'player' });
 const RECONNECT_TOKEN_KEY = 'avalon-player-session-token';
 const RECONNECT_PLAYER_KEY = 'avalon-player-id';
 const ANALYTICS_ID_KEY = 'avalon-analytics-id';
@@ -112,13 +107,21 @@ function screenClass() {
 }
 const presenceScreenLabels = {
     'screen-lobby': 'Drag anywhere · overlap avatars to cluster',
-    'screen-night': 'Night Phase',
     'screen-discussion': 'Mission Discussion',
     'screen-proposal': 'Quest Party',
     'screen-vote': 'Fellowship Vote',
-    'screen-vote-reveal-player': 'The Votes Are Revealed',
     'screen-assassin': 'The Final Choice',
 };
+const cinematicScreenIds = new Set([
+    'screen-game-starting',
+    'screen-role',
+    'screen-night',
+    'screen-vote-reveal-player',
+    'screen-mission',
+    'screen-mission-cards-player',
+    'screen-mission-reveal-player',
+    'screen-game-over',
+]);
 
 function showConnectionStatus(message) {
     connectionStatus.textContent = message;
@@ -138,6 +141,10 @@ let myRole = null;
 let myTeam = null;
 let myRoleArt = null;
 let roleConfirmTimer = null;
+let gameStartingTimer = null;
+let pendingGameStartingRole = null;
+let nightPhaseReady = false;
+let pendingNightPhaseAck = false;
 let isHost = false;
 let gameCode = null;
 let currentLeaderId = null;
@@ -179,10 +186,14 @@ let presencePlayers = [];
 let wakeLock = null;
 let joinedThisPage = false;
 let missionRevealSequence = 0;
+let missionOutcomeTimer = null;
+let missionOutcomeReadyAt = 0;
 let gameOutcomeTimer = null;
 let lastGameOutcomeAnnouncementKey = null;
 let voteRevealSequence = 0;
 const VOTE_REVEAL_STEP_MS = 700;
+const QUEST_CARD_FLIP_MS = 820;
+const QUEST_OUTCOME_HOLD_MS = 3500;
 const AVALON_CONTINUE_LABELS = [
     'Continue Avalon',
     'Ride Forth',
@@ -194,7 +205,33 @@ const AVALON_CONTINUE_LABELS = [
     'Summon the Round Table',
     'Carry On, Fellowship',
     'Advance the Legend',
+    'Write the Next Chapter',
+    'Return to the Council',
+    'Follow the Questing Road',
+    'Let the Chronicle Turn',
+    'Gather the Fellowship',
+    'Answer Avalon’s Call',
+    'Ride Into the Next Tale',
+    'Continue the Legend',
+    'Take Up the Banner',
+    'Face What Comes Next',
+    'The Realm Awaits',
+    'Begin the Next Council',
 ];
+const VOTE_RESULT_FLAVOR = {
+    approved: [
+        'The court lends its trust. The chosen fellowship rides for Avalon.',
+        'With the council’s blessing, the questing party sets forth.',
+        'The banners rise. This fellowship now carries the realm’s hope.',
+        'Consent is given, though trust remains a dangerous wager.',
+    ],
+    rejected: [
+        'Trust fractures at the table. A new fellowship must be named.',
+        'The council withholds its blessing. The crown passes onward.',
+        'Doubt rules the chamber. The proposed fellowship will not ride.',
+        'The court refuses the call. Avalon awaits another company.',
+    ],
+};
 
 function applySpectatorMode(enabled, visionMode = 'blind') {
     isSpectator = Boolean(enabled);
@@ -208,7 +245,6 @@ function applySpectatorMode(enabled, visionMode = 'blind') {
         'hidden',
         !isSpectator || spectatorVisionMode !== 'omniscient',
     );
-    presenceTable.setContributionEnabled(!isSpectator);
 }
 
 function renderSpectatorRoles(players = []) {
@@ -357,7 +393,9 @@ function showScreen(id) {
         id === 'screen-mission-cards-player' || id === 'screen-mission-reveal-player',
     );
     document.body.classList.toggle('mission-cinematic-active', id === 'screen-mission');
+    document.body.classList.toggle('vote-cinematic-active', id === 'screen-vote-reveal-player');
     document.body.classList.toggle('game-over-active', id === 'screen-game-over');
+    document.body.classList.toggle('player-cinematic-active', cinematicScreenIds.has(id));
     const label = presenceScreenLabels[id];
     if (label && gameCode && presencePlayers.length) presenceTable.show(target, label);
     else presenceTable.hide();
@@ -384,6 +422,7 @@ function createIdentityAvatar(name, className = 'identity-avatar') {
     identity.className = className;
     const portrait = document.createElement('span');
     portrait.className = 'identity-avatar-portrait';
+    portrait.classList.toggle('selfie-portrait', Boolean(player.avatar_image));
     portrait.appendChild(presenceTable.createPortraitElement(
         player.avatar_index,
         player.color_index,
@@ -974,6 +1013,22 @@ function showRoleCard(role, team) {
     nameEl.textContent = role;
     flavorEl.textContent = ROLE_FLAVOR[role] || 'Your allegiance is known. The fate of Avalon is now in your hands.';
     descEl.textContent = ROLE_DESCRIPTIONS[role] || '';
+    const knowledge = window._nightInfoPending || nightInfo || {};
+    const knownNames = Array.isArray(knowledge.sees) ? knowledge.sees : [];
+    const knowledgeSection = document.getElementById('role-knowledge');
+    const knowledgeLabel = document.getElementById('role-knowledge-label');
+    const knowledgePortraits = document.getElementById('role-knowledge-portraits');
+    knowledgeLabel.textContent = knowledge.sees_label || (
+        knownNames.length ? 'Those revealed to you' : 'You begin without secret knowledge'
+    );
+    knowledgePortraits.replaceChildren();
+    knownNames.forEach((name, index) => {
+        const identity = createIdentityAvatar(name, 'role-knowledge-person');
+        identity.style.setProperty('--knowledge-delay', `${1.55 + index * 0.42}s`);
+        knowledgePortraits.appendChild(identity);
+    });
+    knowledgeSection.classList.remove('hidden');
+    knowledgeSection.classList.toggle('has-no-portraits', !knownNames.length);
 
     showScreen('screen-role');
 
@@ -982,9 +1037,58 @@ function showRoleCard(role, team) {
     requestAnimationFrame(() => reveal.classList.add('is-revealed'));
     if (artPath && art.complete) requestAnimationFrame(() => art.classList.add('is-loaded'));
     const confirmButton = document.getElementById('btn-confirm-role');
+    confirmButton.classList.remove('hidden');
     confirmButton.disabled = true;
+    document.getElementById('role-reveal-waiting').classList.add('hidden');
     clearTimeout(roleConfirmTimer);
-    roleConfirmTimer = setTimeout(() => { confirmButton.disabled = false; }, 2000);
+    const revealDuration = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 250
+        : Math.max(2200, 1850 + knownNames.length * 420);
+    roleConfirmTimer = setTimeout(() => { confirmButton.disabled = false; }, revealDuration);
+}
+
+function acknowledgeRoleReveal() {
+    const confirmButton = document.getElementById('btn-confirm-role');
+    confirmButton.disabled = true;
+    confirmButton.classList.add('hidden');
+    document.getElementById('role-reveal-waiting').classList.remove('hidden');
+    if (nightPhaseReady) socket.emit('night_phase_ack');
+    else pendingNightPhaseAck = true;
+}
+
+function showGameStartingReveal(role, team) {
+    clearTimeout(gameStartingTimer);
+    pendingGameStartingRole = { role, team };
+    showScreen('screen-game-starting');
+    const screen = document.getElementById('screen-game-starting');
+    const continueButton = document.getElementById('btn-confirm-game-start');
+    continueButton.disabled = true;
+    screen.classList.remove('is-revealed');
+    void screen.offsetWidth;
+    requestAnimationFrame(() => screen.classList.add('is-revealed'));
+    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 250 : 1500;
+    gameStartingTimer = window.setTimeout(() => {
+        gameStartingTimer = null;
+        continueButton.disabled = false;
+    }, duration);
+}
+
+function cancelGameStartingReveal() {
+    clearTimeout(gameStartingTimer);
+    gameStartingTimer = null;
+    pendingGameStartingRole = null;
+    document.getElementById('screen-game-starting')?.classList.remove('is-revealed');
+}
+
+function continueGameStartingReveal() {
+    if (!pendingGameStartingRole) return;
+    const assignment = pendingGameStartingRole;
+    pendingGameStartingRole = null;
+    clearTimeout(gameStartingTimer);
+    gameStartingTimer = null;
+    document.getElementById('btn-confirm-game-start').disabled = true;
+    socket.emit('confirm_game_opening');
+    showRoleCard(assignment.role, assignment.team);
 }
 
 // ---------------------------------------------------------------------------
@@ -994,13 +1098,14 @@ function showNightInfo(info) {
     nightInfo = info;
     const labelEl = document.getElementById('night-sees-label');
     const namesEl = document.getElementById('night-sees-names');
-    labelEl.textContent = info.sees_label || 'Your vision';
+    const hasVision = Array.isArray(info.sees) && info.sees.length > 0;
+    labelEl.textContent = hasVision ? (info.sees_label || 'Your vision') : 'Your vision';
     namesEl.innerHTML = '';
     const confirmButton = document.getElementById('btn-confirm-night');
     confirmButton.disabled = false;
     confirmButton.classList.remove('hidden');
     document.getElementById('night-waiting-text').classList.add('hidden');
-    if (info.sees && info.sees.length > 0) {
+    if (hasVision) {
         info.sees.forEach(name => {
             const isPercival = myRole === 'Percival';
             namesEl.appendChild(createIdentityAvatar(
@@ -1034,6 +1139,8 @@ function showDiscussion(data) {
         ? fmtTime(discussionTimerMax)
         : 'Unlimited';
     const screen = document.getElementById('screen-discussion');
+    screen.classList.toggle('discussion-is-leader', amLeader);
+    renderDiscussionSpotlight({});
     presenceTable.show(screen, 'Mission Discussion', document.querySelector('#screen-discussion .discussion-info'));
     showScreen('screen-discussion');
 }
@@ -1058,12 +1165,31 @@ function renderDiscussionSpotlight(data = {}) {
     const banner = document.getElementById('player-discussion-spotlight');
     if (!data.player_name) {
         banner.classList.add('hidden');
-        banner.textContent = '';
+        banner.replaceChildren();
         return;
     }
-    banner.textContent = data.player_id === myPlayerId
-        ? '♜ THE COURT CALLS ON YOU · DEFEND YOUR CASE'
-        : `♜ THE COURT CALLS ON ${data.player_name.toUpperCase()} · DEFEND YOUR CASE`;
+    const player = presencePlayers.find(candidate =>
+        candidate.player_id === data.player_id || candidate.name === data.player_name
+    ) || { name: data.player_name };
+    const portrait = document.createElement('span');
+    portrait.className = 'accusation-portrait';
+    portrait.classList.toggle('selfie-portrait', Boolean(player.avatar_image));
+    portrait.appendChild(presenceTable.createPortraitElement(
+        player.avatar_index,
+        player.color_index,
+        player.avatar_image,
+    ));
+    const copy = document.createElement('span');
+    copy.className = 'accusation-copy';
+    const label = document.createElement('small');
+    label.textContent = data.player_id === myPlayerId ? 'You stand accused' : 'Accusation spotlight';
+    const name = document.createElement('strong');
+    name.textContent = data.player_id === myPlayerId ? 'DEFEND YOUR CASE' : `${player.name || data.player_name} · DEFEND YOUR CASE`;
+    copy.append(label, name);
+    banner.replaceChildren(portrait, copy);
+    banner.setAttribute('aria-label', data.player_id === myPlayerId
+        ? 'You stand accused. Defend your case.'
+        : `${player.name || data.player_name} stands accused.`);
     banner.classList.remove('hidden');
 }
 
@@ -1073,21 +1199,31 @@ function showVoteReveal(data) {
     const entries = Object.entries(votes);
     const cards = document.getElementById('player-vote-reveal-cards');
     cards.replaceChildren();
-    const teamList = document.getElementById('player-vote-reveal-team');
-    teamList.replaceChildren();
-    (data.team || []).forEach(name => {
-        teamList.appendChild(createIdentityAvatar(name, 'vote-name-chip'));
-    });
+    cards.dataset.playerCount = String(entries.length);
     entries.forEach(([name, vote], index) => {
         const card = document.createElement('div');
-        card.className = `player-reveal-card ${vote}`;
+        card.className = 'cinematic-vote-card sealed';
         card.style.setProperty('--reveal-delay', `${index * (VOTE_REVEAL_STEP_MS / 1000)}s`);
-        card.appendChild(createIdentityAvatar(name, 'vote-reveal-identity'));
+        const player = playerForName(name);
+        const portrait = document.createElement('span');
+        portrait.className = 'cinematic-vote-portrait';
+        portrait.classList.toggle('selfie-portrait', Boolean(player.avatar_image));
+        portrait.appendChild(presenceTable.createPortraitElement(
+            player.avatar_index,
+            player.color_index,
+            player.avatar_image,
+        ));
+        const label = document.createElement('span');
+        label.className = 'cinematic-vote-name';
+        label.textContent = name;
         const stamp = document.createElement('span');
-        stamp.className = 'vote-reveal-stamp';
+        stamp.className = 'cinematic-vote-stamp';
         stamp.innerHTML = `<b>${vote === 'approve' ? '✓' : '×'}</b><strong>${vote === 'approve' ? 'APPROVE' : 'REJECT'}</strong>`;
-        card.appendChild(stamp);
+        card.append(portrait, label, stamp);
         cards.appendChild(card);
+        window.setTimeout(() => {
+            if (sequence === voteRevealSequence) card.className = `cinematic-vote-card ${vote} revealed`;
+        }, 650 + index * VOTE_REVEAL_STEP_MS);
     });
     const approvals = entries.filter(([, vote]) => vote === 'approve').length;
     const approved = approvals > entries.length - approvals;
@@ -1095,7 +1231,11 @@ function showVoteReveal(data) {
     resultBanner.textContent = approved
         ? 'The Quest Party Rides Forth!'
         : 'The Court Dissents!';
-    resultBanner.classList.add('hidden');
+    const resultCopy = document.getElementById('player-vote-result-copy');
+    resultCopy.classList.add('hidden');
+    document.getElementById('player-vote-reveal-flavor').textContent = (
+        approved ? VOTE_RESULT_FLAVOR.approved : VOTE_RESULT_FLAVOR.rejected
+    )[Math.floor(Math.random() * VOTE_RESULT_FLAVOR.approved.length)];
     const continueButton = document.getElementById('btn-player-confirm-vote');
     const waiting = document.getElementById('player-vote-reveal-waiting');
     continueButton.disabled = true;
@@ -1105,13 +1245,14 @@ function showVoteReveal(data) {
     showScreen('screen-vote-reveal-player');
     const revealDuration = entries.length * VOTE_REVEAL_STEP_MS + 2450;
     window.setTimeout(() => {
-        if (sequence === voteRevealSequence) resultBanner.classList.remove('hidden');
+        if (sequence === voteRevealSequence) resultCopy.classList.remove('hidden');
     }, Math.max(1100, entries.length * VOTE_REVEAL_STEP_MS + 1100));
     window.setTimeout(() => {
         if (sequence !== voteRevealSequence) return;
         continueButton.disabled = false;
         continueButton.classList.toggle('hidden', isSpectator);
         waiting.classList.toggle('hidden', !isSpectator);
+        continueButton.textContent = AVALON_CONTINUE_LABELS[Math.floor(Math.random() * AVALON_CONTINUE_LABELS.length)];
         waiting.textContent = isSpectator ? 'Waiting for the fellowship to continue…' : 'Continue when you are ready.';
     }, revealDuration);
 }
@@ -1125,14 +1266,19 @@ function showMissionCardReveal(data, instant = false) {
     if (cardStage.dataset.revealKey === revealKey) return;
 
     const sequence = ++missionRevealSequence;
+    clearTimeout(missionOutcomeTimer);
+    missionOutcomeTimer = null;
     cardStage.dataset.revealKey = revealKey;
     cardGrid.replaceChildren();
     cardStage.classList.remove('hidden', 'is-complete');
     const cards = data.cards_shuffled || [];
+    const finalCardDelay = cards.length ? 1200 + (cards.length - 1) * 1100 : 0;
+    missionOutcomeReadyAt = instant
+        ? Date.now()
+        : Date.now() + finalCardDelay + QUEST_CARD_FLIP_MS + QUEST_OUTCOME_HOLD_MS;
     cards.forEach((card, index) => {
         const element = document.createElement('div');
         element.className = 'cinematic-quest-card sealed';
-        element.innerHTML = '<span>✦</span><strong>SEALED</strong>';
         cardGrid.appendChild(element);
         const revealCard = () => {
             if (sequence !== missionRevealSequence) return;
@@ -1207,6 +1353,7 @@ function showProposalScreen(data) {
             btn.setAttribute('aria-pressed', 'false');
             const portrait = document.createElement('span');
             portrait.className = 'party-avatar-portrait';
+            portrait.classList.toggle('selfie-portrait', Boolean(player.avatar_image));
             portrait.appendChild(presenceTable.createPortraitElement(
                 player.avatar_index,
                 player.color_index,
@@ -1324,11 +1471,22 @@ function showAssassinScreen(data) {
         (data.targets || []).forEach(target => {
             const b = document.createElement('button');
             b.className = 'assassin-target-btn';
-            b.textContent = target.name;
             b.dataset.playerId = target.player_id;
+            b.setAttribute('aria-label', `Choose ${target.name} as Merlin`);
+            b.setAttribute('aria-pressed', 'false');
+            b.appendChild(createIdentityAvatar(target.name, 'assassin-target-identity'));
+            const mark = document.createElement('span');
+            mark.className = 'assassin-target-mark';
+            mark.textContent = '⌖';
+            mark.setAttribute('aria-hidden', 'true');
+            b.appendChild(mark);
             b.addEventListener('click', () => {
-                document.querySelectorAll('.assassin-target-btn').forEach(x => x.classList.remove('selected'));
+                document.querySelectorAll('.assassin-target-btn').forEach(x => {
+                    x.classList.remove('selected');
+                    x.setAttribute('aria-pressed', 'false');
+                });
                 b.classList.add('selected');
+                b.setAttribute('aria-pressed', 'true');
                 assassinTargetId = target.player_id;
                 btn.disabled = false;
             });
@@ -1388,6 +1546,20 @@ function renderChronicle(container, summary) {
             : `Mission ${item.mission_num}: ${item.leader_name}’s party was rejected ${item.approve_count}–${item.reject_count}`;
         container.appendChild(section);
     });
+    const reasons = {
+        missions: summary.winner === 'good' ? 'Good completed 3 quests' : 'Evil failed 3 quests',
+        assassination: 'The Assassin struck down Merlin',
+        assassination_failed: 'The Assassin missed Merlin',
+        rejections: 'Five consecutive teams were rejected',
+    };
+    const finale = document.createElement('section');
+    finale.className = `chronicle-entry chronicle-finale ${summary.winner === 'good' ? 'pass' : 'fail'}`;
+    const finaleTitle = document.createElement('strong');
+    finaleTitle.textContent = 'Final Reckoning';
+    const finaleDetail = document.createElement('span');
+    finaleDetail.textContent = reasons[summary.win_reason] || 'The fate of Avalon was decided';
+    finale.append(finaleTitle, finaleDetail);
+    container.appendChild(finale);
 }
 
 function completeGameOutcomeAnnouncement() {
@@ -1466,9 +1638,12 @@ function showGameOver(summary) {
     flash(summary.winner === 'good' ? 'blue' : 'red', 600);
 
     const myRoleEl = document.getElementById('my-role-reveal-display');
+    myRoleEl.classList.toggle('hidden', !myRole);
     if (myRole) {
         const team = myTeam === 'good' ? 'Forces of Good' : 'Forces of Evil';
         myRoleEl.innerHTML = `You were <strong style="color:var(--gold-light)">${escapeHtml(myRole)}</strong> &mdash; ${team}`;
+    } else {
+        myRoleEl.replaceChildren();
     }
 
     const reasons = {
@@ -1522,7 +1697,8 @@ function renderVictoryCard(card, summary) {
     card.querySelector('.victory-card-subtitle').textContent = winner === 'good'
         ? 'The loyal fellowship preserved the realm.'
         : 'The servants of Mordred claimed the realm.';
-    card.querySelector('.victory-card-room').textContent = `ROOM ${gameCode || '----'}`;
+    const roomCode = document.getElementById('finale-room-code-player');
+    if (roomCode) roomCode.textContent = gameCode || '----';
     const party = card.querySelector('.victory-card-party');
     party.replaceChildren();
     winningPlayers.forEach(player => {
@@ -1531,6 +1707,7 @@ function renderVictoryCard(card, summary) {
         const portrait = document.createElement('div');
         portrait.className = 'victory-person-portrait';
         if (player.avatar_image) {
+            portrait.classList.add('selfie-portrait');
             const image = document.createElement('img');
             image.src = player.avatar_image;
             image.alt = '';
@@ -1560,6 +1737,7 @@ function renderRematchStatus(data) {
 // State snapshot (reconnect)
 // ---------------------------------------------------------------------------
 function applyStateSnapshot(snap) {
+    cancelGameStartingReveal();
     snap.phase = String(snap.phase || 'LOBBY').replace('GamePhase.', '').toUpperCase();
     const previousCode = gameCode;
     applySpectatorMode(snap.is_spectator, snap.spectator_vision_mode);
@@ -1575,7 +1753,6 @@ function applyStateSnapshot(snap) {
     currentLeaderId = snap.current_leader_id;
     presenceTable.setRoomCode(gameCode);
     renderLobbyPlayers(snap.players || []);
-    presenceTable.setPublicPositions(snap.public_spectrum || {});
     presenceTable.setRoleManifest(snap.role_manifest || []);
     if (snap.phase !== 'LOBBY') {
         const status = {
@@ -1631,16 +1808,27 @@ function applyStateSnapshot(snap) {
             renderLobbyPlayers(snap.players || []);
             showScreen('screen-lobby'); break;
         case 'ROLE_ASSIGNMENT':
-        case 'NIGHT_PHASE':
             if (isSpectator) {
                 showSpectatorNight();
             } else if (snap.my_role) {
-                if (snap.night_info) showNightInfo(snap.night_info);
-                else showRoleCard(snap.my_role, snap.my_team);
+                nightPhaseReady = false;
+                window._nightInfoPending = snap.night_info || null;
+                if (snap.opening_acknowledged) showRoleCard(snap.my_role, snap.my_team);
+                else showGameStartingReveal(snap.my_role, snap.my_team);
+            }
+            break;
+        case 'NIGHT_PHASE':
+            nightPhaseReady = true;
+            if (isSpectator) {
+                showSpectatorNight();
+            } else if (snap.my_role) {
+                showRoleCard(snap.my_role, snap.my_team);
                 if (snap.night_acknowledged) {
-                    document.getElementById('btn-confirm-night').disabled = true;
-                    document.getElementById('btn-confirm-night').classList.add('hidden');
-                    document.getElementById('night-waiting-text').classList.remove('hidden');
+                    clearTimeout(roleConfirmTimer);
+                    roleConfirmTimer = null;
+                    document.getElementById('btn-confirm-role').disabled = true;
+                    document.getElementById('btn-confirm-role').classList.add('hidden');
+                    document.getElementById('role-reveal-waiting').classList.remove('hidden');
                 }
             }
             break;
@@ -1768,7 +1956,6 @@ socket.on('join_success', data => {
     document.getElementById('btn-settings').classList.add('hidden');
     document.getElementById('settings-game-actions').classList.toggle('hidden', !isHost);
     renderLobbyPlayers(data.players || []);
-    presenceTable.setPublicPositions(data.public_spectrum || {});
     presenceTable.setRoleManifest(data.role_manifest || []);
     renderPhoneDiscussionSetting(data.settings?.discussion_time);
     renderPhoneProposalSetting(data.settings?.proposal_time);
@@ -1873,7 +2060,6 @@ socket.on('player_reconnected', data => {
 socket.on('lobby_update', data => {
     if (data.player_order) window._playerOrder = data.player_order;
     renderLobbyPlayers(data.players || []);
-    presenceTable.setPublicPositions(data.public_spectrum || {});
     presenceTable.setRoleManifest(data.role_manifest || []);
     renderPhoneDiscussionSetting(data.settings?.discussion_time);
     renderPhoneProposalSetting(data.settings?.proposal_time);
@@ -1901,10 +2087,6 @@ socket.on('name_change_failed', data => {
     button.textContent = 'Update';
 });
 
-socket.on('public_spectrum_updated', data => {
-    presenceTable.setPublicPositions(data.positions || {});
-});
-
 function updateHostStartButton(playerListOrCount) {
     const btn = document.getElementById('btn-host-start');
     const hint = document.getElementById('host-start-hint');
@@ -1928,6 +2110,8 @@ socket.on('game_starting', data => {
     presenceTable.setGameStatus({ mode: 'game' });
     startGameClock(data.game_started_at);
     acquireWakeLock();
+    nightPhaseReady = false;
+    pendingNightPhaseAck = false;
     flash('white', 400);
     showChat();
     document.getElementById('btn-settings').classList.toggle('hidden', !isHost);
@@ -1937,12 +2121,17 @@ socket.on('game_starting', data => {
 
 socket.on('role_assigned', data => {
     window._nightInfoPending = data.night_info;
-    showRoleCard(data.role, data.team);
+    showGameStartingReveal(data.role, data.team);
     requestAttention('View your role');
 });
 
 socket.on('night_phase_start', () => {
     presenceTable.setGameStatus({ mode: 'game' });
+    nightPhaseReady = true;
+    if (pendingNightPhaseAck) {
+        pendingNightPhaseAck = false;
+        socket.emit('night_phase_ack');
+    }
     if (isSpectator) showSpectatorNight();
 });
 
@@ -1990,7 +2179,9 @@ socket.on('discussion_start', data => {
     document.getElementById('discussion-leader-name').textContent = data.leader_name || window._currentLeaderName || 'Unknown';
     const leaderBanner = document.getElementById('leader-banner');
     leaderBanner.classList.toggle('hidden', myPlayerId !== currentLeaderId);
-    document.getElementById('btn-end-discussion').classList.toggle('hidden', myPlayerId !== currentLeaderId);
+    const endDiscussion = document.getElementById('btn-end-discussion');
+    endDiscussion.disabled = false;
+    endDiscussion.classList.toggle('hidden', myPlayerId !== currentLeaderId);
     configureSpotlightControls(myPlayerId === currentLeaderId);
     renderDiscussionSpotlight();
     presenceTable.show(
@@ -2142,7 +2333,15 @@ socket.on('mission_reveal', data => {
 });
 
 socket.on('mission_complete', () => {
-    if (latestMissionReveal) showMissionOutcome(latestMissionReveal, true);
+    if (!latestMissionReveal) return;
+    const reveal = latestMissionReveal;
+    clearTimeout(missionOutcomeTimer);
+    const delay = Math.max(0, missionOutcomeReadyAt - Date.now());
+    missionOutcomeTimer = window.setTimeout(() => {
+        missionOutcomeTimer = null;
+        transition('screen-mission-reveal-player');
+        window.setTimeout(() => showMissionOutcome(reveal, true), 300);
+    }, delay);
 });
 
 socket.on('mission_reveal_ack_status', data => {
@@ -2184,6 +2383,7 @@ socket.on('rematch_status', data => {
 });
 
 socket.on('return_to_lobby', data => {
+    cancelGameStartingReveal();
     stopGameClock();
     resetGameOutcomeAnnouncement();
     myRole = null;
@@ -2218,6 +2418,7 @@ socket.on('return_to_lobby', data => {
 });
 
 socket.on('game_ended', () => {
+    cancelGameStartingReveal();
     stopGameClock();
     resetGameOutcomeAnnouncement();
     clearReconnectSession();
@@ -2257,6 +2458,10 @@ socket.on('error', data => {
         hint.classList.add('error-message');
         document.getElementById('btn-host-start').disabled = false;
     } else {
+        const endDiscussion = document.getElementById('btn-end-discussion');
+        if (document.getElementById('screen-discussion').classList.contains('active')) {
+            endDiscussion.disabled = false;
+        }
         console.warn('[server error]', data.message);
     }
 });
@@ -2554,6 +2759,8 @@ document.getElementById('btn-run-it-back').addEventListener('click', () => {
     socket.emit('set_rematch_ready', { ready: !rematchReady });
 });
 
+document.getElementById('btn-confirm-game-start').addEventListener('click', continueGameStartingReveal);
+
 document.getElementById('btn-player-confirm-vote').addEventListener('click', event => {
     event.currentTarget.disabled = true;
     socket.emit('confirm_vote_reveal');
@@ -2577,13 +2784,7 @@ document.getElementById('btn-confirm-role').addEventListener('click', () => {
     track('role_card_opened', { role: myRole || 'unknown', context: 'night_confirm' });
     clearAttention();
     populateRoleOverlay();
-    // Move to night info screen
-    const pending = window._nightInfoPending;
-    if (pending) {
-        showNightInfo(pending);
-    } else {
-        showScreen('screen-night');
-    }
+    acknowledgeRoleReveal();
 });
 
 function populateRoleOverlay() {

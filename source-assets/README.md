@@ -11,6 +11,9 @@ artwork.
   versions were selected for `static/assets/roles/`.
 - `backgrounds/` contains superseded background compositions.
 - `concepts/` contains layout and visual-development references.
+- `references/` contains supplied UI screenshots and composition references.
+- `backgrounds/opening/` retains superseded generated opening artwork that is
+  no longer loaded by the application.
 
 Runtime code must reference files under `static/`. When promoting an image,
 give it a lowercase kebab-case filename, place it in the matching

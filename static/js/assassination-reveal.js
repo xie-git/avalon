@@ -2,7 +2,8 @@
 (function () {
     'use strict';
 
-    const ART_PATH = '/static/assets/results/assassin-kills-merlin.png?v=20260825';
+    const PORTRAIT_ART_PATH = '/static/assets/results/assassin-kills-merlin.png?v=20260825';
+    const LANDSCAPE_ART_PATH = '/static/assets/results/assassin-kills-merlin-wide.png?v=20260827-production-polish';
     const STYLE_ID = 'assassination-merlin-reveal-styles';
     const REVEAL_ID = 'assassination-merlin-reveal';
     let lastRevealKey = null;
@@ -76,8 +77,11 @@
                 text-wrap: balance; text-shadow: 0 2px 12px #000;
             }
             @media (min-aspect-ratio: 4 / 3) {
-                .assassination-merlin-reveal-art { object-fit: contain; }
-                .assassination-merlin-reveal-copy { bottom: max(clamp(1.5rem, 5dvh, 3.5rem), env(safe-area-inset-bottom)); }
+                .assassination-merlin-reveal-art { object-fit: cover; object-position: 50% 50%; }
+                .assassination-merlin-reveal-copy {
+                    right: 52%;
+                    bottom: max(clamp(1.5rem, 5dvh, 3.5rem), env(safe-area-inset-bottom));
+                }
             }
             @media (prefers-reduced-motion: reduce) {
                 .assassination-merlin-reveal,
@@ -137,8 +141,11 @@
         const content = document.querySelector('#screen-game-over .game-over-content');
         content?.setAttribute('aria-hidden', 'true');
         if (content) content.inert = true;
-        reveal.querySelector('.assassination-merlin-reveal-backdrop').src = ART_PATH;
-        reveal.querySelector('.assassination-merlin-reveal-art').src = ART_PATH;
+        const artPath = window.matchMedia('(min-aspect-ratio: 4 / 3)').matches
+            ? LANDSCAPE_ART_PATH
+            : PORTRAIT_ART_PATH;
+        reveal.querySelector('.assassination-merlin-reveal-backdrop').src = artPath;
+        reveal.querySelector('.assassination-merlin-reveal-art').src = artPath;
         reveal.className = 'assassination-merlin-reveal';
         reveal.setAttribute('aria-hidden', 'false');
         document.body.classList.add('assassination-reveal-active');

@@ -16,7 +16,7 @@ browser—there are no accounts or app installations.
 - Six to ten seated players, optional practice bots, concurrent independent
   rooms, and spectators who can watch and chat without taking a seat.
 - Built-in avatars or voluntary 128 × 128 selfies, cinematic role/quest/result
-  artwork, a suspicion spectrum, public vote reveals, and a post-game
+  artwork, a draggable round table, public vote reveals, and a post-game
   Chronicle.
 - Durable SQLite storage for active-room recovery, chat, game history,
   first-party product events, private selfie metadata, and canonical research
@@ -91,8 +91,9 @@ implemented.
 | `ops/` | Optional, VM-specific host helpers excluded from the application image. |
 
 Runtime role, quest, and result art lives under `static/assets/`; entry/UI art
-lives under `static/img/`. `static/sounds/` contains retained audio sources but
-is intentionally excluded from the production image. See
+lives under `static/img/`. Paired-display music loops and their license
+provenance live under `static/music/`; retained legacy sound sources under
+`static/sounds/` remain excluded from the production image. See
 [source-assets/README.md](source-assets/README.md) for artwork handling rules.
 
 ## Local development

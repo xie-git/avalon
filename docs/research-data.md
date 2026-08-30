@@ -110,8 +110,8 @@ Visibility is an analysis hint:
 
 - `public`: safe to reveal during the game.
 - `private`: participant/product fact not intended for the shared screen.
-- `research_secret`: role assignment, individual vote/card, private suspicion,
-  or another fact that must stay private until the game is over—and should
+- `research_secret`: role assignment, individual vote/card, or another fact
+  that must stay private until the game is over—and should
   remain in the private archive afterward.
 
 ## What is captured
@@ -159,8 +159,8 @@ Visibility is an analysis hint:
 
 - chat message ID, actor, phase/mission/proposal, length, word count, URL flag,
   and content in the separate private chat table;
-- every private suspicion-spectrum layout and the public aggregate can be
-  reconstructed from checkpoints;
+- local round-table avatar arrangements stay in each browser and are not
+  submitted as research data;
 - chat panel opens/closes and unread count, help and role-card usage, selfie
   prompt/capture outcomes, victory/rematch views;
 - screen transitions and previous screen, page visibility, page-session uptime,
@@ -196,7 +196,7 @@ document contains:
   night acknowledgements, and pending mission outcome;
 - timer kind/deadline/remaining value;
 - winner, reason, and assassin target;
-- spotlight/rematch state and all private suspicion coordinates.
+- spotlight and rematch state.
 
 It never contains raw or hashed reconnect/host/recovery/pairing capabilities,
 Socket.IO IDs, IP addresses, environment variables, cookies, or base64 selfie
@@ -231,10 +231,11 @@ participants to `research_events` on `(game_id, actor_id)`.
 The built-in views are `research_proposal_facts`,
 `research_team_member_facts`, `research_vote_facts`,
 `research_mission_card_facts`, `research_mission_facts`,
-`research_assassination_facts`, `research_spectrum_rating_facts`,
-`research_phase_facts`, and `research_player_game_stats`. They flatten JSON and
-perform common joins while leaving the append-only stream as the source of
-truth.
+`research_assassination_facts`, `research_phase_facts`, and
+`research_player_game_stats`. They flatten JSON and perform common joins while
+leaving the append-only stream as the source of truth. The legacy
+`research_spectrum_rating_facts` view remains readable for historical events,
+but current clients no longer submit spectrum ratings.
 
 ## Avalon Wrapped output
 
@@ -253,10 +254,10 @@ HTML. Current sections include:
   co-player;
 - a compact `cards` array ready for a story/carousel UI plus per-game details.
 
-Possible later visualizations need no schema change: suspicion accuracy over
-time, trust networks from party selection, voting blocs, role-specific survival
+Possible later visualizations need no schema change: trust networks from party
+selection, voting blocs, role-specific survival
 curves, leader decision trees, quest deception timing, rejection-pressure
-effects, table-position effects, cohort retention, recovery funnels, phase
+effects, cohort retention, recovery funnels, phase
 dwell-time Sankeys, and version/ruleset A/B comparisons.
 
 ## Private CLI
@@ -298,8 +299,8 @@ Exports omit chat by default. `--redact` also replaces chat text even when
 
 This archive is deliberately private and has no HTTP history endpoint. It can
 still contain personal data: display names, voluntary selfie references,
-stable pseudonymous subjects, private game decisions, suspicion ratings, and—
-when explicitly exported—chat content. Operators should disclose the research
+stable pseudonymous subjects, private game decisions, and—when explicitly
+exported—chat content. Operators should disclose the research
 collection to players, restrict host/filesystem access, encrypt backups, avoid
 publishing unredacted bundles, and honor deletion requests by subject/game.
 

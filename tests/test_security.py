@@ -34,7 +34,7 @@ def test_security_headers_and_development_routes_are_closed():
     host_response = client.get("/host")
     assert b"host-admin-password" not in host_response.data
     assert b"Pair this screen" in host_response.data
-    assert b"Display only" in host_response.data
+    assert b"Paired Display" in host_response.data
     assert b'id="btn-start-game"' not in host_response.data
     assert b'id="btn-host-settings"' not in host_response.data
     assert b'id="discussion-slider"' not in host_response.data
@@ -48,23 +48,131 @@ def test_security_headers_and_development_routes_are_closed():
     assert "immutable" not in client.get("/static/favicon.svg").headers["Cache-Control"]
 
     presence_script = client.get("/static/js/presence.js").data
-    assert presence_script.index(b'data-view="order"') < presence_script.index(b'data-view="private"')
+    assert b"Group Average" not in presence_script
+    assert b">Private</button>" not in presence_script
+    assert b"presence-round-table-label" in presence_script
+    assert b"avalon-round-table:v1" in presence_script
     assert b">Reset</button>" in presence_script
 
+    common_css = client.get("/static/css/common.css").data
+    player_script = client.get("/static/js/player.js").data
+    host_script = client.get("/static/js/host.js").data
+    player_css = client.get("/static/css/player.css").data
+    host_css = client.get("/static/css/host.css").data
+    player_page = response.data
+    assert b"new-table-graphic.png" in common_css
+    assert b"mission-outcome-suspense" not in common_css
+    assert b"assassin-target-identity" in player_script
+    assert b"My Role" in player_page
+    assert b"The fate of the quest hangs in silence" not in player_page
+    assert b"The fate of the quest hangs in silence" not in host_response.data
+    assert b"grid-template-rows: repeat(2, auto)" in player_css
+    assert b'id="host-music-volume"' in host_response.data
+    assert b"quiet-night.mp3" in host_script
+    assert b"new-table-graphic.png" in host_css
 
-def test_party_pages_do_not_reference_portrait_or_audio_assets():
+
+def test_player_pages_do_not_reference_portrait_or_audio_assets():
     client = server.app.test_client()
     served_files = (
         client.get("/").data,
-        client.get("/host").data,
         client.get("/static/js/player.js").data,
-        client.get("/static/js/host.js").data,
         client.get("/static/css/common.css").data,
         client.get("/static/css/player.css").data,
     )
     combined = b"\n".join(served_files).lower()
     for marker in (b"new audio", b"/static/img/portraits", b"/static/sounds"):
         assert marker not in combined
+
+
+def test_paired_display_music_is_local_and_opt_in():
+    client = server.app.test_client()
+    host_page = client.get("/host").data.lower()
+    host_script = client.get("/static/js/host.js").data.lower()
+
+    assert b'id="host-music-player"' in host_page
+    assert b'data-music-track="off"' in host_page
+    assert b"/static/music/loops/" in host_script
+    assert b"player.play()" in host_script
+
+
+def test_opening_cinematic_requires_player_confirmation():
+    client = server.app.test_client()
+    player_page = client.get("/").data
+    player_script = client.get("/static/js/player.js").data
+
+    assert b'id="btn-confirm-game-start"' in player_page
+    assert b"pendingGameStartingRole" in player_script
+    assert b"continueGameStartingReveal" in player_script
+    assert b"confirm_game_opening" in player_script
+
+
+def test_paired_display_room_change_clears_stale_game_chrome():
+    client = server.app.test_client()
+    host_script = client.get("/static/js/host.js").data
+    host_css = client.get("/static/css/host.css").data
+
+    reset = host_script.split(b"function resetHostPresentationForRoomChange()", 1)[1].split(
+        b"// ---------------------------------------------------------------------------\n// Flash overlay", 1
+    )[0]
+    assert b"hideGameHeader()" in reset
+    assert b"host-mission-rail" in reset
+    assert b"mission-tracker" in reset
+    assert b"pairButton.textContent = 'Pair Display'" in reset
+    assert b"host-entry-active" in host_script
+    assert b"body.host-entry-active #game-header" in host_css
+
+
+def test_game_opening_waits_for_every_human_player(socket_client, create_game):
+    created, clients, _ = join_players(socket_client, create_game)
+    socket_client.emit("start_game")
+    game = server.games[created["room_code"]]
+
+    assert game.phase == server.GamePhase.ROLE_ASSIGNMENT
+    for client in clients[:-1]:
+        client.emit("confirm_game_opening")
+        assert game.phase == server.GamePhase.ROLE_ASSIGNMENT
+
+    status = packets_for(clients[-1], "game_opening_ack_status")[-1]
+    assert status["acknowledged_count"] == 5
+    assert status["required_count"] == 6
+    assert status["complete"] is False
+
+    clients[-1].emit("confirm_game_opening")
+    assert game.phase == server.GamePhase.NIGHT_PHASE
+
+
+def test_role_and_private_knowledge_share_one_reveal():
+    client = server.app.test_client()
+    player_page = client.get("/").data
+    player_script = client.get("/static/js/player.js").data
+
+    assert b'id="role-knowledge-portraits"' in player_page
+    assert b"role-knowledge-person" in player_script
+    assert b"acknowledgeRoleReveal" in player_script
+
+
+def test_each_discussion_start_reenables_the_leader_control():
+    player_script = server.app.test_client().get("/static/js/player.js").data
+    discussion_handler = player_script.split(b"socket.on('discussion_start'", 1)[1].split(
+        b"socket.on('discussion_tick'", 1
+    )[0]
+
+    assert b"endDiscussion.disabled = false" in discussion_handler
+
+
+def test_vote_reveal_layout_is_player_count_aware():
+    client = server.app.test_client()
+    player_script = client.get("/static/js/player.js").data
+    host_script = client.get("/static/js/host.js").data
+    player_styles = client.get("/static/css/player.css").data
+    host_styles = client.get("/static/css/host.css").data
+
+    assert b"cards.dataset.playerCount" in player_script
+    assert b"container.dataset.playerCount" in host_script
+    assert b'data-player-count="6"' in player_styles
+    assert b'data-player-count="10"' in player_styles
+    assert b'data-player-count="6"' in host_styles
 
 
 def test_chat_links_are_http_only_and_open_safely():
@@ -353,89 +461,18 @@ def test_phone_only_game_reaches_first_mission_without_host_display(socket_clien
         client.disconnect()
 
 
-def test_group_spectrum_averages_other_players_and_ignores_self_rating(
+def test_round_table_positions_are_local_and_absent_from_game_protocol(
     socket_client, create_game
 ):
-    created = create_game(socket_client)
-    arthur = server.socketio.test_client(server.app)
-    arthur.emit(
-        "join_game", {"room_code": created["room_code"], "player_name": "Arthur"}
-    )
-    arthur_join = packets_for(arthur, "join_success")[0]
-    merlin = server.socketio.test_client(server.app)
-    merlin.emit(
-        "join_game", {"room_code": created["room_code"], "player_name": "Merlin"}
-    )
-    merlin_join = packets_for(merlin, "join_success")[0]
-    percival = server.socketio.test_client(server.app)
-    percival.emit(
-        "join_game", {"room_code": created["room_code"], "player_name": "Percival"}
-    )
-    percival_join = packets_for(percival, "join_success")[0]
-    socket_client.get_received()
-
-    arthur.emit(
-        "update_spectrum_ratings",
-        {"positions": {
-            arthur_join["player_id"]: {"x": 1.0, "y": 1.0},
-            percival_join["player_id"]: {"x": 0.8, "y": 0.2},
-        }},
-    )
-    merlin.emit(
-        "update_spectrum_ratings",
-        {"positions": {
-            percival_join["player_id"]: {"x": 0.4, "y": 0.6},
-        }},
-    )
-    percival.emit(
-        "update_spectrum_ratings",
-        {"positions": {
-            arthur_join["player_id"]: {"x": 0.2, "y": 0.7},
-            percival_join["player_id"]: {"x": 0.0, "y": 0.0},
-        }},
-    )
-
-    positions = packets_for(socket_client, "public_spectrum_updated")[-1]["positions"]
-    assert positions[percival_join["player_id"]] == {"x": 0.6, "y": 0.4}
-    assert positions[arthur_join["player_id"]] == {"x": 0.2, "y": 0.7}
-
-    newcomer = server.socketio.test_client(server.app)
-    newcomer.emit(
-        "join_game", {"room_code": created["room_code"], "player_name": "Gawain"}
-    )
-    newcomer_join = packets_for(newcomer, "join_success")[0]
-    assert newcomer_join["public_spectrum"] == positions
-    newcomer.disconnect()
-    percival.disconnect()
-    merlin.disconnect()
-    arthur.disconnect()
-
-
-def test_group_spectrum_rejects_invalid_or_unauthorized_updates(socket_client, create_game):
     created = create_game(socket_client)
     player = server.socketio.test_client(server.app)
     player.emit(
         "join_game", {"room_code": created["room_code"], "player_name": "Arthur"}
     )
     joined = packets_for(player, "join_success")[0]
-    socket_client.get_received()
-
-    player.emit(
-        "update_spectrum_ratings",
-        {"positions": {joined["player_id"]: {"x": 1.2, "y": 0.5}}},
-    )
-    assert packets_for(player, "error")[-1]["message"] == (
-        "Spectrum coordinates must be between 0 and 1"
-    )
-
-    outsider = server.socketio.test_client(server.app)
-    outsider.emit(
-        "update_spectrum_ratings",
-        {"positions": {joined["player_id"]: {"x": 0.5, "y": 0.5}}},
-    )
-    assert packets_for(outsider, "error")[-1]["message"] == "Not connected to a game"
-    assert server.games[created["room_code"]].spectrum_ratings == {}
-    outsider.disconnect()
+    assert joined["player_id"]
+    assert "public_spectrum" not in joined
+    assert not hasattr(server.games[created["room_code"]], "spectrum_ratings")
     player.disconnect()
 
 
@@ -484,10 +521,6 @@ def test_spectator_chat_is_labeled_and_game_inputs_are_rejected(
     message = packets_for(socket_client, "chat_message")[-1]
     assert message["name"] == "Observer"
     assert message["is_spectator"] is True
-
-    spectator.emit("update_spectrum_ratings", {"positions": {}})
-    assert packets_for(spectator, "error")[-1]["message"] == "Not a player"
-    assert game.spectrum_ratings == {}
 
     game.phase = server.GamePhase.TEAM_VOTE
     spectator.emit("cast_vote", {"vote": "approve"})
@@ -647,6 +680,8 @@ def test_host_reconnect_snapshot_includes_night_confirmation_progress(
 ):
     created, clients, _ = join_players(socket_client, create_game)
     socket_client.emit("start_game")
+    for client in clients:
+        client.emit("confirm_game_opening")
     clients[0].emit("night_phase_ack")
 
     replacement = server.socketio.test_client(server.app)

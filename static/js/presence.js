@@ -1,4 +1,4 @@
-/* A small, dependency-free suspicion spectrum shared by host and phones. */
+/* A small, dependency-free draggable round table shared by host and phones. */
 (function () {
     'use strict';
 
@@ -118,41 +118,26 @@
     class PresenceTable {
         constructor(options = {}) {
             this.mode = options.mode === 'host' ? 'host' : 'player';
-            this.onPrivateChange = typeof options.onPrivateChange === 'function'
-                ? options.onPrivateChange
-                : () => {};
             this.roomCode = '';
             this.players = [];
-            this.privatePositions = {};
-            this.publicPositions = {};
-            this.view = 'order';
+            this.positions = {};
             this.revealedRoles = null;
             this.roleManifest = [];
             this.statusMode = 'lobby';
             this.completedPlayerKeys = new Set();
             this.leaderKey = '';
-            this.contributesToAverage = true;
             this.drag = null;
             this.mountedScreen = null;
 
             this.element = document.createElement('section');
-            this.element.className = `presence-table presence-${this.mode} hidden`;
-            this.element.setAttribute('aria-label', 'Good to bad suspicion spectrum');
+            this.element.className = `presence-table presence-${this.mode} presence-round-table hidden`;
+            this.element.setAttribute('aria-label', 'Draggable Round Table');
             this.element.innerHTML = `
                 <div class="presence-controls">
-                    <div class="presence-view-toggle" role="group" aria-label="Choose suspicion spectrum">
-                        <button type="button" data-view="order" aria-pressed="true">Round Table</button>
-                        <button type="button" data-view="public" aria-pressed="false">Group Average</button>
-                        <button type="button" data-view="private" aria-pressed="false">Private</button>
-                    </div>
+                    <span class="presence-round-table-label">Round Table</span>
                     <button type="button" class="presence-reset" title="Reset avatar positions">Reset</button>
                 </div>
                 <div class="presence-field">
-                    <div class="presence-spectrum-labels" aria-hidden="true">
-                        <span>Most likely good</span>
-                        <span>Unsure</span>
-                        <span>Most likely bad</span>
-                    </div>
                     <div class="presence-nodes"></div>
                 </div>
                 <div class="presence-role-manifest hidden" aria-label="Characters in this game"></div>`;
@@ -160,9 +145,6 @@
             this.nodes = this.element.querySelector('.presence-nodes');
             this.manifest = this.element.querySelector('.presence-role-manifest');
             this.element.querySelector('.presence-reset').addEventListener('click', () => this.reset());
-            this.element.querySelectorAll('[data-view]').forEach(button => {
-                button.addEventListener('click', () => this.setView(button.dataset.view));
-            });
 
             this.roleTooltip = document.createElement('div');
             this.roleTooltip.className = 'presence-character-tooltip hidden';
@@ -183,32 +165,25 @@
         }
 
         storageKey() {
-            return this.roomCode ? `avalon-private-spectrum:v2:${this.mode}:${this.roomCode}` : '';
-        }
-
-        viewStorageKey() {
-            return this.roomCode ? `avalon-spectrum-view:${this.mode}:${this.roomCode}` : '';
+            return this.roomCode ? `avalon-round-table:v1:${this.mode}:${this.roomCode}` : '';
         }
 
         setRoomCode(code) {
             const normalized = String(code || '').toUpperCase();
             if (normalized === this.roomCode) return;
             this.roomCode = normalized;
-            this.privatePositions = {};
-            this.publicPositions = {};
-            this.view = 'order';
+            this.positions = {};
             const key = this.storageKey();
             if (key) {
                 try {
                     const saved = JSON.parse(localStorage.getItem(key) || '{}');
                     if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
-                        this.privatePositions = this.sanitizePositions(saved);
+                        this.positions = this.sanitizePositions(saved);
                     }
                 } catch (_) {
-                    this.privatePositions = {};
+                    this.positions = {};
                 }
             }
-            this.updateViewControls();
             this.layout();
         }
 
@@ -229,19 +204,18 @@
                     const oldIndex = previousPlayers.findIndex(candidate =>
                         String(candidate.player_id || candidate.name) === String(player.player_id || player.name));
                     const key = String(player.player_id || player.name);
-                    const saved = this.privatePositions[key];
+                    const saved = this.positions[key];
                     if (oldIndex < 0 || !saved) return;
-                    const oldDefault = this.defaultPosition(oldIndex, previousCount);
+                    const oldDefault = this.orderPosition(oldIndex, previousCount);
                     if (Math.abs(saved.x - oldDefault.x) < 0.002 && Math.abs(saved.y - oldDefault.y) < 0.002) {
-                        this.privatePositions[key] = this.defaultPosition(newIndex, this.players.length);
+                        this.positions[key] = this.orderPosition(newIndex, this.players.length);
                     }
                 });
             }
             this.prunePositions();
-            this.ensurePrivatePositions();
+            this.ensurePositions();
             this.render();
             this.save();
-            this.notifyPrivateChange();
         }
 
         setGameStatus({ mode = 'game', completedIds = [], completedNames = [], leaderId = '', leaderName = '' } = {}) {
@@ -254,26 +228,11 @@
             this.render();
         }
 
-        defaultPosition(index, count) {
-            if (count > 5) {
-                const columns = Math.ceil(count / 2);
-                const column = Math.floor(index / 2);
-                return {
-                    x: columns <= 1 ? 0.5 : 0.1 + (column / (columns - 1)) * 0.8,
-                    y: index % 2 === 0 ? 0.38 : 0.76,
-                };
-            }
-            return {
-                x: count <= 1 ? 0.5 : 0.1 + (index / (count - 1)) * 0.8,
-                y: 0.62,
-            };
-        }
-
-        ensurePrivatePositions() {
+        ensurePositions() {
             this.players.forEach((player, index) => {
                 const key = String(player.player_id || player.name);
-                if (!this.privatePositions[key]) {
-                    this.privatePositions[key] = this.defaultPosition(index, this.players.length);
+                if (!this.positions[key]) {
+                    this.positions[key] = this.orderPosition(index, this.players.length);
                 }
             });
         }
@@ -292,42 +251,9 @@
 
         prunePositions() {
             const available = new Set(this.players.map(player => String(player.player_id || player.name)));
-            for (const positions of [this.privatePositions, this.publicPositions]) {
-                Object.keys(positions).forEach(key => {
-                    if (!available.has(key)) delete positions[key];
-                });
-            }
-        }
-
-        setPublicPositions(positions) {
-            this.publicPositions = this.sanitizePositions(positions);
-            this.prunePositions();
-            if (this.view === 'public') this.layout();
-        }
-
-        setView(view) {
-            this.view = ['public', 'order'].includes(view) ? view : 'private';
-            this.updateViewControls();
-            this.layout();
-        }
-
-        updateViewControls() {
-            this.element.querySelectorAll('[data-view]').forEach(button => {
-                button.setAttribute('aria-pressed', String(button.dataset.view === this.view));
+            Object.keys(this.positions).forEach(key => {
+                if (!available.has(key)) delete this.positions[key];
             });
-            const isPublic = this.view === 'public';
-            const isOrder = this.view === 'order';
-            this.element.classList.toggle('presence-public-view', isPublic);
-            this.element.classList.toggle('presence-order-view', isOrder);
-            const reset = this.element.querySelector('.presence-reset');
-            reset.classList.toggle('presence-reset-placeholder', isPublic || isOrder);
-            reset.disabled = isPublic || isOrder;
-            reset.setAttribute('aria-hidden', String(isPublic || isOrder));
-        }
-
-        setContributionEnabled(enabled) {
-            this.contributesToAverage = Boolean(enabled);
-            this.updateViewControls();
         }
 
         setRoleManifest(manifest) {
@@ -394,10 +320,6 @@
             this.roleTooltip.classList.add('hidden');
         }
 
-        activePositions() {
-            return this.view === 'public' ? this.publicPositions : this.privatePositions;
-        }
-
         orderPosition(index, count) {
             const angle = -Math.PI / 2 + (index / Math.max(1, count)) * Math.PI * 2;
             return {
@@ -458,13 +380,15 @@
                 node.style.setProperty('--player-color-dark', palette[0]);
                 node.style.setProperty('--player-color', palette[1]);
                 node.tabIndex = 0;
-                node.setAttribute('role', 'img');
+                node.setAttribute('role', 'button');
+                node.setAttribute('aria-roledescription', 'draggable player');
                 const revealLabel = reveal ? `, ${team}, ${reveal.role}` : '';
-                node.setAttribute('aria-label', `${player.name}, ${player.connected === false ? 'disconnected' : 'connected'}${revealLabel}`);
+                node.setAttribute('aria-label', `${player.name}, turn ${this.players.indexOf(player) + 1}, ${player.connected === false ? 'disconnected' : 'connected'}${revealLabel}. Drag or use arrow keys to reposition.`);
 
                 const portrait = document.createElement('span');
                 portrait.className = 'presence-portrait';
                 if (player.avatar_image) {
+                    portrait.classList.add('selfie-portrait');
                     const image = document.createElement('img');
                     image.src = player.avatar_image;
                     image.alt = '';
@@ -566,18 +490,9 @@
             if (!width || !height) return;
             const nodeElements = [...this.nodes.children];
             const count = nodeElements.length;
-            const positions = this.activePositions();
             nodeElements.forEach((node, index) => {
-                const saved = this.view === 'order'
-                    ? this.orderPosition(index, count)
-                    : positions[node.dataset.playerKey];
-                let xRatio;
-                let yRatio;
-                if (saved) {
-                    ({ x: xRatio, y: yRatio } = saved);
-                } else {
-                    ({ x: xRatio, y: yRatio } = this.defaultPosition(index, count));
-                }
+                const saved = this.positions[node.dataset.playerKey] || this.orderPosition(index, count);
+                const { x: xRatio, y: yRatio } = saved;
                 this.place(node, xRatio * width, yRatio * height, width, height);
             });
         }
@@ -593,7 +508,6 @@
         }
 
         startDrag(event, node) {
-            if (this.view !== 'private') return;
             if (event.button !== undefined && event.button !== 0) return;
             event.preventDefault();
             node.focus({ preventScroll: true });
@@ -614,7 +528,7 @@
                 rect.width,
                 rect.height,
             );
-            this.activePositions()[node.dataset.playerKey] = {
+            this.positions[node.dataset.playerKey] = {
                 x: point.x / rect.width,
                 y: point.y / rect.height,
             };
@@ -625,14 +539,12 @@
             node.classList.remove('dragging');
             this.drag = null;
             this.save();
-            this.notifyPrivateChange();
         }
 
         moveWithKeyboard(event, node) {
-            if (this.view !== 'private') return;
             if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
             event.preventDefault();
-            const positions = this.activePositions();
+            const positions = this.positions;
             const current = positions[node.dataset.playerKey] || { x: 0.5, y: 0.58 };
             const step = 0.035;
             positions[node.dataset.playerKey] = {
@@ -641,34 +553,26 @@
             };
             this.layout();
             this.save();
-            this.notifyPrivateChange();
-        }
-
-        notifyPrivateChange() {
-            if (!this.roomCode || !this.contributesToAverage) return;
-            this.onPrivateChange({ positions: this.sanitizePositions(this.privatePositions) });
         }
 
         save() {
             const key = this.storageKey();
             if (!key) return;
             try {
-                localStorage.setItem(key, JSON.stringify(this.privatePositions));
+                localStorage.setItem(key, JSON.stringify(this.positions));
             } catch (_) {
-                // The spectrum still works if browser storage is unavailable.
+                // The round table still works if browser storage is unavailable.
             }
         }
 
         reset() {
-            if (this.view === 'public') return;
-            this.privatePositions = {};
-            this.ensurePrivatePositions();
+            this.positions = {};
+            this.ensurePositions();
             const key = this.storageKey();
             if (key) {
                 try { localStorage.removeItem(key); } catch (_) { /* no-op */ }
             }
             this.save();
-            this.notifyPrivateChange();
             this.layout();
         }
 

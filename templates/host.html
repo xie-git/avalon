@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon — Host</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260827-cinematics3">
-<link rel="stylesheet" href="/static/css/host.css?v=20260827-cinematics3">
-<link rel="stylesheet" href="/static/css/entry.css?v=20260824-uniform-entry-4">
+<link rel="stylesheet" href="/static/css/common.css?v=20260830-spotlight-fit-1">
+<link rel="stylesheet" href="/static/css/host.css?v=20260830-join-bg-1">
+<link rel="stylesheet" href="/static/css/entry.css?v=20260829-production-bg-fix-1">
 <style>
 .reorder-label {
     font-family: var(--font-heading);
@@ -66,7 +66,20 @@
     <div class="leader-display" id="leader-display">Leader: <span>—</span></div>
     <div id="host-spectator-count" class="host-spectator-count hidden" aria-live="polite">◈ 0 spectators</div>
     <div id="host-room-code-badge" class="host-room-code-badge">Room <strong>----</strong></div>
+    <div class="host-music-controls" id="host-music-controls" aria-label="Paired display music">
+        <span>Music</span>
+        <button type="button" class="host-music-button active" data-music-track="off" aria-pressed="true">Off</button>
+        <button type="button" class="host-music-button" data-music-track="quiet-night" aria-pressed="false" title="The Quiet Night Medieval Village">Quiet Night</button>
+        <button type="button" class="host-music-button" data-music-track="celtic-realm" aria-pressed="false" title="Medieval Celtic Music and Fantasy Celtic Music">Celtic</button>
+        <button type="button" class="host-music-button" data-music-track="waterfall-citadel" aria-pressed="false" title="The Waterfall Citadel">Citadel</button>
+        <label class="host-volume-control" for="host-music-volume">
+            <span>Volume</span>
+            <input id="host-music-volume" type="range" min="0" max="100" step="1" value="34" aria-label="Music volume" aria-valuetext="34 percent">
+            <output id="host-music-volume-output" for="host-music-volume">34%</output>
+        </label>
+    </div>
 </div>
+<audio id="host-music-player" loop preload="none"></audio>
 
 <div id="page-transition"></div>
 <div id="flash-overlay"></div>
@@ -122,41 +135,62 @@
     <!-- ============ LOBBY SCREEN ============ -->
     <div class="screen" id="screen-lobby">
         <div class="lobby-main">
-            <div class="room-code-block">
-                <div class="room-code-label">Room Code</div>
-                <div class="room-code" id="room-code-display">----</div>
-                <div class="room-join-url" id="join-url-display"></div>
+            <header class="tv-lobby-brand" aria-label="Avalon — Join the Quest">
+                <span aria-hidden="true"></span>
+                <div><strong>AVALON</strong><small>Join the Quest</small></div>
+                <span aria-hidden="true"></span>
+            </header>
+            <section class="tv-lobby-join-panel">
+                <div class="room-code-block">
+                    <div class="room-code-label">Room Code</div>
+                    <div class="room-code" id="room-code-display">----</div>
+                    <div class="room-join-url" id="join-url-display"></div>
+                    <div class="host-can-play-note">Join from a phone at the address above</div>
+                </div>
                 <div class="join-tools">
                     <img id="join-qr" class="join-qr hidden" alt="QR code to join this room">
                 </div>
-                <div class="host-can-play-note">The host joins as a player from the same address on their phone.</div>
-            </div>
-            <div class="round-table-container suspicion-spectrum-container" id="lobby-spectrum"></div>
-            <p class="reorder-label">GAME TURN ORDER</p>
-            <ol id="reorder-list" class="reorder-list"></ol>
+                <div class="lobby-sidebar">
+                    <div class="panel">
+                        <div class="player-count-indicator">
+                            <div class="count-dot" id="player-count-dot"></div>
+                            <span id="player-count-text">0 / 10 Players</span>
+                        </div>
+                        <div class="host-ready-summary" id="host-ready-summary" aria-live="polite">
+                            <strong>0 ready</strong><span>0 not ready</span>
+                        </div>
+                        <div class="host-ready-detail" id="host-ready-detail">Waiting for players to join</div>
+                    </div>
+                    <div class="panel shared-display-note">
+                        <strong>Paired Display</strong>
+                        <span>Controls remain on the host device</span>
+                    </div>
+                </div>
+            </section>
+            <div class="round-table-container round-table-stage-container" id="lobby-round-table"></div>
+            <footer class="tv-lobby-waiting" aria-live="polite">
+                <span class="tv-lobby-crown" aria-hidden="true">♛</span>
+                <strong id="host-ready-footer-title">Waiting for players</strong>
+                <span id="host-ready-footer-count">0 of 6 players ready</span>
+                <small>Paired Display · Controls remain on the host device</small>
+            </footer>
+            <ol id="reorder-list" class="reorder-list hidden" aria-hidden="true"></ol>
         </div>
-        <div class="lobby-sidebar">
-            <div class="panel">
-                <div class="player-count-indicator">
-                    <div class="count-dot" id="player-count-dot"></div>
-                    <span id="player-count-text">0 / 10 Players</span>
-                </div>
-                <div class="host-ready-summary" id="host-ready-summary" aria-live="polite">
-                    <strong>0 ready</strong><span>0 not ready</span>
-                </div>
-                <div class="host-ready-detail" id="host-ready-detail">Waiting for players to join</div>
-            </div>
-            <div class="panel shared-display-note">
-                <strong>Display only</strong>
-                <span>Game controls stay on the host’s phone. This screen updates automatically.</span>
-            </div>
+    </div>
+
+    <!-- ============ GAME OPENING CINEMATIC ============ -->
+    <div class="screen game-starting-screen" id="screen-game-starting" aria-live="polite">
+        <img class="game-starting-art" src="/static/assets/opening/avalon-game-start-wide.png?v=20260828" alt="The fellowship gathers around the Round Table beneath the title Avalon">
+        <div class="game-starting-scrim" aria-hidden="true"></div>
+        <div class="game-starting-copy">
+            <span>In the gathering dark, every allegiance will be revealed.</span>
+            <p class="game-opening-status" id="game-opening-status">Waiting for every player to enter Avalon…</p>
         </div>
     </div>
 
     <!-- ============ NIGHT PHASE ============ -->
     <div class="screen" id="screen-night">
         <div class="night-stars" id="night-stars"></div>
-        <h1 class="night-title">Close your eyes...</h1>
         <p class="dim-text" style="font-style:italic;font-size:1.2rem">The night reveals its secrets</p>
         <div class="night-progress">
             Awaiting confirmation... <span id="night-confirmed">0</span> / <span id="night-total">0</span>
@@ -180,7 +214,7 @@
                 <div class="timer-text" id="timer-text">—</div>
             </div>
         </div>
-        <div id="host-discussion-spotlight" class="discussion-spotlight hidden" aria-live="polite"></div>
+        <div id="host-discussion-spotlight" class="discussion-spotlight discussion-spotlight--tv hidden" aria-live="polite"></div>
     </div>
 
     <!-- ============ TEAM PROPOSAL ============ -->
@@ -201,31 +235,34 @@
             <h2 id="vote-leader-label">Leader proposes:</h2>
             <div class="vote-team-names" id="vote-team-names"></div>
         </div>
-        <p class="heading-font" style="font-size:1rem;letter-spacing:0.15em;color:var(--text-secondary)">ALL PLAYERS: CAST YOUR VOTE</p>
         <div class="vote-status-grid" id="vote-status-grid"></div>
     </div>
 
     <!-- ============ VOTE REVEAL ============ -->
     <div class="screen" id="screen-vote-reveal">
-        <div class="vote-team-banner vote-reveal-team-banner">
-            <h2>The proposed quest party:</h2>
-            <div class="vote-team-names" id="vote-reveal-team-names"></div>
+        <img class="vote-reveal-background" src="/static/assets/votes/cards-revealed-wide.png?v=20260829-cards4k" alt="The fellowship journeys toward Avalon as the court's votes are revealed">
+        <div class="vote-reveal-scrim" aria-hidden="true"></div>
+        <div class="vote-reveal-stage" role="status" aria-live="polite">
+            <div class="vote-cards-grid" id="vote-cards-container"></div>
+            <div class="vote-result-copy hidden" id="vote-result-copy-host">
+                <div class="vote-result-banner" id="vote-result-banner"></div>
+                <p id="vote-result-flavor-host"></p>
+                <small id="vote-result-ready-host">Continue on your phones when ready</small>
+            </div>
         </div>
-        <div class="vote-cards-grid" id="vote-cards-container"></div>
-        <div class="vote-result-banner hidden" id="vote-result-banner"></div>
     </div>
 
     <!-- ============ MISSION ============ -->
     <div class="screen" id="screen-mission">
         <div class="cinematic-reveal host-mission-begins" id="host-mission-begins">
-            <img class="cinematic-reveal-backdrop" src="/static/assets/quests/quest-begins-v2.png?v=20260827" alt="" aria-hidden="true">
-            <img class="cinematic-reveal-art" src="/static/assets/quests/quest-begins-v2.png?v=20260827" alt="A fellowship setting out toward Avalon">
+            <img class="cinematic-reveal-backdrop" src="/static/assets/quests/quest-begins-alt.png?v=20260830-ui-2" alt="" aria-hidden="true">
+            <img class="cinematic-reveal-art" src="/static/assets/quests/quest-begins-alt.png?v=20260830-ui-2" alt="A fellowship overlooking Avalon at sunrise">
             <div class="cinematic-reveal-scrim"></div>
-            <div class="cinematic-reveal-copy">
-                <p class="cinematic-reveal-eyebrow">The fate of Avalon rests with them</p>
+            <div class="cinematic-reveal-copy mission-begins-copy quest-begun-ui">
+                <p class="cinematic-reveal-eyebrow">The fate of Avalon rests with you</p>
                 <h1>Quest Begins</h1>
-                <p>A fellowship has been chosen. Trust travels beside betrayal.</p>
-                <div class="cinematic-party" id="host-mission-party"></div>
+                <p class="quest-begins-flavor">A fellowship has been chosen. Trust travels beside betrayal.</p>
+                <div class="cinematic-party" id="host-mission-party" aria-label="Quest party"></div>
                 <div class="mission-progress">Cards sealed: <span id="mission-played">0</span> / <span id="mission-total">0</span></div>
             </div>
         </div>
@@ -238,6 +275,7 @@
         <div class="host-card-reveal-stage" id="host-card-reveal-stage">
             <p class="cinematic-reveal-eyebrow">The fellowship returns</p>
             <h1>The cards are unsealed</h1>
+            <p class="quest-reveal-omen">The fellowship’s fate lies sealed — triumph or treachery waits beneath.</p>
             <div class="mission-cards-display" id="mission-cards-display"></div>
         </div>
     </div>
@@ -279,17 +317,21 @@
             </div>
         </div>
         <div class="game-over-content">
-            <div class="game-over-banner" id="game-over-banner"></div>
-            <p class="win-reason" id="win-reason-text"></p>
-            <section class="victory-group-card" id="victory-group-card-host" aria-label="Victory group portrait">
-                <div class="victory-card-kicker">THE CHRONICLE RECORDS</div>
-                <div class="victory-card-crest" aria-hidden="true">♜</div>
+            <header class="finale-heading">
+                <div class="finale-crown" aria-hidden="true">♛</div>
+                <div class="game-over-banner" id="game-over-banner"></div>
+                <p class="win-reason" id="win-reason-text"></p>
+            </header>
+            <section class="victory-group-card" id="victory-group-card-host" aria-label="Winning players">
+                <div class="victory-card-kicker">Winners</div>
                 <h2 class="victory-card-title"></h2>
                 <p class="victory-card-subtitle"></p>
                 <div class="victory-card-party"></div>
-                <div class="victory-card-footer">AVALON · <span class="victory-card-room"></span></div>
             </section>
-            <div class="roles-reveal-grid" id="roles-reveal-grid"></div>
+            <section class="final-role-gallery-section" id="host-full-role-reveal">
+                <h3>Full Role Reveal</h3>
+                <div class="final-role-gallery" id="roles-reveal-grid"></div>
+            </section>
             <div class="game-chronicle host-chronicle">
                 <h3>Chronicle of Avalon</h3>
                 <div id="chronicle-host"></div>
@@ -298,6 +340,12 @@
                 <p class="shared-display-finale-note">The host can start a rematch from their phone.</p>
             </div>
             <div class="rematch-status" id="rematch-status-host" aria-live="polite">Waiting for players to choose “Run It Back”…</div>
+            <footer class="finale-footer">
+                <span class="finale-footer-crown" aria-hidden="true">♛</span>
+                <strong>Room <span id="finale-room-code-host">----</span></strong>
+                <i aria-hidden="true">•</i>
+                <span>Thanks for playing Avalon</span>
+            </footer>
         </div>
     </div>
 
@@ -306,9 +354,9 @@
 <div id="host-chat-strip" class="host-chat-strip hidden" aria-live="polite"></div>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/presence.js?v=20260827-cinematics3"></script>
-<script src="/static/js/host.js?v=20260827-cinematics3"></script>
-<script src="/static/js/assassination-reveal.js?v=20260826"></script>
-<script src="/static/js/final-role-gallery.js?v=20260825"></script>
+<script src="/static/js/presence.js?v=20260828-round-table-ui-1"></script>
+<script src="/static/js/host.js?v=20260830-quest-success-alt-1"></script>
+<script src="/static/js/assassination-reveal.js?v=20260827-production-polish-v3"></script>
+<script src="/static/js/final-role-gallery.js?v=20260829-finale-redesign-1"></script>
 </body>
 </html>

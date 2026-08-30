@@ -77,6 +77,7 @@
         const portrait = document.createElement('div');
         portrait.className = 'final-role-portrait';
         if (player.avatar_image) {
+            portrait.classList.add('selfie-portrait');
             const image = document.createElement('img');
             image.src = player.avatar_image;
             image.alt = '';
@@ -130,11 +131,9 @@
     function renderPlayerGallery(summary) {
         const container = document.getElementById('roles-list-player');
         const section = container?.closest('.game-over-roles');
-        const chronicle = document.querySelector('#screen-game-over .game-chronicle:not(.host-chronicle)');
         if (!container || !section) return;
         section.classList.add('final-role-gallery-section');
         section.classList.remove('hidden');
-        if (chronicle) chronicle.after(section);
         renderGallery(container, summary);
     }
 
@@ -151,7 +150,7 @@
             heading.textContent = 'Full Role Reveal';
             section.append(heading, container);
         }
-        chronicle.after(section);
+        chronicle.before(section);
         renderGallery(container, summary);
     }
 

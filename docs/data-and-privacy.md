@@ -5,8 +5,8 @@ after disconnects/restarts and completed games can be analyzed. There are no
 public history endpoints, advertising trackers, or third-party analytics.
 
 This archive is private, but it is not anonymous: it can contain player names,
-voluntary selfie references, chat text, roles, votes, quest cards, suspicion
-ratings, and pseudonymous cross-game identifiers. Hosts should disclose that
+voluntary selfie references, chat text, roles, votes, quest cards, and
+pseudonymous cross-game identifiers. Hosts should disclose that
 collection to players and protect exports and backups accordingly.
 
 ## Storage layout

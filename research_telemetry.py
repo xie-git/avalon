@@ -82,7 +82,7 @@ def replay_state(game: Any, *, captured_at: float | None = None) -> dict[str, An
     """Build a capability-free authoritative state sufficient for exact replay.
 
     The snapshot intentionally includes hidden roles, individual votes/cards,
-    private suspicion coordinates, and stable seat IDs because it is a private
+    and stable seat IDs because it is a private
     research artifact.  Raw/hashed auth capabilities, socket IDs, IP data, and
     embedded selfie bytes are never included.
     """
@@ -189,16 +189,6 @@ def replay_state(game: Any, *, captured_at: float | None = None) -> dict[str, An
         "social": {
             "spotlight_player_id": game.spotlight_player_id,
             "rematch_ready_player_ids": sorted(game.rematch_ready),
-            "spectrum_ratings": {
-                rater_id: {
-                    target_id: {
-                        "x": float(position["x"]),
-                        "y": float(position["y"]),
-                    }
-                    for target_id, position in sorted(positions.items())
-                }
-                for rater_id, positions in sorted(game.spectrum_ratings.items())
-            },
         },
     }
     encoded = canonical_json(state).encode("utf-8")
@@ -221,7 +211,7 @@ def classify_event(event_type: str, source: str) -> str:
         return "lifecycle"
     if event_type.startswith(("player_join", "spectator_join", "settings_", "avatar_", "selfie_", "player_ready", "player_renamed", "roster_", "beta_")):
         return "lobby"
-    if event_type.startswith(("chat_", "discussion_spotlight", "spectrum_")):
+    if event_type.startswith(("chat_", "discussion_spotlight")):
         return "social"
     if event_type.startswith(
         (

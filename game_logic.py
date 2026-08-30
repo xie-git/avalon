@@ -214,6 +214,7 @@ class GameState:
         self.pending_vote_result: dict | None = None
         self.mission_cards: dict[str, str] = {}  # player_id -> "success"/"fail"
         self.pending_mission_reveal: dict | None = None
+        self.opening_acks: set[str] = set()
         self.night_acks: set[str] = set()
         self.vote_reveal_acks: set[str] = set()
         self.mission_intro_acks: set[str] = set()
@@ -252,11 +253,6 @@ class GameState:
         # Host-issued, short-lived recovery codes for disconnected seats.
         self.seat_recovery_codes: dict[str, tuple[str, float]] = {}
         self.display_pair_codes: dict[str, float] = {}
-
-        # Each seated player's private suspicion layout, submitted as normalized
-        # coordinates. The shared board is computed from these ratings and never
-        # includes a player's placement of their own avatar.
-        self.spectrum_ratings: dict[str, dict[str, dict[str, float]]] = {}
 
     def player_count(self) -> int:
         return len(self.players)
@@ -306,6 +302,7 @@ class GameState:
         self.pending_vote_result = None
         self.mission_cards = {}
         self.pending_mission_reveal = None
+        self.opening_acks = set()
         self.night_acks = set()
         self.vote_reveal_acks = set()
         self.mission_intro_acks = set()
@@ -658,29 +655,6 @@ def get_game_summary(game: GameState) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def spectrum_average_positions(game: GameState) -> dict[str, dict[str, float]]:
-    """Average every target's ratings, excluding the target's self-rating."""
-    totals: dict[str, list[float]] = {}
-    for rater_id, positions in game.spectrum_ratings.items():
-        if rater_id not in game.players or game.players[rater_id].is_bot:
-            continue
-        for target_id, position in positions.items():
-            if target_id not in game.players or target_id == rater_id:
-                continue
-            total = totals.setdefault(target_id, [0.0, 0.0, 0.0])
-            total[0] += position["x"]
-            total[1] += position["y"]
-            total[2] += 1
-    return {
-        target_id: {
-            "x": round(total[0] / total[2], 6),
-            "y": round(total[1] / total[2], 6),
-        }
-        for target_id, total in totals.items()
-        if total[2]
-    }
-
-
 def role_manifest(game: GameState) -> list[dict]:
     """Public role lineup for this player count, without assignments."""
     teams = PLAYER_COUNT_ROLES.get(game.player_count())
@@ -728,7 +702,6 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
             "beta_test_mode": game.beta_test_mode,
             "beta_test_player_count": game.beta_test_player_count,
         },
-        "public_spectrum": spectrum_average_positions(game),
         "role_manifest": role_manifest(game),
         "timer_kind": game.timer_kind,
         "timer_remaining": (
@@ -746,6 +719,7 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
         "mission_cards_played_ids": [
             pid for pid in game.proposed_team if pid in game.mission_cards
         ],
+        "opening_ack_ids": sorted(game.opening_acks),
         "vote_reveal_ack_ids": sorted(game.vote_reveal_acks),
         "mission_intro_ack_ids": sorted(game.mission_intro_acks),
         "mission_reveal_ack_ids": sorted(game.mission_reveal_acks),
@@ -764,6 +738,7 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
         snap["my_vote"] = game.votes.get(player_id)
         snap["my_mission_card"] = game.mission_cards.get(player_id)
         snap["night_acknowledged"] = player_id in game.night_acks
+        snap["opening_acknowledged"] = player_id in game.opening_acks
 
     leader = game.current_leader()
     if leader:

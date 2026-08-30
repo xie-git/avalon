@@ -9,9 +9,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260827-cinematics3">
-<link rel="stylesheet" href="/static/css/player.css?v=20260827-cinematics3">
-<link rel="stylesheet" href="/static/css/entry.css?v=20260824-responsive-entry">
+<link rel="stylesheet" href="/static/css/common.css?v=20260830-spotlight-fit-1">
+<link rel="stylesheet" href="/static/css/player.css?v=20260830-status-text-1">
+<link rel="stylesheet" href="/static/css/entry.css?v=20260829-production-bg-fix-1">
 </head>
 <body data-force-new="{{ 'true' if force_new else 'false' }}">
 
@@ -23,9 +23,6 @@
 <div id="player-board" class="player-board hidden">
     <div class="pb-shields" id="pb-shields"></div>
     <div class="pb-stats">
-        <button type="button" class="pb-role-peek role-reminder-trigger" aria-haspopup="dialog" aria-label="Open my role card">
-            <span aria-hidden="true">◈</span> Role
-        </button>
         <div class="pb-stat pb-proposal-stat role-reminder-trigger" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Team proposal 1 of 5; show my role">
             <span>PROPOSAL</span>
             <div class="pb-proposal-circles" aria-hidden="true"><i class="active"></i><i></i><i></i><i></i><i></i></div>
@@ -36,7 +33,10 @@
             <div class="pb-fail-circles" aria-hidden="true"><i></i><i></i><i></i></div>
             <strong id="pb-fails" class="sr-only">0/3</strong>
         </div>
-        <div class="pb-stat"><span>TIME</span><strong id="pb-game-time">00:00</strong></div>
+        <button type="button" class="pb-role-peek role-reminder-trigger" aria-haspopup="dialog" aria-label="Open my role card">
+            <span aria-hidden="true">◈</span> My Role
+        </button>
+        <div class="pb-stat" aria-label="Elapsed game time"><strong id="pb-game-time">00:00</strong></div>
     </div>
 </div>
 
@@ -201,6 +201,18 @@
         <p class="waiting-text" style="margin-top:1rem">Waiting for the host to begin...</p>
     </div>
 
+    <!-- ============ GAME OPENING CINEMATIC ============ -->
+    <div class="screen game-starting-screen" id="screen-game-starting" aria-live="polite">
+        <img class="game-starting-art" src="/static/assets/opening/avalon-game-start-mobile.png?v=20260828" alt="The fellowship gathers around the Round Table beneath the title Avalon">
+        <div class="game-starting-scrim" aria-hidden="true"></div>
+        <div class="game-starting-copy">
+            <span>Your allegiance is about to be revealed.</span>
+            <button class="btn btn-primary cinematic-action-button" id="btn-confirm-game-start" disabled>
+                Enter Avalon
+            </button>
+        </div>
+    </div>
+
     <!-- ============ ROLE REVEAL SCREEN ============ -->
     <div class="screen" id="screen-role">
         <div class="role-reveal-product" id="role-reveal-product">
@@ -217,11 +229,16 @@
                 <p class="role-reveal-eyebrow">Your charge</p>
                 <p class="role-flavor" id="role-flavor-display"></p>
                 <p class="role-description" id="role-desc-display"></p>
+                <section class="role-knowledge hidden" id="role-knowledge" aria-live="polite">
+                    <p class="role-knowledge-label" id="role-knowledge-label"></p>
+                    <div class="role-knowledge-portraits" id="role-knowledge-portraits"></div>
+                </section>
             </div>
         </div>
         <button class="btn btn-primary role-confirm-button" id="btn-confirm-role" disabled>
             I understand my role
         </button>
+        <p class="role-reveal-waiting hidden" id="role-reveal-waiting">Waiting for the fellowship…</p>
     </div>
 
     <!-- ============ NIGHT PHASE INFO ============ -->
@@ -253,7 +270,7 @@
             <span>Time remaining</span>
             <div class="timer-small" id="discussion-timer-player">—</div>
         </div>
-        <div id="player-discussion-spotlight" class="discussion-spotlight hidden" aria-live="polite"></div>
+        <div id="player-discussion-spotlight" class="discussion-spotlight discussion-spotlight--phone hidden" aria-live="polite"></div>
         <p class="waiting-text" style="font-size:0.9rem">Deliberate. Argue. Trust wisely.</p>
         <div class="spotlight-leader-controls hidden" id="spotlight-leader-controls">
             <label for="spotlight-player-select">Accusation Spotlight</label>
@@ -268,17 +285,17 @@
 
     <!-- ============ VOTE REVEAL — all phones ============ -->
     <div class="screen" id="screen-vote-reveal-player">
-        <div class="screen-header">
-            <div class="screen-title-small">The Votes Are Revealed</div>
+        <img class="vote-reveal-background" src="/static/assets/votes/cards-revealed-mobile.png?v=20260829-cards2" alt="The fellowship journeys toward Avalon as the court's votes are revealed">
+        <div class="vote-reveal-scrim" aria-hidden="true"></div>
+        <div class="vote-reveal-stage" role="status" aria-live="polite">
+            <div class="player-reveal-cards" id="player-vote-reveal-cards"></div>
+            <div class="vote-result-copy hidden" id="player-vote-result-copy">
+                <div class="player-reveal-banner" id="player-vote-reveal-result"></div>
+                <p id="player-vote-reveal-flavor"></p>
+            </div>
+            <button class="btn btn-primary cinematic-action-button hidden" id="btn-player-confirm-vote">Continue</button>
+            <p class="waiting-text" id="player-vote-reveal-waiting">The court’s judgment is being revealed…</p>
         </div>
-        <div class="vote-team-display vote-reveal-team-display">
-            <h3>Proposed quest party</h3>
-            <div class="vote-team-names-list" id="player-vote-reveal-team"></div>
-        </div>
-        <div class="player-reveal-cards" id="player-vote-reveal-cards"></div>
-        <div class="player-reveal-banner" id="player-vote-reveal-result"></div>
-        <button class="btn btn-primary hidden" id="btn-player-confirm-vote" style="width:100%">Continue</button>
-        <p class="waiting-text" id="player-vote-reveal-waiting">The court’s judgment is being revealed…</p>
     </div>
 
     <!-- ============ TEAM PROPOSAL — leader ============ -->
@@ -306,6 +323,7 @@
         <div class="quest-card-reveal-stage" id="player-quest-card-stage" role="status" aria-live="polite">
             <p class="cinematic-reveal-eyebrow">The fellowship returns</p>
             <h1>The cards are unsealed</h1>
+            <p class="quest-reveal-omen">The fellowship’s fate lies sealed — triumph or treachery waits beneath.</p>
             <div class="quest-card-reveal-grid" id="player-quest-card-grid"></div>
         </div>
     </div>
@@ -323,7 +341,7 @@
                 <div class="cinematic-party" id="player-mission-result-party" aria-label="Quest party"></div>
             </div>
         </div>
-        <button class="btn quest-reveal-action hidden" id="btn-player-next-round">Continue</button>
+        <button class="btn cinematic-action-button quest-reveal-action hidden" id="btn-player-next-round">Continue</button>
         <p class="quest-reveal-waiting" id="player-mission-reveal-waiting">The chronicle is still unfolding…</p>
     </div>
 
@@ -354,8 +372,8 @@
     <!-- ============ MISSION SCREEN ============ -->
     <div class="screen" id="screen-mission">
         <div class="cinematic-reveal mission-begins-product" id="mission-begins-product" role="status" aria-live="polite">
-            <img class="cinematic-reveal-backdrop" src="/static/assets/quests/quest-begins-v2.png?v=20260827" alt="" aria-hidden="true">
-            <img class="cinematic-reveal-art" src="/static/assets/quests/quest-begins-v2.png?v=20260827" alt="A fellowship setting out toward Avalon">
+            <img class="cinematic-reveal-backdrop" src="/static/assets/quests/quest-begun-mobile.png?v=20260828" alt="" aria-hidden="true">
+            <img class="cinematic-reveal-art" src="/static/assets/quests/quest-begun-mobile.png?v=20260828" alt="A fellowship setting out toward Avalon">
             <div class="cinematic-reveal-scrim"></div>
             <div class="cinematic-reveal-copy mission-begins-copy">
                 <p class="cinematic-reveal-eyebrow">The fate of Avalon rests with you</p>
@@ -364,7 +382,7 @@
                 <div class="cinematic-party" id="player-mission-begins-party" aria-label="Quest party"></div>
             </div>
         </div>
-        <button class="btn quest-reveal-action" id="btn-enter-quest">Enter the Quest</button>
+        <button class="btn cinematic-action-button quest-reveal-action" id="btn-enter-quest">Enter the Quest</button>
         <p class="quest-reveal-waiting hidden" id="mission-intro-waiting">Waiting for the fellowship to enter…</p>
         <div class="mission-choice-overlay hidden" id="mission-on-team">
             <p class="cinematic-reveal-eyebrow">Choose your quest card</p>
@@ -391,8 +409,9 @@
             <div class="screen-subtitle">Who is Merlin?</div>
         </div>
         <div class="assassin-target-list" id="assassin-target-list"></div>
-        <button class="btn btn-danger" id="btn-assassinate" disabled style="width:100%;margin-top:1rem">
-            ⚔ Assassinate
+        <button class="btn btn-danger assassin-strike-button" id="btn-assassinate" disabled>
+            <span class="assassin-strike-icon" aria-hidden="true">🗡</span>
+            <span><small>Seal their fate</small><strong>Assassinate</strong></span>
         </button>
         <p class="waiting-text hidden" id="assassin-waiting">The Assassin is deliberating...</p>
     </div>
@@ -410,20 +429,18 @@
             </div>
         </div>
         <div class="game-over-content">
-            <div class="game-over-result" id="game-over-result-player"></div>
+            <header class="finale-heading">
+                <div class="finale-crown" aria-hidden="true">♛</div>
+                <div class="game-over-result" id="game-over-result-player"></div>
+                <p class="waiting-text" id="win-reason-player"></p>
+            </header>
             <div class="my-role-reveal" id="my-role-reveal-display"></div>
-            <p class="waiting-text" id="win-reason-player" style="font-size:0.9rem"></p>
-            <section class="victory-group-card" id="victory-group-card-player" aria-label="Victory group portrait">
-                <div class="victory-card-kicker">THE CHRONICLE RECORDS</div>
-                <div class="victory-card-crest" aria-hidden="true">♜</div>
+            <section class="victory-group-card" id="victory-group-card-player" aria-label="Winning players">
+                <div class="victory-card-kicker">Winners</div>
                 <h2 class="victory-card-title"></h2>
                 <p class="victory-card-subtitle"></p>
                 <div class="victory-card-party"></div>
-                <div class="victory-card-footer">AVALON · <span class="victory-card-room"></span></div>
             </section>
-            <p class="victory-card-hint">Frame this card on screen and take a screenshot to remember the game.</p>
-            <button type="button" class="btn btn-primary" id="btn-run-it-back" aria-pressed="false">↻ Run It Back</button>
-            <div class="rematch-status" id="rematch-status-player" aria-live="polite">0 players ready for another game</div>
             <div class="game-over-roles">
                 <h3>Full Role Reveal</h3>
                 <div class="roles-list" id="roles-list-player"></div>
@@ -432,6 +449,16 @@
                 <h3>Chronicle of Avalon</h3>
                 <div id="chronicle-player"></div>
             </div>
+            <div class="finale-rematch">
+                <button type="button" class="btn btn-primary" id="btn-run-it-back" aria-pressed="false">↻ Run It Back</button>
+                <div class="rematch-status" id="rematch-status-player" aria-live="polite">0 players ready for another game</div>
+            </div>
+            <footer class="finale-footer">
+                <span class="finale-footer-crown" aria-hidden="true">♛</span>
+                <strong>Room <span id="finale-room-code-player">----</span></strong>
+                <i aria-hidden="true">•</i>
+                <span>Thanks for playing Avalon</span>
+            </footer>
         </div>
     </div>
 
@@ -635,9 +662,9 @@
 </style>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/presence.js?v=20260827-cinematics3"></script>
-<script src="/static/js/player.js?v=20260827-cinematics3"></script>
-<script src="/static/js/assassination-reveal.js?v=20260826"></script>
-<script src="/static/js/final-role-gallery.js?v=20260825"></script>
+<script src="/static/js/presence.js?v=20260828-round-table-ui-1"></script>
+<script src="/static/js/player.js?v=20260830-sealed-card-1"></script>
+<script src="/static/js/assassination-reveal.js?v=20260827-production-polish-v3"></script>
+<script src="/static/js/final-role-gallery.js?v=20260829-finale-redesign-1"></script>
 </body>
 </html>

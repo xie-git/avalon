@@ -107,6 +107,48 @@ body:has(#screen-join.active) #btn-settings { display: none !important; }
 .screen.active { opacity: 1; pointer-events: all; visibility: visible; }
 .screen:not(.active) { visibility: hidden; }
 
+/* The first breath of the game, before any private information appears. */
+.game-starting-screen {
+    inset: 0;
+    width: 100vw;
+    max-width: none;
+    padding: 0;
+    overflow: hidden;
+    justify-content: flex-end;
+    background: #020303;
+}
+.game-starting-art,
+.game-starting-scrim { position: absolute; inset: 0; width: 100%; height: 100%; }
+.game-starting-art {
+    object-fit: cover;
+    transform: scale(1.035);
+    filter: brightness(0.62) saturate(0.82);
+}
+.game-starting-scrim {
+    background: linear-gradient(180deg, rgba(2,3,3,0.2) 25%, rgba(2,3,3,0.45) 58%, rgba(2,3,3,0.96) 100%);
+}
+.game-starting-copy {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 420px);
+    display: grid;
+    gap: 0.5rem;
+    padding: 0 1.4rem max(3.2rem, calc(2.2rem + env(safe-area-inset-bottom)));
+    text-align: center;
+    opacity: 0;
+    transform: translateY(18px);
+}
+.game-starting-copy p,
+.game-starting-copy h1,
+.game-starting-copy span { margin: 0; }
+.game-starting-copy p { color: var(--gold-light); font: 0.62rem var(--font-heading); letter-spacing: 0.19em; text-transform: uppercase; }
+.game-starting-copy h1 { color: #f0e7d2; font: clamp(2rem, 10vw, 3rem)/1.03 var(--font-title); text-shadow: 0 3px 20px #000; }
+.game-starting-copy span { color: rgba(231,226,210,0.72); font-size: 0.88rem; }
+.game-starting-screen.is-revealed .game-starting-art { animation: opening-drift 4s cubic-bezier(.15,.65,.28,1) both; }
+.game-starting-screen.is-revealed .game-starting-copy { animation: opening-copy 1.4s ease 0.45s forwards; }
+@keyframes opening-drift { to { transform: scale(1); filter: brightness(0.82) saturate(0.9); } }
+@keyframes opening-copy { to { opacity: 1; transform: none; } }
+
 /* ============================================================
    SHARED ELEMENTS
    ============================================================ */
@@ -883,7 +925,7 @@ body.mission-cinematic-active #connection-status {
 }
 .player-reveal-card.approve,
 .player-reveal-card.reject {
-    min-height: 82px;
+    min-height: 68px;
     padding: 0.25rem 0.15rem;
     overflow: hidden;
     border-color: rgba(201,168,76,0.28);
@@ -892,7 +934,7 @@ body.mission-cinematic-active #connection-status {
     animation: vote-player-in 0.6s cubic-bezier(.18,.78,.2,1) var(--reveal-delay, 0s) forwards;
 }
 .vote-reveal-identity { display: grid; min-width: 0; justify-items: center; gap: 0.12rem; color: #c9c0ad; }
-.vote-reveal-identity .identity-avatar-portrait { width: 50px; height: 50px; }
+.vote-reveal-identity .identity-avatar-portrait { width: 40px; height: 40px; }
 .vote-reveal-identity .identity-avatar-name {
     width: 100%;
     overflow: hidden;
@@ -917,7 +959,7 @@ body.mission-cinematic-active #connection-status {
     transform: rotate(9deg) scale(1.75);
     animation-name: vote-stamp-reject-in;
 }
-.vote-reveal-stamp b { font: 2.4rem/0.78 sans-serif; }
+.vote-reveal-stamp b { font: 2rem/0.78 sans-serif; }
 .vote-reveal-stamp strong { padding: 0.1rem 0.2rem; border: 1px solid currentColor; font-size: 0.42rem; letter-spacing: 0.08em; }
 @keyframes vote-player-in { from { opacity: 0; transform: translateY(12px) scale(0.94); } to { opacity: 1; transform: none; } }
 @keyframes vote-stamp-in { to { opacity: 0.9; transform: rotate(-10deg) scale(1); } }
@@ -998,6 +1040,7 @@ body.mission-cinematic-active #connection-status {
     gap: clamp(0.5rem, 1.5dvh, 0.9rem);
     overflow: hidden;
     overscroll-behavior: none;
+    scrollbar-gutter: auto;
 }
 .forced-proposal-note {
     width: 100%;
@@ -1022,11 +1065,48 @@ body.mission-cinematic-active #connection-status {
     overflow: visible;
 }
 #screen-vote-reveal-player.presence-active .presence-table.presence-player {
-    flex: 0 0 clamp(155px, 22dvh, 190px);
-    min-height: 155px;
+    flex: 1 1 clamp(180px, 27dvh, 225px);
+    min-height: 170px;
 }
 #screen-vote-reveal-player.presence-active .presence-field {
-    min-height: 135px;
+    min-height: 152px;
+}
+#screen-vote-reveal-player.presence-active .presence-player-panel {
+    flex: 0 0 clamp(300px, 44dvh, 360px);
+    height: clamp(300px, 44dvh, 360px);
+    max-height: clamp(300px, 44dvh, 360px);
+    gap: clamp(0.28rem, 0.7dvh, 0.45rem);
+    padding: clamp(0.45rem, 1dvh, 0.65rem);
+    overflow: hidden;
+}
+#screen-vote-reveal-player.presence-active .screen-header { margin: 0; }
+#screen-vote-reveal-player.presence-active .vote-team-display h3 { margin-bottom: 0.25rem; font-size: 0.58rem; }
+#screen-vote-reveal-player.presence-active .vote-team-names-list { flex-wrap: nowrap; gap: 0.25rem; }
+#screen-vote-reveal-player.presence-active .vote-name-chip {
+    min-width: 0;
+    flex: 1 1 0;
+    gap: 0.08rem;
+    padding: 0.18rem 0.12rem;
+    border-radius: 12px;
+    font-size: 0.48rem;
+}
+#screen-vote-reveal-player.presence-active .vote-name-chip .identity-avatar-portrait { width: 32px; height: 32px; }
+#screen-vote-reveal-player.presence-active .player-reveal-cards {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.25rem;
+}
+#screen-vote-reveal-player.presence-active .player-reveal-card.approve,
+#screen-vote-reveal-player.presence-active .player-reveal-card.reject { min-height: 54px; }
+#screen-vote-reveal-player.presence-active .vote-reveal-identity .identity-avatar-portrait { width: 32px; height: 32px; }
+#screen-vote-reveal-player.presence-active .vote-reveal-stamp b { font-size: 1.65rem; }
+#screen-vote-reveal-player.presence-active .player-reveal-banner { padding: 0.38rem; font-size: 0.78rem; }
+#screen-vote-reveal-player.presence-active .waiting-text { font-size: 0.68rem !important; }
+#screen-vote-reveal-player.presence-active .presence-node { width: clamp(42px, 12vw, 54px); }
+#screen-vote-reveal-player.presence-active .presence-portrait { width: clamp(28px, 7.8vw, 36px); }
+
+@media (prefers-reduced-motion: reduce) {
+    .game-starting-screen.is-revealed .game-starting-art,
+    .game-starting-screen.is-revealed .game-starting-copy { animation-duration: 0.01ms; animation-delay: 0s; }
 }
 #screen-discussion.presence-active .presence-table.presence-player {
     flex: 1 1 clamp(245px, 35dvh, 310px);
@@ -1067,6 +1147,7 @@ body.mission-cinematic-active #connection-status {
     padding: 0;
     gap: 0;
     overflow: hidden;
+    scrollbar-gutter: auto;
     background: #030405;
 }
 .mission-begins-product { position: absolute; inset: 0; }
@@ -1279,6 +1360,54 @@ body.mission-cinematic-active #connection-status {
     text-transform: uppercase;
     margin-bottom: 0.5rem;
 }
+
+/* Keep the complete proposal decision visible alongside the social table.
+   The roster itself scrolls for unusually large games instead of hiding the
+   primary action below the panel edge. */
+#screen-proposal.presence-active {
+    gap: clamp(0.45rem, 1.2dvh, 0.75rem);
+}
+#screen-proposal.presence-active .presence-player-panel {
+    flex: 0 0 clamp(285px, 40dvh, 325px);
+    height: clamp(285px, 40dvh, 325px);
+    max-height: clamp(285px, 40dvh, 325px);
+    gap: clamp(0.28rem, 0.7dvh, 0.45rem);
+    padding: clamp(0.5rem, 1.15dvh, 0.72rem);
+    overflow: hidden;
+}
+#screen-proposal.presence-active .screen-header { margin: 0; }
+#screen-proposal.presence-active .player-select-list {
+    min-height: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(0.28rem, 0.7dvh, 0.45rem);
+    padding-right: 0.15rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+#screen-proposal.presence-active .party-avatar-option {
+    gap: 0.16rem;
+    padding: 0.28rem 0.18rem 0.24rem;
+    border-radius: 12px;
+}
+#screen-proposal.presence-active .party-avatar-portrait {
+    width: clamp(44px, 12vw, 54px);
+    margin-bottom: 0;
+}
+#screen-proposal.presence-active .party-avatar-name { font-size: clamp(0.56rem, 2.7vw, 0.68rem); }
+#screen-proposal.presence-active .select-count,
+#screen-proposal.presence-active .proposal-timer-player { font-size: 0.68rem; }
+#screen-proposal.presence-active #btn-lock-team {
+    min-height: 42px;
+    flex: 0 0 auto;
+    margin-top: 0.1rem !important;
+    padding: 0.58rem 0.75rem;
+    font-size: 0.7rem;
+}
+#screen-proposal.presence-active .presence-table.presence-player {
+    flex: 1 1 210px;
+    min-height: 190px;
+}
 .vote-team-names-list {
     display: flex;
     flex-wrap: wrap;
@@ -1386,7 +1515,8 @@ body.mission-cinematic-active #connection-status {
 }
 .assassin-target-btn {
     width: 100%;
-    padding: 0.9rem 1.2rem;
+    min-width: 0;
+    padding: 0.55rem;
     background: var(--bg-card);
     border: 2px solid var(--border-gold);
     border-radius: var(--radius-sm);
@@ -1395,14 +1525,81 @@ body.mission-cinematic-active #connection-status {
     font-size: 1rem;
     cursor: pointer;
     transition: all 0.2s ease;
-    text-align: left;
+    text-align: center;
+    position: relative;
 }
 .assassin-target-btn:hover { border-color: var(--red-glow); color: #ff8080; background: #1a0808; }
 .assassin-target-btn.selected { border-color: var(--red-glow); color: #ff8080; box-shadow: 0 0 12px rgba(192,57,43,0.3); }
 #btn-assassinate { width: 100%; margin-top: 0.5rem; padding: 1rem; font-size: 0.9rem; }
 #btn-assassinate.btn-danger:not(:disabled):hover { box-shadow: 0 0 20px rgba(192,57,43,0.4); }
+.assassin-target-identity {
+    display: grid;
+    justify-items: center;
+    gap: 0.3rem;
+    min-width: 0;
+}
+.assassin-target-identity .identity-avatar-portrait {
+    width: clamp(52px, 16vw, 68px);
+    height: clamp(52px, 16vw, 68px);
+    border: 2px solid rgba(201,168,76,0.48);
+    box-shadow: 0 8px 18px rgba(0,0,0,0.48);
+}
+.assassin-target-identity .identity-avatar-name {
+    max-width: 100%;
+    overflow: hidden;
+    color: #ddd2bc;
+    font: 0.68rem var(--font-heading);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.assassin-target-mark {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.42rem;
+    color: transparent;
+    font-size: 1.1rem;
+    text-shadow: none;
+    transition: color 0.2s, text-shadow 0.2s;
+}
+.assassin-target-btn.selected .assassin-target-mark {
+    color: #ff665c;
+    text-shadow: 0 0 10px rgba(255,38,26,0.85);
+}
+.assassin-target-btn.selected .identity-avatar-portrait {
+    border-color: #ff665c;
+    box-shadow: 0 0 0 2px rgba(111,0,0,0.7), 0 0 20px rgba(220,32,25,0.52);
+}
+.assassin-strike-button {
+    min-height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.7rem;
+    border: 1px solid #a52824 !important;
+    border-radius: 4px !important;
+    background:
+        linear-gradient(120deg, transparent 0 43%, rgba(255,120,105,0.12) 44% 45%, transparent 46%),
+        linear-gradient(180deg, #3b0808, #140304) !important;
+    color: #ffd7cc !important;
+    letter-spacing: 0.13em;
+    box-shadow: inset 0 0 18px rgba(207,25,17,0.18), 0 8px 22px rgba(0,0,0,0.45);
+    overflow: hidden;
+}
+.assassin-strike-button::before,
+.assassin-strike-button::after {
+    content: '';
+    width: 24px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #d34a40);
+}
+.assassin-strike-button::after { transform: scaleX(-1); }
+.assassin-strike-button > span:not(.assassin-strike-icon) { display: grid; gap: 0.08rem; }
+.assassin-strike-button small { color: #b87870; font: 0.43rem var(--font-heading); letter-spacing: 0.18em; text-transform: uppercase; }
+.assassin-strike-button strong { font: 0.78rem var(--font-heading); letter-spacing: 0.16em; text-transform: uppercase; }
+.assassin-strike-icon { color: #ff6d60; font-size: 1.35rem; filter: drop-shadow(0 0 7px rgba(225,33,23,0.6)); }
+.assassin-strike-button:not(:disabled):active { transform: translateY(1px); filter: brightness(1.2); }
 
-/* Keep the final choice and the spectrum visible together on short phones. */
+/* Keep the final choice and the round table visible together on short phones. */
 #screen-assassin.presence-active .presence-player-panel {
     flex-basis: clamp(245px, 38dvh, 270px);
     height: clamp(245px, 38dvh, 270px);
@@ -1422,7 +1619,6 @@ body.mission-cinematic-active #connection-status {
     overflow: hidden;
     font-size: clamp(0.68rem, 3.2vw, 0.82rem);
     text-overflow: ellipsis;
-    white-space: nowrap;
 }
 #screen-assassin.presence-active #btn-assassinate {
     min-height: 40px;
@@ -1430,6 +1626,11 @@ body.mission-cinematic-active #connection-status {
     padding: 0.55rem 0.8rem;
     font-size: 0.72rem;
 }
+#screen-assassin.presence-active .assassin-target-identity .identity-avatar-portrait {
+    width: clamp(44px, 12vw, 54px);
+    height: clamp(44px, 12vw, 54px);
+}
+#screen-assassin.presence-active .assassin-target-identity .identity-avatar-name { font-size: 0.58rem; }
 
 /* ============================================================
    GAME OVER SCREEN
@@ -1511,6 +1712,206 @@ body.mission-cinematic-active #connection-status {
 .role-row.evil { background: rgba(192,57,43,0.08); border: 1px solid rgba(192,57,43,0.2); }
 .role-row .r-name { color: var(--text-primary); }
 .role-row .r-role { color: var(--text-secondary); font-size: 0.75rem; }
+
+/* The personal finale follows the same illustrated chronicle language as the
+   shared display, reflowed into a deliberate, scrollable phone keepsake. */
+#screen-game-over.winner-good,
+#screen-game-over.winner-evil {
+    --finale-accent: #d9bd70;
+    --finale-team: #7fb8d7;
+    gap: 0;
+    padding: 0;
+    background: #050608;
+}
+#screen-game-over.winner-evil {
+    --finale-accent: #b45b4e;
+    --finale-team: #dc685b;
+}
+#screen-game-over.winner-good::before,
+#screen-game-over.winner-evil::before {
+    inset: 0;
+    opacity: 1;
+    filter: none;
+    transform: none;
+    background-position: 31% center;
+    background-size: auto 100%;
+}
+#screen-game-over.winner-good::before {
+    background-image: url('/static/assets/results/good-wins-finale-wide.png?v=20260829');
+    background-position: 31% calc(50% - 100px);
+}
+#screen-game-over.winner-evil::before {
+    background-image: url('/static/assets/results/evil-wins-finale-wide.png?v=20260829');
+}
+#screen-game-over.winner-good::after,
+#screen-game-over.winner-evil::after {
+    background:
+        linear-gradient(180deg, rgba(3,4,5,0.18), rgba(3,4,5,0.68) 20rem, rgba(3,4,5,0.94) 40rem, #030405 100%),
+        radial-gradient(ellipse at 50% 8rem, transparent, rgba(3,4,5,0.5) 76%);
+}
+#screen-game-over > .game-over-content {
+    width: 100%;
+    display: flex;
+    gap: 1rem;
+    padding: max(2rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1.2rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+}
+#screen-game-over .finale-heading {
+    width: 100%;
+    min-height: 17rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    text-align: center;
+}
+#screen-game-over .finale-crown {
+    width: 76%;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    color: var(--finale-accent);
+    font-size: 1.25rem;
+}
+#screen-game-over .finale-crown::before,
+#screen-game-over .finale-crown::after {
+    content: '';
+    height: 1px;
+    flex: 1;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--finale-accent) 58%, transparent));
+}
+#screen-game-over .finale-crown::after { transform: scaleX(-1); }
+#screen-game-over .game-over-result {
+    color: #eadbad;
+    font: 500 clamp(2.7rem, 13vw, 3.7rem)/0.9 var(--font-title);
+    letter-spacing: 0.1em;
+    text-shadow: 0 3px 24px #000;
+}
+#screen-game-over .game-over-result.evil { color: #bd4d43; }
+#screen-game-over .finale-heading .waiting-text {
+    margin: 0;
+    color: #b4a486;
+    font: italic 0.88rem/1.35 var(--font-body);
+}
+#screen-game-over .my-role-reveal {
+    padding: 0.7rem 0.9rem;
+    border-color: color-mix(in srgb, var(--finale-accent) 32%, transparent);
+    background: rgba(5,7,8,0.72);
+    color: #b9af9c;
+    font-size: 0.72rem;
+    backdrop-filter: blur(8px);
+}
+#screen-game-over .victory-group-card {
+    width: 100%;
+    min-height: 0;
+    aspect-ratio: auto;
+    display: grid;
+    justify-items: center;
+    gap: 0.7rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+#screen-game-over .victory-group-card::before,
+#screen-game-over .victory-group-card::after { display: none; }
+#screen-game-over .victory-card-kicker,
+#screen-game-over .final-role-gallery-section > h3,
+#screen-game-over .game-chronicle > h3 {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin: 0;
+    color: var(--finale-accent);
+    font: 600 0.6rem/1 var(--font-heading);
+    letter-spacing: 0.21em;
+    text-align: center;
+    text-transform: uppercase;
+}
+#screen-game-over .victory-card-kicker::before,
+#screen-game-over .victory-card-kicker::after,
+#screen-game-over .final-role-gallery-section > h3::before,
+#screen-game-over .final-role-gallery-section > h3::after,
+#screen-game-over .game-chronicle > h3::before,
+#screen-game-over .game-chronicle > h3::after {
+    content: '';
+    height: 1px;
+    flex: 1;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--finale-accent) 46%, transparent));
+}
+#screen-game-over .victory-card-kicker::after,
+#screen-game-over .final-role-gallery-section > h3::after,
+#screen-game-over .game-chronicle > h3::after { transform: scaleX(-1); }
+#screen-game-over .victory-card-title,
+#screen-game-over .victory-card-subtitle { display: none; }
+#screen-game-over .victory-card-party { flex-wrap: wrap; gap: 0.7rem; }
+#screen-game-over .victory-person { width: 68px; min-width: 0; gap: 0.18rem; }
+#screen-game-over .victory-person-portrait {
+    width: 58px;
+    border-color: var(--finale-team);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--finale-team) 20%, transparent);
+}
+#screen-game-over .victory-person strong { font-size: 0.58rem; }
+#screen-game-over .victory-person small { color: var(--finale-team); font-size: 0.5rem; }
+#screen-game-over .final-role-gallery-section {
+    width: 100%;
+    display: grid;
+    gap: 0.55rem;
+    margin: 0;
+}
+#screen-game-over .final-role-gallery { gap: 0.42rem; }
+#screen-game-over .final-role-card {
+    grid-template-columns: 50px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    justify-items: start;
+    align-items: center;
+    gap: 0.05rem 0.5rem;
+    padding: 0.42rem;
+    border-radius: 6px;
+    background: linear-gradient(135deg, rgba(13,19,23,0.86), rgba(5,7,9,0.92));
+}
+#screen-game-over .final-role-card.evil { background: linear-gradient(135deg, rgba(29,12,13,0.86), rgba(8,5,6,0.93)); }
+#screen-game-over .final-role-portrait { width: 50px; grid-row: 1 / span 2; }
+#screen-game-over .final-role-player,
+#screen-game-over .final-role-name { width: 100%; text-align: left; font-size: 0.56rem; }
+#screen-game-over .final-role-name { font-size: 0.5rem; }
+#screen-game-over .game-chronicle { width: 100%; display: grid; gap: 0.55rem; padding: 0; }
+#screen-game-over .chronicle-entry {
+    margin: 0 0 0.25rem;
+    padding: 0.48rem 0.55rem;
+    border: 0;
+    border-left: 2px solid var(--red-glow);
+    border-bottom: 1px solid rgba(188,166,105,0.1);
+    border-radius: 0;
+    background: rgba(3,5,6,0.48);
+    font-size: 0.66rem;
+}
+#screen-game-over .chronicle-entry.pass { border-left-color: #68a7c7; }
+#screen-game-over .chronicle-finale { border-left-color: var(--finale-accent); }
+#screen-game-over .finale-rematch {
+    width: 100%;
+    display: grid;
+    justify-items: center;
+    gap: 0.5rem;
+    padding-top: 0.25rem;
+}
+#screen-game-over .finale-rematch .btn { width: min(100%, 250px); }
+#screen-game-over .finale-footer {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding-top: 0.4rem;
+    color: #a08e69;
+    font: 0.66rem/1.2 var(--font-body);
+}
+#screen-game-over .finale-footer strong { font-weight: 500; }
+#screen-game-over .finale-footer i { font-style: normal; opacity: 0.55; }
+#screen-game-over .finale-footer-crown { color: var(--finale-accent); font-size: 1rem; }
 
 /* ============================================================
    PLAYER MISSION BOARD (fixed top)
@@ -1750,6 +2151,17 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
     flex-direction: column;
     gap: 0.2rem;
 }
+.chat-history-list:empty {
+    min-height: 54px;
+    align-items: center;
+    justify-content: center;
+}
+.chat-history-list:empty::before {
+    content: 'No messages yet · the court is quiet';
+    color: var(--text-dim);
+    font: italic 0.72rem/1.35 var(--font-body);
+    text-align: center;
+}
 .chat-history-entry {
     font-family: var(--font-body);
     font-size: 0.72rem;
@@ -1975,6 +2387,86 @@ body.chat-visible .screen {
     .presence-table.presence-player { flex-basis: 205px; min-height: 185px; }
     .presence-player .presence-field { min-height: 162px; }
     .presence-game-panel { transform: translateY(clamp(0.2rem, 1dvh, 0.55rem)); }
+
+    #screen-discussion.presence-active .presence-player-panel {
+        flex: 0 1 auto;
+        height: auto;
+        max-height: 300px;
+        min-height: 0;
+        gap: 0.2rem;
+        padding: 0.4rem;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+    #screen-discussion.presence-active .screen-title-small {
+        font-size: 1.05rem !important;
+        line-height: 1.1;
+    }
+    #screen-discussion.presence-active .mission-info-pill {
+        padding: 0.2rem 0.55rem;
+        font-size: 0.62rem;
+    }
+    #screen-discussion.presence-active .discussion-leader {
+        margin-top: 0.2rem;
+        font-size: 0.62rem;
+    }
+    #screen-discussion.presence-active .you-are-leader {
+        padding: 0.35rem 0.6rem;
+        border-width: 1px;
+        font-size: 0.68rem;
+    }
+    #screen-discussion.presence-active .discussion-clock-player {
+        gap: 0.4rem;
+        padding: 0.25rem 0.5rem;
+    }
+    #screen-discussion.presence-active .discussion-clock-player .timer-small { font-size: 1.15rem; }
+    #screen-discussion.presence-active .waiting-text { font-size: 0.72rem !important; line-height: 1.2; }
+    #screen-discussion.presence-active .spotlight-leader-controls { padding: 0.45rem; }
+    #screen-discussion.presence-active .spotlight-leader-controls > label {
+        margin-bottom: 0.25rem;
+        font-size: 0.58rem;
+    }
+    #screen-discussion.presence-active .spotlight-control-row select { padding: 0.4rem; }
+    #screen-discussion.presence-active .spotlight-control-row .btn {
+        padding-inline: 0.55rem;
+        font-size: 0.58rem;
+    }
+    #screen-discussion.presence-active .spotlight-clear {
+        margin-top: 0.15rem;
+        font-size: 0.58rem;
+    }
+    #screen-discussion.presence-active #btn-end-discussion {
+        min-height: 36px;
+        padding: 0.4rem 0.6rem;
+        font-size: 0.62rem;
+    }
+    #screen-discussion.presence-active .presence-table.presence-player {
+        flex-basis: 185px;
+        min-height: 185px;
+    }
+
+    #screen-proposal.presence-active .presence-player-panel {
+        flex-basis: 238px;
+        height: 238px;
+        max-height: 238px;
+        gap: 0.2rem;
+        padding: 0.38rem 0.48rem;
+    }
+    #screen-proposal.presence-active .party-avatar-option { padding: 0.16rem; }
+    #screen-proposal.presence-active .party-avatar-portrait { width: 38px; }
+    #screen-proposal.presence-active .party-avatar-name { font-size: 0.52rem; }
+    #screen-proposal.presence-active .select-count,
+    #screen-proposal.presence-active .proposal-timer-player { font-size: 0.58rem; }
+    #screen-proposal.presence-active #btn-lock-team {
+        min-height: 36px;
+        padding-block: 0.4rem;
+        font-size: 0.62rem;
+    }
+    #screen-proposal.presence-active .presence-table.presence-player {
+        flex-basis: 160px;
+        min-height: 150px;
+    }
+    #screen-proposal.presence-active .presence-player .presence-field { min-height: 136px; }
 }
 
 /* Cinematic mission rules intentionally live last to override legacy mission layout. */
@@ -1982,6 +2474,7 @@ body.chat-visible .screen {
     gap: 0;
     justify-content: stretch;
     padding: 0;
+    scrollbar-gutter: auto;
 }
 
 @media (max-width: 390px) {
@@ -2015,7 +2508,7 @@ body.chat-visible .screen {
     background-image:
         linear-gradient(180deg, rgba(5, 6, 7, 0.34) 0%, rgba(7, 7, 7, 0.16) 32%, rgba(4, 4, 5, 0.78) 100%),
         radial-gradient(circle at 50% 35%, transparent 0%, rgba(4, 4, 5, 0.18) 62%, rgba(3, 3, 4, 0.6) 100%),
-        url('/static/img/avalon-entry-background.png?v=20260824-2');
+        url('/static/img/join_page_bg.png?v=20260829');
     background-position: center, center, center -50px;
     background-repeat: no-repeat;
     background-size: cover, cover, auto calc(100% + 50px);
@@ -2198,4 +2691,621 @@ body.chat-visible .screen {
         transform: translate(-50%, 0);
         pointer-events: auto;
     }
+}
+
+/* Full-screen court vote and mission-card reveals. */
+body.vote-cinematic-active .player-board,
+body.vote-cinematic-active .chat-container,
+body.vote-cinematic-active .player-utility-dock { display: none !important; }
+body.player-cinematic-active .player-board,
+body.player-cinematic-active .chat-container,
+body.player-cinematic-active .player-utility-dock,
+body.player-cinematic-active #connection-status { display: none !important; }
+#screen-vote-reveal-player,
+#screen-mission-cards-player {
+    position: fixed; inset: 0; left: 0; width: 100vw; max-width: none;
+    height: 100dvh; padding: 0 !important; gap: 0; overflow: hidden; background: #030405;
+    transform: none !important;
+}
+#screen-vote-reveal-player .vote-reveal-background,
+#screen-vote-reveal-player .vote-reveal-scrim { position: absolute; inset: 0; width: 100%; height: 100%; }
+#screen-vote-reveal-player .vote-reveal-background { object-fit: cover; object-position: center top; filter: brightness(0.7) saturate(0.82); }
+#screen-vote-reveal-player .vote-reveal-scrim {
+    background: linear-gradient(180deg, rgba(2,3,4,0.08) 24%, rgba(2,3,4,0.24) 48%, rgba(2,3,4,0.92) 100%),
+        radial-gradient(ellipse at 50% 48%, transparent 22%, rgba(2,3,4,0.38) 90%);
+}
+#screen-vote-reveal-player .vote-reveal-stage { position: absolute; z-index: 2; inset: 0; }
+#screen-vote-reveal-player .player-reveal-cards {
+    position: absolute; top: clamp(16.5rem, 37dvh, 24rem); left: 50%;
+    width: min(calc(100vw - 1.15rem), 430px); display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr)); gap: clamp(0.22rem, 1.3vw, 0.38rem);
+    transform: translateX(-50%);
+}
+#screen-vote-reveal-player .cinematic-vote-card {
+    position: relative; min-width: 0; aspect-ratio: 0.78; display: grid; place-content: center;
+    justify-items: center; gap: 0.1rem; padding: 0.2rem 0.1rem; overflow: hidden;
+    border: 1px solid rgba(218,190,110,0.5); border-radius: 8px;
+    background: linear-gradient(150deg, rgba(31,25,15,0.96), rgba(5,6,8,0.96));
+    box-shadow: 0 7px 18px rgba(0,0,0,0.58), inset 0 0 14px rgba(201,168,76,0.06);
+    opacity: 0; transform: rotateY(82deg) scale(0.9);
+    transition: opacity 0.4s ease, transform 0.56s cubic-bezier(.2,.72,.2,1), border-color 0.4s ease;
+}
+#screen-vote-reveal-player .cinematic-vote-card.revealed { opacity: 1; transform: none; }
+#screen-vote-reveal-player .cinematic-vote-card.approve { border-color: rgba(112,190,241,0.72); }
+#screen-vote-reveal-player .cinematic-vote-card.reject { border-color: rgba(226,102,92,0.76); }
+#screen-vote-reveal-player .cinematic-vote-portrait {
+    display: block; width: clamp(25px, 8.5vw, 38px); aspect-ratio: 1; overflow: hidden;
+    border: 1px solid rgba(218,190,110,0.42); border-radius: 50%; background: #111;
+}
+#screen-vote-reveal-player .cinematic-vote-portrait > img,
+#screen-vote-reveal-player .cinematic-vote-portrait > svg { display: block; width: 100%; height: 100%; object-fit: cover; }
+#screen-vote-reveal-player .cinematic-vote-name {
+    width: 100%; overflow: hidden; color: #ddd4c2; font: clamp(0.38rem, 1.8vw, 0.5rem) var(--font-heading);
+    text-align: center; text-overflow: ellipsis; white-space: nowrap;
+}
+#screen-vote-reveal-player .cinematic-vote-stamp {
+    position: absolute; inset: 0; display: grid; place-content: center; justify-items: center;
+    color: #9ccfeb; text-shadow: 0 2px 8px #000; opacity: 0; transform: rotate(-8deg) scale(1.45);
+    transition: opacity 0.24s ease 0.14s, transform 0.34s cubic-bezier(.2,.9,.2,1.2) 0.14s;
+}
+#screen-vote-reveal-player .cinematic-vote-card.reject .cinematic-vote-stamp { color: #e7aaa4; transform: rotate(8deg) scale(1.45); }
+#screen-vote-reveal-player .cinematic-vote-card.revealed .cinematic-vote-stamp { opacity: 0.95; transform: rotate(-8deg); }
+#screen-vote-reveal-player .cinematic-vote-card.reject.revealed .cinematic-vote-stamp { transform: rotate(8deg); }
+#screen-vote-reveal-player .cinematic-vote-stamp b { font: clamp(1.2rem, 6vw, 1.75rem)/0.78 sans-serif; }
+#screen-vote-reveal-player .cinematic-vote-stamp strong {
+    padding: 0.08rem 0.12rem; border: 1px solid currentColor;
+    font: clamp(0.28rem, 1.25vw, 0.36rem) var(--font-heading); letter-spacing: 0.04em;
+}
+#screen-vote-reveal-player .vote-result-copy {
+    position: absolute; z-index: 3; left: 50%; bottom: max(6.2rem, calc(5.6rem + env(safe-area-inset-bottom)));
+    width: min(calc(100vw - 2rem), 430px); display: grid; justify-items: center; gap: 0.35rem;
+    transform: translateX(-50%); text-align: center; animation: phone-vote-result-in 0.6s ease both;
+}
+#screen-vote-reveal-player .vote-result-copy.hidden { display: none; }
+#screen-vote-reveal-player .player-reveal-banner {
+    padding: 0; border: 0; color: #f1dfab; font: clamp(1.55rem, 8vw, 2.3rem)/1 var(--font-title);
+    text-shadow: 0 3px 18px #000;
+}
+#screen-vote-reveal-player .vote-result-copy p {
+    margin: 0; color: rgba(235,228,211,0.8); font-size: clamp(0.72rem, 3.3vw, 0.88rem); line-height: 1.35;
+}
+#screen-vote-reveal-player #btn-player-confirm-vote {
+    position: absolute; z-index: 4; left: 50%; bottom: max(1rem, env(safe-area-inset-bottom));
+    width: min(calc(100vw - 2rem), 360px); min-height: 44px; transform: translateX(-50%);
+}
+#screen-vote-reveal-player #player-vote-reveal-waiting {
+    position: absolute; z-index: 4; left: 1rem; right: 1rem;
+    bottom: max(1.4rem, calc(0.8rem + env(safe-area-inset-bottom)));
+    margin: 0; color: rgba(235,228,211,0.68); font-size: 0.72rem !important;
+}
+@keyframes phone-vote-result-in {
+    from { opacity: 0; transform: translate(-50%, 12px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+}
+#screen-mission-cards-player {
+    background: linear-gradient(180deg, rgba(3,4,5,0.12), rgba(3,4,5,0.72)),
+        center / cover no-repeat url('/static/assets/votes/cards-revealed-mobile.png?v=20260829-cards2');
+}
+#screen-mission-cards-player .quest-card-reveal-stage { background: transparent; }
+#screen-mission-cards-player .quest-card-reveal-stage > .cinematic-reveal-eyebrow,
+#screen-mission-cards-player .quest-card-reveal-stage > h1 { visibility: hidden; }
+@media (max-height: 650px) {
+    #screen-vote-reveal-player .player-reveal-cards { top: 31dvh; }
+    #screen-vote-reveal-player .vote-result-copy { bottom: 4.8rem; }
+}
+
+/* ============================================================
+   FINAL CINEMATIC LAYOUT
+   Count-aware compositions and one consistent confirmation treatment.
+   ============================================================ */
+.game-starting-copy {
+    gap: 0.8rem;
+    padding-bottom: max(1.25rem, calc(0.9rem + env(safe-area-inset-bottom)));
+}
+.game-starting-copy .cinematic-action-button {
+    margin-top: 0.2rem;
+}
+.cinematic-action-button {
+    width: min(100%, 360px);
+    min-height: 48px;
+    padding: 0.72rem 1rem;
+    border: 1px solid rgba(205,184,126,0.58);
+    border-radius: var(--radius-pill);
+    background: linear-gradient(135deg, rgba(51,43,29,0.94), rgba(17,16,14,0.97));
+    color: #ded1b5;
+    font: 0.7rem var(--font-heading);
+    letter-spacing: 0.08em;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.34), inset 0 0 14px rgba(201,168,76,0.05);
+}
+.cinematic-action-button:disabled { opacity: 0.42; }
+
+/* Three cards per row through nine players; ten uses a balanced 4/4/2 wrap. */
+#screen-vote-reveal-player .player-reveal-cards {
+    top: clamp(11.5rem, 26dvh, 13.75rem);
+    width: min(calc(100vw - 2.5rem), 330px);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: flex-start;
+    gap: clamp(0.34rem, 1.6vw, 0.48rem);
+}
+#screen-vote-reveal-player .cinematic-vote-card {
+    flex: 0 0 calc((100% - 1rem) / 3);
+    aspect-ratio: 0.8;
+    padding: 0.35rem 0.2rem;
+}
+#screen-vote-reveal-player .cinematic-vote-portrait {
+    width: clamp(42px, 13vw, 56px);
+}
+#screen-vote-reveal-player .player-reveal-cards[data-player-count="6"] {
+    width: min(calc(100vw - 2rem), 360px);
+}
+#screen-vote-reveal-player .player-reveal-cards[data-player-count="6"] .cinematic-vote-portrait {
+    width: clamp(48px, 15vw, 62px);
+}
+#screen-vote-reveal-player .player-reveal-cards[data-player-count="10"] {
+    width: min(calc(100vw - 1.5rem), 360px);
+}
+#screen-vote-reveal-player .player-reveal-cards[data-player-count="10"] .cinematic-vote-card {
+    flex-basis: calc((100% - 1.5rem) / 4);
+}
+#screen-vote-reveal-player .player-reveal-cards[data-player-count="10"] .cinematic-vote-portrait {
+    width: clamp(36px, 10.5vw, 46px);
+}
+#screen-vote-reveal-player .cinematic-vote-name {
+    font-size: clamp(0.46rem, 2.1vw, 0.58rem);
+}
+#screen-mission-cards-player {
+    background-color: #030405;
+    background-size: cover;
+}
+
+/* ============================================================
+   FIXED FULL-UI GEOMETRY
+   Discussion, proposal, vote, and assassination always use the same two
+   fixed grid tracks. Content never changes either box's size; overflowing
+   action content scrolls inside the upper box.
+   ============================================================ */
+body.board-visible.chat-visible #screen-discussion.presence-active,
+body.board-visible.chat-visible #screen-proposal.presence-active,
+body.board-visible.chat-visible #screen-vote.presence-active,
+body.board-visible.chat-visible #screen-assassin.presence-active {
+    position: fixed;
+    top: calc(var(--player-board-height) + env(safe-area-inset-top) + 1rem);
+    right: auto;
+    bottom: calc(var(--player-chat-height) + env(safe-area-inset-bottom) + 0.5rem);
+    left: 50%;
+    width: min(100vw, 480px);
+    min-height: 0;
+    height: auto;
+    max-height: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: calc(48% - 4px) calc(52% - 4px);
+    align-content: stretch;
+    align-items: stretch;
+    justify-items: stretch;
+    gap: 8px;
+    padding: 0 max(var(--phone-gutter), env(safe-area-inset-right))
+        0 max(var(--phone-gutter), env(safe-area-inset-left));
+    overflow: hidden;
+    transform: translateX(-50%);
+    box-sizing: border-box;
+    scrollbar-gutter: auto;
+    background:
+        linear-gradient(180deg,
+            #050609 0,
+            rgba(5,6,9,0.84) 24px,
+            rgba(5,6,9,0.3) 88px,
+            rgba(3,4,7,0.16) 100%),
+        center calc(50% + 18px) / cover no-repeat url('/static/img/full_ui_bg.png?v=20260830-night-castle');
+    background-color: #050609;
+}
+
+body.board-visible.chat-visible #screen-discussion.presence-active > .presence-game-panel,
+body.board-visible.chat-visible #screen-proposal.presence-active > .presence-game-panel,
+body.board-visible.chat-visible #screen-vote.presence-active > .presence-game-panel,
+body.board-visible.chat-visible #screen-assassin.presence-active > .presence-game-panel {
+    grid-row: 1;
+    align-self: stretch;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    min-height: 100%;
+    max-height: 100%;
+    flex: none;
+    margin: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    transform: none;
+    box-sizing: border-box;
+    scrollbar-gutter: auto;
+}
+
+body.board-visible.chat-visible #screen-discussion.presence-active > .presence-table,
+body.board-visible.chat-visible #screen-proposal.presence-active > .presence-table,
+body.board-visible.chat-visible #screen-vote.presence-active > .presence-table,
+body.board-visible.chat-visible #screen-assassin.presence-active > .presence-table {
+    grid-row: 2;
+    align-self: stretch;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    min-height: 100%;
+    max-height: 100%;
+    flex: none;
+    margin: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+body.board-visible.chat-visible #screen-discussion.presence-active > .presence-table .presence-field,
+body.board-visible.chat-visible #screen-proposal.presence-active > .presence-table .presence-field,
+body.board-visible.chat-visible #screen-vote.presence-active > .presence-table .presence-field,
+body.board-visible.chat-visible #screen-assassin.presence-active > .presence-table .presence-field {
+    min-height: 0;
+}
+
+body.board-visible.chat-visible #screen-proposal.presence-active .player-select-list,
+body.board-visible.chat-visible #screen-assassin.presence-active .assassin-target-list {
+    flex: 0 0 auto;
+    min-height: auto;
+    overflow: visible;
+}
+
+@media (max-height: 720px) {
+    #screen-vote-reveal-player .player-reveal-cards {
+        top: 8.8rem;
+        width: 235px;
+        gap: 0.3rem;
+    }
+    #screen-vote-reveal-player .player-reveal-cards[data-player-count="6"] { width: 270px; }
+    #screen-vote-reveal-player .player-reveal-cards[data-player-count="10"] { width: 270px; }
+    #screen-vote-reveal-player .cinematic-vote-portrait { width: 38px; }
+    #screen-vote-reveal-player .player-reveal-cards[data-player-count="6"] .cinematic-vote-portrait { width: 44px; }
+    #screen-vote-reveal-player .player-reveal-cards[data-player-count="10"] .cinematic-vote-portrait { width: 34px; }
+}
+
+/* Baked title copy occupies the upper third of the supplied reveal art. */
+#screen-vote-reveal-player .player-reveal-cards {
+    top: clamp(15rem, 30.5dvh, 17rem);
+}
+#screen-mission-cards-player .quest-card-reveal-stage {
+    padding-top: 14dvh;
+    padding-bottom: 2dvh;
+}
+
+@media (max-height: 720px) {
+    #screen-vote-reveal-player .player-reveal-cards { top: 27.5dvh; }
+}
+
+/* A role and its private knowledge now resolve as one cinematic reveal. */
+#screen-role .role-reveal-heading {
+    bottom: calc(17rem + env(safe-area-inset-bottom));
+}
+#screen-role .role-reveal-details {
+    bottom: calc(4.8rem + env(safe-area-inset-bottom));
+    max-height: 12rem;
+    gap: 0.28rem;
+}
+.role-knowledge {
+    display: grid;
+    gap: 0.32rem;
+    margin-top: 0.12rem;
+}
+.role-knowledge-label {
+    margin: 0;
+    color: #c9b98e;
+    font: 0.54rem/1.25 var(--font-heading);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.role-knowledge-portraits {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: clamp(0.42rem, 2.5vw, 0.7rem);
+}
+.role-knowledge-person {
+    min-width: 0;
+    display: grid;
+    justify-items: center;
+    gap: 0.2rem;
+    color: #d6c9b0;
+    opacity: 0;
+    transform: translateY(12px) scale(0.92);
+}
+.role-knowledge-person .identity-avatar-portrait {
+    width: clamp(46px, 13vw, 56px);
+    height: clamp(46px, 13vw, 56px);
+    border: 1px solid rgba(201,168,76,0.48);
+    box-shadow: 0 7px 18px rgba(0,0,0,0.42);
+}
+.role-knowledge-person .identity-avatar-name {
+    max-width: 5rem;
+    overflow: hidden;
+    font: 0.5rem var(--font-heading);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.role-reveal-product.is-revealed .role-knowledge-person {
+    animation: role-knowledge-in 0.65s cubic-bezier(.2,.78,.2,1) var(--knowledge-delay, 1.55s) forwards;
+}
+@keyframes role-knowledge-in {
+    to { opacity: 1; transform: none; }
+}
+.role-knowledge.has-no-portraits .role-knowledge-label {
+    color: #9f9788;
+    text-transform: none;
+}
+.role-reveal-waiting {
+    position: absolute;
+    z-index: 4;
+    left: 1rem;
+    right: 1rem;
+    bottom: max(1.25rem, env(safe-area-inset-bottom));
+    margin: 0;
+    color: #aaa18f;
+    font: 0.66rem var(--font-heading);
+    letter-spacing: 0.08em;
+    text-align: center;
+}
+
+@media (max-height: 680px) {
+    #screen-role .role-reveal-heading { bottom: calc(13.4rem + env(safe-area-inset-bottom)); }
+    #screen-role .role-reveal-details {
+        bottom: calc(3.8rem + env(safe-area-inset-bottom));
+        max-height: 9.25rem;
+        gap: 0.18rem;
+    }
+    .role-knowledge { gap: 0.18rem; }
+    .role-knowledge-person .identity-avatar-portrait { width: 38px; height: 38px; }
+    .role-knowledge-person .identity-avatar-name { font-size: 0.43rem; }
+    .role-knowledge-label { font-size: 0.46rem; }
+}
+
+/* ============================================================
+   FIXED ACTION-PANEL CONTENT POLISH
+   The fixed tracks above remain authoritative; only their contents change.
+   ============================================================ */
+#screen-vote.presence-active .presence-player-panel {
+    justify-content: flex-start;
+    gap: clamp(0.35rem, 0.9dvh, 0.55rem);
+    padding: clamp(0.5rem, 1.2dvh, 0.72rem);
+}
+#screen-vote.presence-active .screen-header { flex: 0 0 auto; margin: 0; }
+#screen-vote.presence-active .vote-team-display {
+    min-height: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+#screen-vote.presence-active .vote-team-display h3 { flex: 0 0 auto; margin: 0; font-size: 0.64rem; }
+#screen-vote.presence-active .vote-team-names-list {
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: safe center;
+    gap: 0.42rem;
+    padding: 0.2rem 0.1rem 0.34rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+}
+#screen-vote.presence-active .vote-name-chip {
+    min-width: 68px;
+    flex: 0 0 68px;
+    gap: 0.18rem;
+    padding: 0.28rem 0.32rem;
+    scroll-snap-align: center;
+}
+#screen-vote.presence-active .vote-name-chip .identity-avatar-portrait { width: 46px; height: 46px; }
+#screen-vote.presence-active .vote-buttons { flex: 0 0 auto; gap: 0.55rem; }
+#screen-vote.presence-active .vote-buttons .btn {
+    min-height: 68px;
+    max-height: 72px;
+    padding: 0.5rem 0.6rem;
+    gap: 0.18rem;
+    font-size: 0.72rem;
+}
+#screen-vote.presence-active .vote-icon { font-size: 1.35rem; line-height: 1; }
+
+#screen-discussion.presence-active:not(.discussion-is-leader) .presence-player-panel {
+    justify-content: center;
+    gap: clamp(0.62rem, 1.8dvh, 1rem);
+    padding: clamp(0.7rem, 1.8dvh, 1rem);
+}
+#screen-discussion.presence-active:not(.discussion-is-leader) .screen-title-small {
+    font-size: clamp(1.35rem, 6.5vw, 1.8rem) !important;
+}
+#screen-discussion.presence-active:not(.discussion-is-leader) .mission-info-pill {
+    padding: 0.42rem 0.75rem;
+    font-size: clamp(0.68rem, 3vw, 0.8rem);
+}
+#screen-discussion.presence-active:not(.discussion-is-leader) .discussion-leader {
+    margin-top: 0.35rem;
+    font-size: clamp(0.66rem, 2.9vw, 0.78rem);
+}
+#screen-discussion.presence-active:not(.discussion-is-leader) .discussion-clock-player {
+    gap: 0.75rem;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.64rem;
+}
+#screen-discussion.presence-active:not(.discussion-is-leader) .discussion-clock-player .timer-small {
+    font-size: clamp(1.65rem, 7vw, 2.1rem);
+}
+#screen-discussion.presence-active:not(.discussion-is-leader) .waiting-text {
+    font-size: clamp(0.8rem, 3.7vw, 0.95rem) !important;
+    line-height: 1.35;
+}
+
+/* Compact mobile-only status block: proposal/failed, then role/clock. */
+.player-board .pb-stats {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    grid-template-rows: repeat(2, auto);
+    align-items: center;
+    flex: 0 0 5.85rem;
+    gap: 4px 0.16rem;
+    width: 5.85rem;
+    min-width: 5.85rem;
+}
+.player-board .pb-role-peek {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: center;
+    justify-self: center;
+    margin: 0;
+    min-height: 16px;
+    padding: 0;
+    gap: 2px;
+    font-size: 0.4rem;
+    letter-spacing: 0.045em;
+    white-space: nowrap;
+}
+.player-board .pb-role-peek span { font-size: 0.48rem; }
+.player-board .pb-stats > .pb-stat:last-child {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+    justify-content: center;
+}
+.player-board .pb-proposal-stat {
+    grid-column: 1;
+    grid-row: 1;
+}
+.player-board .pb-fail-stat {
+    grid-column: 2;
+    grid-row: 1;
+}
+.player-board .pb-proposal-stat,
+.player-board .pb-fail-stat {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.player-board .pb-stat { min-width: 0; gap: 0.18rem; }
+.player-board .pb-stat span { font-size: 0.42rem; letter-spacing: 0.05em; }
+.player-board .pb-stat strong { font-size: 0.62rem; }
+.player-board .pb-proposal-circles,
+.player-board .pb-fail-circles { gap: 1.5px; }
+.player-board .pb-proposal-circles i,
+.player-board .pb-fail-circles i { width: 6px; height: 6px; }
+.player-board #pb-game-time { width: auto; text-align: center; }
+.player-board {
+    gap: 10px;
+    padding-left: max(0.5rem, env(safe-area-inset-left));
+    padding-right: max(0.5rem, env(safe-area-inset-right));
+}
+.player-board .pb-shields { gap: 0.2rem; }
+
+/* Reference-inspired surface finish; geometry remains unchanged. */
+.player-board,
+.presence-player-panel,
+.presence-player .presence-field,
+.chat-input-row {
+    border-color: rgba(191,151,63,0.54);
+    box-shadow:
+        inset 0 0 0 1px rgba(255,225,148,0.055),
+        inset 0 0 0 3px rgba(0,0,0,0.2),
+        0 8px 24px rgba(0,0,0,0.34);
+}
+
+.quest-reveal-omen {
+    width: min(88vw, 38rem);
+    margin: 0;
+    color: rgba(237,220,177,0.88);
+    font: italic clamp(0.82rem, 3.5vw, 1.05rem)/1.45 var(--font-body);
+    letter-spacing: 0.04em;
+    text-shadow: 0 2px 12px #000;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .quest-reveal-omen { animation: quest-omen-breathe 2.4s ease-in-out infinite; }
+}
+
+@keyframes quest-omen-breathe {
+    0%, 100% { opacity: 0.64; }
+    50% { opacity: 1; }
+}
+
+/* Texture every game control, including cinematic and utility actions. */
+button:not(.role-overlay-close):not(.assassin-strike-button) {
+    position: relative;
+    isolation: isolate;
+    box-shadow:
+        inset 0 0 0 1px rgba(255,230,166,0.1),
+        inset 0 -8px 18px rgba(0,0,0,0.2),
+        0 5px 13px rgba(0,0,0,0.28);
+}
+
+button:not(.role-overlay-close):not(.assassin-strike-button)::after {
+    content: '';
+    position: absolute;
+    z-index: 0;
+    inset: 3px;
+    border: 1px solid rgba(255,225,154,0.11);
+    border-radius: max(2px, calc(var(--radius-sm) - 3px));
+    background:
+        radial-gradient(circle at 14% 24%, rgba(255,255,255,0.12) 0 0.6px, transparent 0.9px),
+        repeating-linear-gradient(112deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 4px);
+    background-size: 17px 15px, auto;
+    opacity: 0.72;
+    pointer-events: none;
+}
+
+.btn-approve,
+.mission-choice-btn.success {
+    background: radial-gradient(circle at 48% 10%, rgba(76,151,210,0.22), transparent 42%), linear-gradient(145deg, #173b62, #071421 72%);
+}
+
+.btn-reject,
+.mission-choice-btn.fail,
+.btn-danger {
+    background: radial-gradient(circle at 48% 10%, rgba(207,78,66,0.2), transparent 42%), linear-gradient(145deg, #5b1815, #1b0707 72%);
+}
+
+/* Cinematic actions are viewport-anchored. Keep the decorative global button
+   treatment from pulling them back into normal document flow. */
+#screen-role .role-confirm-button,
+#screen-mission > .quest-reveal-action,
+#screen-mission-reveal-player > .quest-reveal-action,
+#screen-vote-reveal-player #btn-player-confirm-vote {
+    position: absolute;
+}
+
+/* My Role is intentionally a quiet text affordance in the compact phone bar. */
+#player-board .pb-role-peek {
+    border: 0;
+    box-shadow: none;
+    font-size: 0.54rem;
+}
+#player-board .pb-role-peek span { font-size: 0.64rem; }
+#player-board .pb-role-peek::after { display: none; }
+
+/* Let the full-UI scene breathe through its controls while preserving contrast. */
+body.board-visible.chat-visible #screen-discussion.presence-active > .presence-game-panel,
+body.board-visible.chat-visible #screen-proposal.presence-active > .presence-game-panel,
+body.board-visible.chat-visible #screen-vote.presence-active > .presence-game-panel,
+body.board-visible.chat-visible #screen-assassin.presence-active > .presence-game-panel {
+    background: linear-gradient(145deg, rgba(28,21,11,0.84), rgba(8,8,9,0.89));
+    backdrop-filter: blur(2px);
+}
+body.board-visible.chat-visible #screen-discussion.presence-active > .presence-table .presence-field,
+body.board-visible.chat-visible #screen-proposal.presence-active > .presence-table .presence-field,
+body.board-visible.chat-visible #screen-vote.presence-active > .presence-table .presence-field,
+body.board-visible.chat-visible #screen-assassin.presence-active > .presence-table .presence-field {
+    background: rgba(3,4,6,0.78);
+}
+body.board-visible.chat-visible #screen-discussion.presence-active > .presence-table .presence-field::before,
+body.board-visible.chat-visible #screen-proposal.presence-active > .presence-table .presence-field::before,
+body.board-visible.chat-visible #screen-vote.presence-active > .presence-table .presence-field::before,
+body.board-visible.chat-visible #screen-assassin.presence-active > .presence-table .presence-field::before {
+    opacity: 0.9;
 }

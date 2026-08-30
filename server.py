@@ -55,7 +55,6 @@ from game_logic import (
     process_assassination,
     get_game_summary,
     build_state_snapshot,
-    spectrum_average_positions,
     role_manifest,
     SpectatorInfo,
     MISSION_SIZES,
@@ -842,6 +841,7 @@ def serialize_game(game: GameState) -> dict:
         "pending_vote_result": game.pending_vote_result,
         "mission_cards": game.mission_cards,
         "pending_mission_reveal": game.pending_mission_reveal,
+        "opening_acks": sorted(game.opening_acks),
         "night_acks": sorted(game.night_acks),
         "vote_reveal_acks": sorted(game.vote_reveal_acks),
         "mission_intro_acks": sorted(game.mission_intro_acks),
@@ -863,7 +863,6 @@ def serialize_game(game: GameState) -> dict:
             {"digest": digest, "expires_at": expires_at}
             for digest, expires_at in game.display_pair_codes.items()
         ],
-        "spectrum_ratings": game.spectrum_ratings,
         "suspended": game.suspended,
         "inactive_since": game.inactive_since,
         "expires_at": game.expires_at,
@@ -931,6 +930,7 @@ def deserialize_game(state: dict, *, saved_at: float) -> GameState:
     game.pending_vote_result = state.get("pending_vote_result")
     game.mission_cards = dict(state.get("mission_cards", {}))
     game.pending_mission_reveal = state.get("pending_mission_reveal")
+    game.opening_acks = set(state.get("opening_acks", []))
     game.night_acks = set(state.get("night_acks", []))
     game.vote_reveal_acks = set(state.get("vote_reveal_acks", []))
     game.mission_intro_acks = set(state.get("mission_intro_acks", []))
@@ -964,7 +964,6 @@ def deserialize_game(state: dict, *, saved_at: float) -> GameState:
         for item in state.get("display_pair_codes", [])
         if item.get("expires_at", 0) > time.time()
     }
-    game.spectrum_ratings = dict(state.get("spectrum_ratings", {}))
     # A process restart disconnects everyone and therefore suspends the room
     # from the latest durable save point.
     game.suspended = True
@@ -1440,15 +1439,10 @@ def emit_validation_error(error: Exception) -> None:
     emit("error", {"message": str(error)})
 
 
-def public_spectrum_payload(game: GameState) -> dict[str, dict[str, float]]:
-    return spectrum_average_positions(game)
-
-
 def lobby_payload(game: GameState) -> dict:
     return {
         "players": game.public_players(),
         "player_order": [game.players[player_id].name for player_id in game.player_order],
-        "public_spectrum": public_spectrum_payload(game),
         "role_manifest": role_manifest(game),
         "settings": {
             "discussion_time": game.discussion_time,
@@ -1465,6 +1459,15 @@ def night_pending_names(game: GameState) -> list[str]:
         player.name
         for player in game.player_order_list()
         if player.player_id not in game.night_acks
+    ]
+
+
+def opening_pending_names(game: GameState) -> list[str]:
+    """Names of human players who have not entered the opening reveal yet."""
+    return [
+        player.name
+        for player in game.player_order_list()
+        if not player.is_bot and player.player_id not in game.opening_acks
     ]
 
 
@@ -1798,13 +1801,44 @@ def transition_to_team_proposal(game: GameState):
     persist_game(game)
 
 
-def transition_to_night_phase(game: GameState):
+def emit_role_assignments(game: GameState) -> None:
+    """Deliver private roles while the public room remains on the opening."""
+    for pid, player in game.players.items():
+        if not player.sid:
+            continue
+        emit_to_player(
+            player.sid,
+            "role_assigned",
+            {
+                "role": player.role,
+                "team": player.team,
+                "night_info": get_night_phase_info(game, pid),
+            },
+        )
+    omniscient_roles = spectator_role_payload(game)
+    for spectator in game.spectators.values():
+        if spectator.sid and spectator.vision_mode == "omniscient":
+            emit_to_player(
+                spectator.sid,
+                "spectator_roles_revealed",
+                {"players": omniscient_roles},
+            )
+
+
+def transition_to_night_phase(
+    game: GameState,
+    *,
+    preacknowledged_night_ids: set[str] | None = None,
+) -> None:
     game.phase = GamePhase.NIGHT_PHASE
     game.timer_phase_key = None
     game.timer_deadline = None
     game.timer_kind = None
     game.timer_remaining = None
-    game.night_acks = set()
+    game.night_acks = set(preacknowledged_night_ids or ())
+    game.night_acks.update(
+        player.player_id for player in game.players.values() if player.is_bot
+    )
     mark_phase_started(game, "night_phase_started", {"player_count": game.player_count()})
     emit_to_game(
         game.code,
@@ -1815,29 +1849,6 @@ def transition_to_night_phase(game: GameState):
             "pending_names": night_pending_names(game),
         },
     )
-    # Send private role info to each player
-    for pid, player in game.players.items():
-        if player.sid:
-            night_info = get_night_phase_info(game, pid)
-            emit_to_player(
-                player.sid,
-                "role_assigned",
-                {
-                    "role": player.role,
-                    "team": player.team,
-                    "night_info": night_info,
-                },
-            )
-        elif player.is_bot:
-            game.night_acks.add(pid)
-    omniscient_roles = spectator_role_payload(game)
-    for spectator in game.spectators.values():
-        if spectator.sid and spectator.vision_mode == "omniscient":
-            emit_to_player(
-                spectator.sid,
-                "spectator_roles_revealed",
-                {"players": omniscient_roles},
-            )
     if game.night_acks:
         emit_to_game(
             game.code,
@@ -1848,6 +1859,13 @@ def transition_to_night_phase(game: GameState):
                 "pending_names": night_pending_names(game),
             },
         )
+    if len(game.night_acks) >= game.player_count():
+        game.phase = GamePhase.ROUND_START
+        emit_to_game(game.code, "night_phase_complete", {})
+        persist_game(game)
+        pause(1)
+        start_round(game)
+        return
     persist_game(game)
 
 
@@ -1985,6 +2003,12 @@ def reveal_ack_payload(game: GameState, acknowledgements: set[str]) -> dict:
     }
 
 
+def opening_ack_payload(game: GameState) -> dict:
+    payload = reveal_ack_payload(game, game.opening_acks)
+    payload["pending_names"] = opening_pending_names(game)
+    return payload
+
+
 def vote_reveal_seconds(game: GameState) -> float:
     """Minimum time needed for every avatar stamp and result beat to finish."""
     return 2.2 + game.player_count() * 0.7
@@ -2029,9 +2053,10 @@ def finish_mission(game: GameState, result: dict) -> None:
     )
     emit_to_game(game.code, "mission_reveal", reveal_payload)
     persist_game(game)
-    # Keep the card suspense on its own screen long enough for every card to
-    # turn and breathe before the separate outcome artwork is announced.
-    pause((1200 + len(result["cards_shuffled"]) * 1100 + 1500) / 1000)
+    # Reveal every card, hold the final result for a brief beat, then move
+    # directly to the outcome artwork on every connected screen.
+    final_card_at_ms = 1200 + max(0, len(result["cards_shuffled"]) - 1) * 1100
+    pause((final_card_at_ms + 900) / 1000)
     game.mission_history.append(history_item)
     log_game_event(
         game,
@@ -2678,7 +2703,6 @@ def on_register_host_screen(data):
                 "join_url": public_base_url(),
                 "players": game.public_players(),
                 "player_order": [game.players[player_id].name for player_id in game.player_order],
-                "public_spectrum": public_spectrum_payload(game),
                 "role_manifest": role_manifest(game),
                 "phase": game.phase,
                 "mission_sizes": MISSION_SIZES.get(player_count, []),
@@ -2710,6 +2734,8 @@ def on_register_host_screen(data):
                 "night_confirmed": len(game.night_acks),
                 "night_total": game.player_count(),
                 "night_pending_names": night_pending_names(game),
+                "opening_ack_ids": sorted(game.opening_acks),
+                "opening_status": opening_ack_payload(game),
                 "spectator_count": connected_spectator_count(game),
                 "pending_mission_outcome": game.pending_mission_outcome,
                 "mission_choices_open": game.mission_choices_open,
@@ -2890,7 +2916,6 @@ def on_create_player_game(data):
                 "is_host": True,
                 "room_code": code,
                 "players": game.public_players(),
-                "public_spectrum": public_spectrum_payload(game),
                 "role_manifest": role_manifest(game),
                 "settings": lobby_payload(game)["settings"],
             },
@@ -2939,7 +2964,6 @@ def on_join_game(data):
                         "is_host": existing_player.player_id == game.host_player_id,
                         "room_code": code,
                         "players": game.public_players(),
-                        "public_spectrum": public_spectrum_payload(game),
                         "role_manifest": role_manifest(game),
                         "settings": lobby_payload(game)["settings"],
                     },
@@ -2987,7 +3011,6 @@ def on_join_game(data):
                 "is_host": player.player_id == game.host_player_id,
                 "room_code": code,
                 "players": game.public_players(),
-                "public_spectrum": public_spectrum_payload(game),
                 "role_manifest": role_manifest(game),
                 "settings": {
                     "discussion_time": game.discussion_time,
@@ -3292,60 +3315,6 @@ def on_claim_player_seat(data):
 
 
 # --- Lobby management ---
-
-
-@socketio.on("update_spectrum_ratings")
-@rate_limited()
-def on_update_spectrum_ratings(data):
-    try:
-        game, rater = validate_caller(request.sid)
-        data = require_object(data)
-        positions = data.get("positions")
-        if not isinstance(positions, dict) or len(positions) > 10:
-            raise ValueError("positions must be an object with at most 10 players")
-        clean_positions = {}
-        for player_id, position in positions.items():
-            if not isinstance(player_id, str) or player_id not in game.players:
-                raise ValueError("Player is not in this game")
-            if not isinstance(position, dict):
-                raise ValueError("Each position must be an object")
-            x = position.get("x")
-            y = position.get("y")
-            if (
-                isinstance(x, bool)
-                or isinstance(y, bool)
-                or not isinstance(x, (int, float))
-                or not isinstance(y, (int, float))
-                or not math.isfinite(x)
-                or not math.isfinite(y)
-                or not 0 <= x <= 1
-                or not 0 <= y <= 1
-            ):
-                raise ValueError("Spectrum coordinates must be between 0 and 1")
-            clean_positions[player_id] = {
-                "x": round(float(x), 4),
-                "y": round(float(y), 4),
-            }
-        game.spectrum_ratings[rater.player_id] = clean_positions
-        record_product_event(
-            "spectrum_ratings_updated",
-            game=game,
-            actor_type="player",
-            actor_id=rater.player_id,
-            analytics_id=rater.analytics_id,
-            payload={
-                "positions": clean_positions,
-                "target_count": len(clean_positions),
-            },
-            visibility="research_secret",
-        )
-        emit_to_game(
-            game.code,
-            "public_spectrum_updated",
-            {"positions": public_spectrum_payload(game)},
-        )
-    except ValueError as error:
-        emit_validation_error(error)
 
 
 @socketio.on("reorder_players")
@@ -3698,10 +3667,20 @@ def on_start_game():
                 "human_count": sum(not player.is_bot for player in game.players.values()),
             },
         )
-        emit_to_game(game.code, "game_starting", {"player_count": n, "game_started_at": game.started_at})
+        game.opening_acks = set()
+        opening_status = opening_ack_payload(game)
+        emit_to_game(
+            game.code,
+            "game_starting",
+            {
+                "player_count": n,
+                "game_started_at": game.started_at,
+                **opening_status,
+            },
+        )
+        emit_role_assignments(game)
+        emit_to_game(game.code, "game_opening_ack_status", opening_status)
         persist_game(game)
-        pause(1)
-        transition_to_night_phase(game)
     except ValueError as error:
         if game:
             message = str(error)
@@ -3723,14 +3702,50 @@ def on_start_game():
 # --- Night phase ---
 
 
+@socketio.on("confirm_game_opening")
+@rate_limited()
+def on_confirm_game_opening():
+    try:
+        game, player = validate_caller(
+            request.sid,
+            require_phase=GamePhase.ROLE_ASSIGNMENT,
+        )
+        game.opening_acks.add(player.player_id)
+        status = opening_ack_payload(game)
+        emit_to_game(game.code, "game_opening_ack_status", status)
+        persist_game(game)
+        if status["complete"]:
+            transition_to_night_phase(game)
+    except ValueError as error:
+        emit_validation_error(error)
+
+
 @socketio.on("night_phase_ack")
 @rate_limited()
 def on_night_phase_ack():
     sid = request.sid
     try:
-        game, player = validate_caller(sid, require_phase=GamePhase.NIGHT_PHASE)
+        game, player = validate_caller(sid)
     except ValueError as e:
         emit("error", {"message": str(e)})
+        return
+    # Compatibility for clients that joined before the explicit opening gate:
+    # their role acknowledgement also counts as entering Avalon. This never
+    # bypasses the requirement that every human player confirms.
+    if game.phase == GamePhase.ROLE_ASSIGNMENT:
+        game.opening_acks.add(player.player_id)
+        game.night_acks.add(player.player_id)
+        status = opening_ack_payload(game)
+        emit_to_game(game.code, "game_opening_ack_status", status)
+        persist_game(game)
+        if status["complete"]:
+            transition_to_night_phase(
+                game,
+                preacknowledged_night_ids=set(game.night_acks),
+            )
+        return
+    if game.phase != GamePhase.NIGHT_PHASE:
+        emit("error", {"message": f"Game is not in {GamePhase.NIGHT_PHASE.value} phase"})
         return
     if player.player_id in game.night_acks:
         return  # Already acked, ignore duplicate
@@ -4148,7 +4163,6 @@ def return_game_to_lobby(game: GameState, *, reason: str) -> None:
         "return_to_lobby",
         {
             "players": game.public_players(),
-            "public_spectrum": public_spectrum_payload(game),
             "role_manifest": role_manifest(game),
             "settings": {
                 "discussion_time": game.discussion_time,
