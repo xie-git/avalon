@@ -3258,3 +3258,42 @@ body.board-visible.chat-visible #screen-vote.presence-active > .presence-table .
 body.board-visible.chat-visible #screen-assassin.presence-active > .presence-table .presence-field::before {
     opacity: 0.9;
 }
+
+/* Keep the full-UI artwork continuous beneath its transparent top bar. */
+body.board-visible.chat-visible::before {
+    content: '';
+    position: fixed;
+    z-index: 0;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: min(100vw, 480px);
+    transform: translateX(-50%);
+    background:
+        linear-gradient(180deg,
+            rgba(5,6,9,0.34) 0,
+            rgba(5,6,9,0.22) 48px,
+            rgba(3,4,9,0.2) 100%),
+        center / cover no-repeat url('/static/assets/ui/mobile-ui-bg.png?v=20260901-v2');
+    pointer-events: none;
+}
+
+body.board-visible.chat-visible::after {
+    display: none;
+}
+
+body.board-visible.chat-visible .player-board {
+    background: transparent;
+    border-bottom-color: rgba(191,151,63,0.38);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+}
+
+body.board-visible.chat-visible #screen-discussion.presence-active,
+body.board-visible.chat-visible #screen-proposal.presence-active,
+body.board-visible.chat-visible #screen-vote.presence-active,
+body.board-visible.chat-visible #screen-assassin.presence-active {
+    background: transparent;
+    background-color: transparent;
+}
