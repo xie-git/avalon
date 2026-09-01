@@ -28,7 +28,7 @@ html:has(.entry-screen) {
     background-image:
         linear-gradient(180deg, rgba(5, 6, 7, 0.34) 0%, rgba(7, 7, 7, 0.16) 32%, rgba(4, 4, 5, 0.78) 100%),
         radial-gradient(circle at 50% 35%, transparent 0%, rgba(4, 4, 5, 0.18) 62%, rgba(3, 3, 4, 0.6) 100%),
-        url('/static/img/join_page_bg.png?v=20260829-production-fix-1');
+        url('/static/assets/entry/join-page-bg.webp?v=20260830-entry-webp-1');
     background-position: center, center, center;
     background-repeat: no-repeat;
     background-size: cover, cover, cover;

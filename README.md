@@ -87,13 +87,14 @@ implemented.
 | `templates/`, `static/` | Browser UI and runtime artwork. |
 | `tests/` | Logic, protocol, security, persistence, archive, and research tests. |
 | `docs/` | Operator, privacy, and research documentation. |
-| `source-assets/` | Original/concept artwork excluded from the application image. |
+| `source-assets/unused-art/` | Unused, original, and reference artwork excluded from the application image. |
 | `ops/` | Optional, VM-specific host helpers excluded from the application image. |
 
-Runtime role, quest, and result art lives under `static/assets/`; entry/UI art
-lives under `static/img/`. Paired-display music loops and their license
-provenance live under `static/music/`; retained legacy sound sources under
-`static/sounds/` remain excluded from the production image. See
+All runtime artwork lives in category folders under `static/assets/`.
+Paired-display music loops and their license provenance live under
+`static/music/`; retained legacy sound sources under `static/sounds/` remain
+excluded from the production image. Unused art is archived by category under
+`source-assets/unused-art/`. See
 [source-assets/README.md](source-assets/README.md) for artwork handling rules.
 
 ## Local development

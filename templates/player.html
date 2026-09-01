@@ -9,9 +9,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260830-spotlight-fit-1">
-<link rel="stylesheet" href="/static/css/player.css?v=20260830-status-text-1">
-<link rel="stylesheet" href="/static/css/entry.css?v=20260829-production-bg-fix-1">
+<link rel="stylesheet" href="/static/css/common.css?v=20260901-1">
+<link rel="stylesheet" href="/static/css/player.css?v=20260901-mobile-ui-bg-2">
+<link rel="stylesheet" href="/static/css/entry.css?v=20260830-entry-webp-1">
 </head>
 <body data-force-new="{{ 'true' if force_new else 'false' }}">
 
@@ -63,7 +63,7 @@
     <!-- ============ JOIN SCREEN ============ -->
     <div class="screen entry-screen active" id="screen-join">
         <header class="entry-brand">
-            <img class="entry-title-art" src="/static/img/avalon-title.png?v=20260824" alt="Avalon — The Resistance Awaits">
+            <img class="entry-title-art" src="/static/assets/entry/avalon-title.webp?v=20260830-entry-webp-1" alt="Avalon — The Resistance Awaits" decoding="async" fetchpriority="high">
         </header>
         <div id="resume-card" class="dashboard-resume hidden">
             <span>Continue your adventure</span>
@@ -203,7 +203,7 @@
 
     <!-- ============ GAME OPENING CINEMATIC ============ -->
     <div class="screen game-starting-screen" id="screen-game-starting" aria-live="polite">
-        <img class="game-starting-art" src="/static/assets/opening/avalon-game-start-mobile.png?v=20260828" alt="The fellowship gathers around the Round Table beneath the title Avalon">
+        <img class="game-starting-art" data-src="/static/assets/opening/avalon-game-start-mobile.png?v=20260828" alt="The fellowship gathers around the Round Table beneath the title Avalon">
         <div class="game-starting-scrim" aria-hidden="true"></div>
         <div class="game-starting-copy">
             <span>Your allegiance is about to be revealed.</span>
@@ -270,22 +270,13 @@
             <span>Time remaining</span>
             <div class="timer-small" id="discussion-timer-player">—</div>
         </div>
-        <div id="player-discussion-spotlight" class="discussion-spotlight discussion-spotlight--phone hidden" aria-live="polite"></div>
         <p class="waiting-text" style="font-size:0.9rem">Deliberate. Argue. Trust wisely.</p>
-        <div class="spotlight-leader-controls hidden" id="spotlight-leader-controls">
-            <label for="spotlight-player-select">Accusation Spotlight</label>
-            <div class="spotlight-control-row">
-                <select id="spotlight-player-select" aria-label="Choose a player to address the court"></select>
-                <button type="button" class="btn" id="btn-set-spotlight">Call On Them</button>
-            </div>
-            <button type="button" class="spotlight-clear" id="btn-clear-spotlight">Clear spotlight</button>
-        </div>
         <button class="btn hidden" id="btn-end-discussion" style="width:100%">End Discussion &amp; Pick a Team</button>
     </div>
 
     <!-- ============ VOTE REVEAL — all phones ============ -->
     <div class="screen" id="screen-vote-reveal-player">
-        <img class="vote-reveal-background" src="/static/assets/votes/cards-revealed-mobile.png?v=20260829-cards2" alt="The fellowship journeys toward Avalon as the court's votes are revealed">
+        <img class="vote-reveal-background" data-src="/static/assets/votes/cards-revealed-mobile.png?v=20260829-cards2" alt="The fellowship journeys toward Avalon as the court's votes are revealed">
         <div class="vote-reveal-scrim" aria-hidden="true"></div>
         <div class="vote-reveal-stage" role="status" aria-live="polite">
             <div class="player-reveal-cards" id="player-vote-reveal-cards"></div>
@@ -319,7 +310,7 @@
     </div>
 
     <!-- ============ MISSION CARDS — suspense before the outcome ============ -->
-    <div class="screen" id="screen-mission-cards-player">
+    <div class="screen" id="screen-mission-cards-player" data-deferred-background="/static/assets/votes/cards-revealed-mobile.png?v=20260829-cards2">
         <div class="quest-card-reveal-stage" id="player-quest-card-stage" role="status" aria-live="polite">
             <p class="cinematic-reveal-eyebrow">The fellowship returns</p>
             <h1>The cards are unsealed</h1>
@@ -372,8 +363,8 @@
     <!-- ============ MISSION SCREEN ============ -->
     <div class="screen" id="screen-mission">
         <div class="cinematic-reveal mission-begins-product" id="mission-begins-product" role="status" aria-live="polite">
-            <img class="cinematic-reveal-backdrop" src="/static/assets/quests/quest-begun-mobile.png?v=20260828" alt="" aria-hidden="true">
-            <img class="cinematic-reveal-art" src="/static/assets/quests/quest-begun-mobile.png?v=20260828" alt="A fellowship setting out toward Avalon">
+            <img class="cinematic-reveal-backdrop" data-src="/static/assets/quests/quest-begun-mobile.png?v=20260828" alt="" aria-hidden="true">
+            <img class="cinematic-reveal-art" data-src="/static/assets/quests/quest-begun-mobile.png?v=20260828" alt="A fellowship setting out toward Avalon">
             <div class="cinematic-reveal-scrim"></div>
             <div class="cinematic-reveal-copy mission-begins-copy">
                 <p class="cinematic-reveal-eyebrow">The fate of Avalon rests with you</p>
@@ -663,7 +654,7 @@
 
 <script src="/static/js/socket.io.min.js"></script>
 <script src="/static/js/presence.js?v=20260828-round-table-ui-1"></script>
-<script src="/static/js/player.js?v=20260830-sealed-card-1"></script>
+<script src="/static/js/player.js?v=20260901-1"></script>
 <script src="/static/js/assassination-reveal.js?v=20260827-production-polish-v3"></script>
 <script src="/static/js/final-role-gallery.js?v=20260829-finale-redesign-1"></script>
 </body>

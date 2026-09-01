@@ -231,9 +231,6 @@ class GameState:
             None  # "next_mission" | "assassin_phase" | "evil_wins"
         )
 
-        # Additive social state. A spotlight is only a public discussion cue;
-        # it never affects proposals, votes, missions, or scoring.
-        self.spotlight_player_id: str | None = None
         self.rematch_ready: set[str] = set()
 
         # Timer cancellation flag
@@ -318,7 +315,6 @@ class GameState:
         self.seat_recovery_codes = {}
         self.display_pair_codes = {}
         self.pending_mission_outcome = None
-        self.spotlight_player_id = None
         self.rematch_ready = set()
         self.started_at = None
         self.game_id = None
@@ -711,7 +707,6 @@ def build_state_snapshot(game: GameState, player_id: str) -> dict:
             if game.timer_deadline
             else None
         ),
-        "spotlight_player_id": game.spotlight_player_id,
         "rematch_ready_ids": sorted(game.rematch_ready),
         "voted_names": [
             game.players[pid].name for pid in game.player_order if pid in game.votes

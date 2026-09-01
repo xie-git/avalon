@@ -857,42 +857,6 @@ body.mission-cinematic-active #connection-status {
     text-transform: uppercase;
 }
 .discussion-clock-player .timer-small { font-size: 1.5rem; line-height: 1; }
-.spotlight-leader-controls {
-    width: 100%;
-    padding: 0.8rem;
-    border: 1px solid var(--border-gold);
-    border-radius: var(--radius-md);
-    background: rgba(201, 168, 76, 0.06);
-}
-.spotlight-leader-controls > label {
-    display: block;
-    margin-bottom: 0.5rem;
-    color: var(--gold);
-    font: 700 0.7rem/1.2 var(--font-heading);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-}
-.spotlight-control-row { display: flex; gap: 0.45rem; }
-.spotlight-control-row select {
-    min-width: 0;
-    flex: 1;
-    padding: 0.7rem;
-    border: 1px solid var(--border-gold);
-    border-radius: var(--radius-sm);
-    background: var(--bg-card);
-    color: var(--text-primary);
-    font-family: var(--font-heading);
-}
-.spotlight-control-row .btn { flex: 0 0 auto; padding-inline: 0.8rem; font-size: 0.68rem; }
-.spotlight-clear {
-    margin-top: 0.5rem;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--text-dim);
-    font-family: var(--font-heading);
-    cursor: pointer;
-}
 .phone-discussion-setting {
     padding: 0.75rem;
     border: 1px solid var(--border-gold);
@@ -2421,20 +2385,6 @@ body.chat-visible .screen {
     }
     #screen-discussion.presence-active .discussion-clock-player .timer-small { font-size: 1.15rem; }
     #screen-discussion.presence-active .waiting-text { font-size: 0.72rem !important; line-height: 1.2; }
-    #screen-discussion.presence-active .spotlight-leader-controls { padding: 0.45rem; }
-    #screen-discussion.presence-active .spotlight-leader-controls > label {
-        margin-bottom: 0.25rem;
-        font-size: 0.58rem;
-    }
-    #screen-discussion.presence-active .spotlight-control-row select { padding: 0.4rem; }
-    #screen-discussion.presence-active .spotlight-control-row .btn {
-        padding-inline: 0.55rem;
-        font-size: 0.58rem;
-    }
-    #screen-discussion.presence-active .spotlight-clear {
-        margin-top: 0.15rem;
-        font-size: 0.58rem;
-    }
     #screen-discussion.presence-active #btn-end-discussion {
         min-height: 36px;
         padding: 0.4rem 0.6rem;
@@ -2508,7 +2458,7 @@ body.chat-visible .screen {
     background-image:
         linear-gradient(180deg, rgba(5, 6, 7, 0.34) 0%, rgba(7, 7, 7, 0.16) 32%, rgba(4, 4, 5, 0.78) 100%),
         radial-gradient(circle at 50% 35%, transparent 0%, rgba(4, 4, 5, 0.18) 62%, rgba(3, 3, 4, 0.6) 100%),
-        url('/static/img/join_page_bg.png?v=20260829');
+        url('/static/assets/entry/join-page-bg.webp?v=20260830-entry-webp-1');
     background-position: center, center, center -50px;
     background-repeat: no-repeat;
     background-size: cover, cover, auto calc(100% + 50px);
@@ -2784,7 +2734,7 @@ body.player-cinematic-active #connection-status { display: none !important; }
 }
 #screen-mission-cards-player {
     background: linear-gradient(180deg, rgba(3,4,5,0.12), rgba(3,4,5,0.72)),
-        center / cover no-repeat url('/static/assets/votes/cards-revealed-mobile.png?v=20260829-cards2');
+        var(--deferred-background-art, none) center / cover no-repeat;
 }
 #screen-mission-cards-player .quest-card-reveal-stage { background: transparent; }
 #screen-mission-cards-player .quest-card-reveal-stage > .cinematic-reveal-eyebrow,
@@ -2894,11 +2844,10 @@ body.board-visible.chat-visible #screen-assassin.presence-active {
     scrollbar-gutter: auto;
     background:
         linear-gradient(180deg,
-            #050609 0,
-            rgba(5,6,9,0.84) 24px,
-            rgba(5,6,9,0.3) 88px,
-            rgba(3,4,7,0.16) 100%),
-        center calc(50% + 18px) / cover no-repeat url('/static/img/full_ui_bg.png?v=20260830-night-castle');
+            rgba(5,6,9,0.7) 0,
+            rgba(5,6,9,0.5) 48px,
+            rgba(3,4,9,0.26) 100%),
+        center / cover no-repeat url('/static/assets/ui/mobile-ui-bg.png?v=20260901-v2');
     background-color: #050609;
 }
 

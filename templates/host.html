@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Avalon — Host</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260830-spotlight-fit-1">
-<link rel="stylesheet" href="/static/css/host.css?v=20260830-join-bg-1">
-<link rel="stylesheet" href="/static/css/entry.css?v=20260829-production-bg-fix-1">
+<link rel="stylesheet" href="/static/css/common.css?v=20260901-1">
+<link rel="stylesheet" href="/static/css/host.css?v=20260901-large-vote-cards-4">
+<link rel="stylesheet" href="/static/css/entry.css?v=20260830-entry-webp-1">
 <style>
 .reorder-label {
     font-family: var(--font-heading);
@@ -74,8 +74,8 @@
         <button type="button" class="host-music-button" data-music-track="waterfall-citadel" aria-pressed="false" title="The Waterfall Citadel">Citadel</button>
         <label class="host-volume-control" for="host-music-volume">
             <span>Volume</span>
-            <input id="host-music-volume" type="range" min="0" max="100" step="1" value="34" aria-label="Music volume" aria-valuetext="34 percent">
-            <output id="host-music-volume-output" for="host-music-volume">34%</output>
+            <input id="host-music-volume" class="host-music-volume" type="range" min="0" max="100" step="1" value="34" aria-label="Music volume" aria-valuetext="34 percent">
+            <output id="host-music-volume-output" class="host-music-volume-output" for="host-music-volume">34%</output>
         </label>
     </div>
 </div>
@@ -109,7 +109,7 @@
     <!-- ============ TITLE SCREEN ============ -->
     <div class="screen entry-screen active" id="screen-title">
         <header class="entry-brand">
-            <img class="entry-title-art" src="/static/img/avalon-title.png?v=20260824" alt="Avalon — The Resistance Awaits">
+            <img class="entry-title-art" src="/static/assets/entry/avalon-title.webp?v=20260830-entry-webp-1" alt="Avalon — The Resistance Awaits" decoding="async" fetchpriority="high">
         </header>
         <section class="entry-panel" aria-labelledby="tv-pair-title">
             <a class="entry-back" href="/" aria-label="Back to entry choices">← Back</a>
@@ -133,7 +133,7 @@
     </div>
 
     <!-- ============ LOBBY SCREEN ============ -->
-    <div class="screen" id="screen-lobby">
+    <div class="screen" id="screen-lobby" data-deferred-background="/static/assets/opening/avalon-game-start-wide.png?v=20260828">
         <div class="lobby-main">
             <header class="tv-lobby-brand" aria-label="Avalon — Join the Quest">
                 <span aria-hidden="true"></span>
@@ -169,6 +169,20 @@
             </section>
             <div class="round-table-container round-table-stage-container" id="lobby-round-table"></div>
             <footer class="tv-lobby-waiting" aria-live="polite">
+                <div class="tv-lobby-music" aria-label="Paired display music">
+                    <span class="tv-lobby-music-label">Soundtrack</span>
+                    <div class="tv-lobby-music-tracks">
+                        <button type="button" class="host-music-button active" data-music-track="off" aria-pressed="true">Off</button>
+                        <button type="button" class="host-music-button" data-music-track="quiet-night" aria-pressed="false" title="The Quiet Night Medieval Village">Quiet Night</button>
+                        <button type="button" class="host-music-button" data-music-track="celtic-realm" aria-pressed="false" title="Medieval Celtic Music and Fantasy Celtic Music">Celtic</button>
+                        <button type="button" class="host-music-button" data-music-track="waterfall-citadel" aria-pressed="false" title="The Waterfall Citadel">Citadel</button>
+                    </div>
+                    <label class="host-volume-control tv-lobby-volume" for="lobby-music-volume">
+                        <span>Volume</span>
+                        <input id="lobby-music-volume" class="host-music-volume" type="range" min="0" max="100" step="1" value="34" aria-label="Music volume" aria-valuetext="34 percent">
+                        <output class="host-music-volume-output" for="lobby-music-volume">34%</output>
+                    </label>
+                </div>
                 <span class="tv-lobby-crown" aria-hidden="true">♛</span>
                 <strong id="host-ready-footer-title">Waiting for players</strong>
                 <span id="host-ready-footer-count">0 of 6 players ready</span>
@@ -180,7 +194,7 @@
 
     <!-- ============ GAME OPENING CINEMATIC ============ -->
     <div class="screen game-starting-screen" id="screen-game-starting" aria-live="polite">
-        <img class="game-starting-art" src="/static/assets/opening/avalon-game-start-wide.png?v=20260828" alt="The fellowship gathers around the Round Table beneath the title Avalon">
+        <img class="game-starting-art" data-src="/static/assets/opening/avalon-game-start-wide.png?v=20260828" alt="The fellowship gathers around the Round Table beneath the title Avalon">
         <div class="game-starting-scrim" aria-hidden="true"></div>
         <div class="game-starting-copy">
             <span>In the gathering dark, every allegiance will be revealed.</span>
@@ -214,7 +228,6 @@
                 <div class="timer-text" id="timer-text">—</div>
             </div>
         </div>
-        <div id="host-discussion-spotlight" class="discussion-spotlight discussion-spotlight--tv hidden" aria-live="polite"></div>
     </div>
 
     <!-- ============ TEAM PROPOSAL ============ -->
@@ -240,7 +253,7 @@
 
     <!-- ============ VOTE REVEAL ============ -->
     <div class="screen" id="screen-vote-reveal">
-        <img class="vote-reveal-background" src="/static/assets/votes/cards-revealed-wide.png?v=20260829-cards4k" alt="The fellowship journeys toward Avalon as the court's votes are revealed">
+        <img class="vote-reveal-background" data-src="/static/assets/votes/cards-revealed-wide.png?v=20260829-cards4k" alt="The fellowship journeys toward Avalon as the court's votes are revealed">
         <div class="vote-reveal-scrim" aria-hidden="true"></div>
         <div class="vote-reveal-stage" role="status" aria-live="polite">
             <div class="vote-cards-grid" id="vote-cards-container"></div>
@@ -255,8 +268,8 @@
     <!-- ============ MISSION ============ -->
     <div class="screen" id="screen-mission">
         <div class="cinematic-reveal host-mission-begins" id="host-mission-begins">
-            <img class="cinematic-reveal-backdrop" src="/static/assets/quests/quest-begins-alt.png?v=20260830-ui-2" alt="" aria-hidden="true">
-            <img class="cinematic-reveal-art" src="/static/assets/quests/quest-begins-alt.png?v=20260830-ui-2" alt="A fellowship overlooking Avalon at sunrise">
+            <img class="cinematic-reveal-backdrop" data-src="/static/assets/quests/quest-begins-alt.png?v=20260830-ui-2" alt="" aria-hidden="true">
+            <img class="cinematic-reveal-art" data-src="/static/assets/quests/quest-begins-alt.png?v=20260830-ui-2" alt="A fellowship overlooking Avalon at sunrise">
             <div class="cinematic-reveal-scrim"></div>
             <div class="cinematic-reveal-copy mission-begins-copy quest-begun-ui">
                 <p class="cinematic-reveal-eyebrow">The fate of Avalon rests with you</p>
@@ -271,7 +284,7 @@
     </div>
 
     <!-- ============ MISSION CARDS — suspense on the main display ============ -->
-    <div class="screen" id="screen-mission-cards">
+    <div class="screen" id="screen-mission-cards" data-deferred-background="/static/assets/votes/cards-revealed-wide.png?v=20260829-cards4k">
         <div class="host-card-reveal-stage" id="host-card-reveal-stage">
             <p class="cinematic-reveal-eyebrow">The fellowship returns</p>
             <h1>The cards are unsealed</h1>
@@ -355,7 +368,7 @@
 
 <script src="/static/js/socket.io.min.js"></script>
 <script src="/static/js/presence.js?v=20260828-round-table-ui-1"></script>
-<script src="/static/js/host.js?v=20260830-quest-success-alt-1"></script>
+<script src="/static/js/host.js?v=20260901-lobby-music-1"></script>
 <script src="/static/js/assassination-reveal.js?v=20260827-production-polish-v3"></script>
 <script src="/static/js/final-role-gallery.js?v=20260829-finale-redesign-1"></script>
 </body>

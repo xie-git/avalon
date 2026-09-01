@@ -15,6 +15,22 @@ const ANALYTICS_ID_KEY = 'avalon-analytics-id';
 const FORCE_NEW = document.body.dataset.forceNew === 'true';
 const DEFAULT_TITLE = document.title;
 
+function loadDeferredArtwork(root = document) {
+    root.querySelectorAll('img[data-src]').forEach(image => {
+        image.src = image.dataset.src;
+        image.removeAttribute('data-src');
+    });
+    const backgrounds = root.matches?.('[data-deferred-background]') ? [root] : [];
+    backgrounds.push(...root.querySelectorAll('[data-deferred-background]'));
+    backgrounds.forEach(element => {
+        element.style.setProperty(
+            '--deferred-background-art',
+            `url("${element.dataset.deferredBackground}")`,
+        );
+        element.removeAttribute('data-deferred-background');
+    });
+}
+
 function randomUuid() {
     return crypto.randomUUID ? crypto.randomUUID() :
         'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, character => {
@@ -386,7 +402,10 @@ function showScreen(id) {
     const previousScreenId = document.querySelector('.screen.active')?.id || null;
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const target = document.getElementById(id);
-    if (target) target.classList.add('active');
+    if (target) {
+        loadDeferredArtwork(target);
+        target.classList.add('active');
+    }
     document.body.classList.toggle('role-reveal-active', id === 'screen-role');
     document.body.classList.toggle(
         'quest-reveal-active',
@@ -1133,64 +1152,14 @@ function showDiscussion(data) {
     const endDiscussion = document.getElementById('btn-end-discussion');
     endDiscussion.disabled = false;
     endDiscussion.classList.toggle('hidden', !amLeader);
-    configureSpotlightControls(amLeader);
     discussionTimerMax = Number(data.duration_seconds);
     document.getElementById('discussion-timer-player').textContent = discussionTimerMax
         ? fmtTime(discussionTimerMax)
         : 'Unlimited';
     const screen = document.getElementById('screen-discussion');
     screen.classList.toggle('discussion-is-leader', amLeader);
-    renderDiscussionSpotlight({});
     presenceTable.show(screen, 'Mission Discussion', document.querySelector('#screen-discussion .discussion-info'));
     showScreen('screen-discussion');
-}
-
-function configureSpotlightControls(amLeader) {
-    const controls = document.getElementById('spotlight-leader-controls');
-    controls.classList.toggle('hidden', !amLeader);
-    if (!amLeader) return;
-    const select = document.getElementById('spotlight-player-select');
-    const previous = select.value;
-    select.replaceChildren();
-    (window._playerOrder || []).forEach(name => {
-        const option = document.createElement('option');
-        option.value = (window._playerNameToId || {})[name] || '';
-        option.textContent = name;
-        select.appendChild(option);
-    });
-    if ([...select.options].some(option => option.value === previous)) select.value = previous;
-}
-
-function renderDiscussionSpotlight(data = {}) {
-    const banner = document.getElementById('player-discussion-spotlight');
-    if (!data.player_name) {
-        banner.classList.add('hidden');
-        banner.replaceChildren();
-        return;
-    }
-    const player = presencePlayers.find(candidate =>
-        candidate.player_id === data.player_id || candidate.name === data.player_name
-    ) || { name: data.player_name };
-    const portrait = document.createElement('span');
-    portrait.className = 'accusation-portrait';
-    portrait.classList.toggle('selfie-portrait', Boolean(player.avatar_image));
-    portrait.appendChild(presenceTable.createPortraitElement(
-        player.avatar_index,
-        player.color_index,
-        player.avatar_image,
-    ));
-    const copy = document.createElement('span');
-    copy.className = 'accusation-copy';
-    const label = document.createElement('small');
-    label.textContent = data.player_id === myPlayerId ? 'You stand accused' : 'Accusation spotlight';
-    const name = document.createElement('strong');
-    name.textContent = data.player_id === myPlayerId ? 'DEFEND YOUR CASE' : `${player.name || data.player_name} · DEFEND YOUR CASE`;
-    copy.append(label, name);
-    banner.replaceChildren(portrait, copy);
-    banner.setAttribute('aria-label', data.player_id === myPlayerId
-        ? 'You stand accused. Defend your case.'
-        : `${player.name || data.player_name} stands accused.`);
-    banner.classList.remove('hidden');
 }
 
 function showVoteReveal(data) {
@@ -1737,6 +1706,7 @@ function renderRematchStatus(data) {
 // State snapshot (reconnect)
 // ---------------------------------------------------------------------------
 function applyStateSnapshot(snap) {
+    loadDeferredArtwork();
     cancelGameStartingReveal();
     snap.phase = String(snap.phase || 'LOBBY').replace('GamePhase.', '').toUpperCase();
     const previousCode = gameCode;
@@ -1840,13 +1810,6 @@ function applyStateSnapshot(snap) {
                 leader_name: snap.current_leader,
                 duration_seconds: snap.timer_remaining ?? snap.settings.discussion_time,
             });
-            if (snap.spotlight_player_id) {
-                const spotlightPlayer = (snap.players || []).find(player => player.player_id === snap.spotlight_player_id);
-                renderDiscussionSpotlight({
-                    player_id: snap.spotlight_player_id,
-                    player_name: spotlightPlayer?.name,
-                });
-            }
             break;
         case 'TEAM_PROPOSAL':
             showProposalScreen({
@@ -1933,6 +1896,7 @@ function applyStateSnapshot(snap) {
 // ---------------------------------------------------------------------------
 
 socket.on('join_success', data => {
+    loadDeferredArtwork();
     joinedThisPage = true;
     applySpectatorMode(false);
     const joinButton = document.getElementById('btn-join');
@@ -2163,7 +2127,6 @@ socket.on('round_start', data => {
     showPlayerBoard();
     renderPlayerBoard();
     showChat();
-    renderDiscussionSpotlight();
 });
 
 socket.on('discussion_start', data => {
@@ -2182,8 +2145,6 @@ socket.on('discussion_start', data => {
     const endDiscussion = document.getElementById('btn-end-discussion');
     endDiscussion.disabled = false;
     endDiscussion.classList.toggle('hidden', myPlayerId !== currentLeaderId);
-    configureSpotlightControls(myPlayerId === currentLeaderId);
-    renderDiscussionSpotlight();
     presenceTable.show(
         document.getElementById('screen-discussion'),
         'Mission Discussion',
@@ -2196,10 +2157,6 @@ socket.on('discussion_tick', data => {
     const timerEl = document.getElementById('discussion-timer-player');
     timerEl.textContent = fmtTime(data.remaining_seconds);
     timerEl.className = 'timer-small' + (data.remaining_seconds <= 10 ? ' warning' : '');
-});
-
-socket.on('discussion_spotlight', data => {
-    renderDiscussionSpotlight(data);
 });
 
 socket.on('proposal_start', data => {
@@ -2400,7 +2357,6 @@ socket.on('return_to_lobby', data => {
     releaseWakeLock();
     clearAttention();
     presenceTable.setRoleReveal(null);
-    renderDiscussionSpotlight();
     rematchReady = false;
     chatBubbleEls = [];
     chatHistory = [];
@@ -2738,15 +2694,6 @@ document.getElementById('phone-beta-player-count').addEventListener('change', ev
         enabled: phoneBetaMode,
         target_count: phoneBetaPlayerCount,
     });
-});
-
-document.getElementById('btn-set-spotlight').addEventListener('click', () => {
-    const playerId = document.getElementById('spotlight-player-select').value;
-    if (playerId) socket.emit('set_discussion_spotlight', { player_id: playerId });
-});
-
-document.getElementById('btn-clear-spotlight').addEventListener('click', () => {
-    socket.emit('set_discussion_spotlight', { player_id: null });
 });
 
 document.getElementById('btn-end-discussion').addEventListener('click', event => {

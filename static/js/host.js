@@ -12,6 +12,22 @@ const HOST_TOKEN_KEY = 'avalon-host-token';
 const PAIRED_DISPLAY_KEY = 'avalon-host-is-paired-display';
 const ANALYTICS_ID_KEY = 'avalon-analytics-id';
 
+function loadDeferredArtwork(root = document) {
+    root.querySelectorAll('img[data-src]').forEach(image => {
+        image.src = image.dataset.src;
+        image.removeAttribute('data-src');
+    });
+    const backgrounds = root.matches?.('[data-deferred-background]') ? [root] : [];
+    backgrounds.push(...root.querySelectorAll('[data-deferred-background]'));
+    backgrounds.forEach(element => {
+        element.style.setProperty(
+            '--deferred-background-art',
+            `url("${element.dataset.deferredBackground}")`,
+        );
+        element.removeAttribute('data-deferred-background');
+    });
+}
+
 function randomUuid() {
     return crypto.randomUUID ? crypto.randomUUID() :
         'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, character => {
@@ -296,7 +312,10 @@ function showScreen(id) {
     const previousScreenId = document.querySelector('.screen.active')?.id || null;
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const target = document.getElementById(id);
-    if (target) target.classList.add('active');
+    if (target) {
+        loadDeferredArtwork(target);
+        target.classList.add('active');
+    }
     currentPhase = id.replace('screen-', '');
     const isEntrySurface = id === 'screen-title' || id === 'screen-lobby';
     document.body.classList.toggle('host-entry-active', isEntrySurface);
@@ -767,11 +786,13 @@ function setHostMusic(trackId) {
 function setHostMusicVolume(value) {
     const volume = Math.max(0, Math.min(100, Number(value)));
     const player = document.getElementById('host-music-player');
-    const slider = document.getElementById('host-music-volume');
-    const output = document.getElementById('host-music-volume-output');
-    slider.value = String(volume);
-    slider.setAttribute('aria-valuetext', `${volume} percent`);
-    output.value = `${volume}%`;
+    document.querySelectorAll('.host-music-volume').forEach(slider => {
+        slider.value = String(volume);
+        slider.setAttribute('aria-valuetext', `${volume} percent`);
+    });
+    document.querySelectorAll('.host-music-volume-output').forEach(output => {
+        output.value = `${volume}%`;
+    });
     player.volume = volume / 100;
 }
 
@@ -1070,40 +1091,6 @@ function renderRematchStatus(element, data) {
         : 'Waiting for players to choose “Run It Back”…';
 }
 
-function renderDiscussionSpotlight(data = {}) {
-    const banner = document.getElementById('host-discussion-spotlight');
-    if (!data.player_name) {
-        banner.classList.add('hidden');
-        banner.replaceChildren();
-        return;
-    }
-    const player = players.find(candidate =>
-        candidate.player_id === data.player_id || candidate.name === data.player_name
-    ) || { name: data.player_name };
-    const portrait = document.createElement('span');
-    portrait.className = 'accusation-portrait';
-    portrait.classList.toggle('selfie-portrait', Boolean(player.avatar_image));
-    portrait.appendChild(presenceTable.createPortraitElement(
-        player.avatar_index,
-        player.color_index,
-        player.avatar_image,
-    ));
-    const copy = document.createElement('span');
-    copy.className = 'accusation-copy';
-    const eyebrow = document.createElement('small');
-    eyebrow.textContent = 'The court has spoken';
-    const name = document.createElement('strong');
-    name.textContent = player.name || data.player_name;
-    const charge = document.createElement('span');
-    charge.textContent = 'STANDS ACCUSED';
-    const defense = document.createElement('em');
-    defense.textContent = 'Defend your honor before the Round Table';
-    copy.append(eyebrow, name, charge, defense);
-    banner.replaceChildren(portrait, copy);
-    banner.setAttribute('aria-label', `${player.name || data.player_name} stands accused and must defend their case`);
-    banner.classList.remove('hidden');
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -1170,6 +1157,7 @@ socket.on('display_pairing_failed', data => {
 });
 
 socket.on('host_registered', data => {
+    loadDeferredArtwork();
     const roomChanged = Boolean(gameCode && gameCode !== data.code);
     if (roomChanged || data.phase === 'LOBBY') resetHostPresentationForRoomChange();
     gameCode = data.code;
@@ -1260,11 +1248,6 @@ socket.on('host_registered', data => {
         } else if (data.phase === 'DISCUSSION') {
             timerMax = Number(data.timer_remaining ?? data.discussion_time);
             updateTimerRing('timer-ring', timerMax, data.discussion_time);
-            const spotlightPlayer = players.find(player => player.player_id === data.spotlight_player_id);
-            renderDiscussionSpotlight({
-                player_id: data.spotlight_player_id,
-                player_name: spotlightPlayer?.name,
-            });
         } else if (data.phase === 'TEAM_VOTE' || data.phase === 'VOTE_REVEAL') {
             proposedTeam = data.proposed_team || [];
             document.getElementById('vote-team-names').textContent =
@@ -1439,13 +1422,11 @@ socket.on('round_start', data => {
     updateLeaderDisplay(data.leader_name);
     showGameHeader();
     transition('screen-round');
-    renderDiscussionSpotlight();
 });
 
 socket.on('discussion_start', data => {
     timerMax = data.duration_seconds;
     updateTimerRing('timer-ring', timerMax, timerMax);
-    renderDiscussionSpotlight();
     showScreen('screen-round');
 });
 
@@ -1458,10 +1439,6 @@ socket.on('discussion_tick', data => {
 });
 
 socket.on('discussion_end', () => {});
-
-socket.on('discussion_spotlight', data => {
-    renderDiscussionSpotlight(data);
-});
 
 socket.on('proposal_start', data => {
     currentLeaderName = data.leader_name;
@@ -1721,7 +1698,6 @@ socket.on('return_to_lobby', data => {
     renderTvChat();
     hideGameHeader();
     presenceTable.setRoleReveal(null);
-    renderDiscussionSpotlight();
     if (data.settings) {
         renderDiscussionSetting(data.settings.discussion_time);
         renderProposalSetting(data.settings.proposal_time);
@@ -1808,8 +1784,8 @@ document.getElementById('btn-forget-saved-display').addEventListener('click', ()
 document.querySelectorAll('.host-music-button').forEach(button => {
     button.addEventListener('click', () => setHostMusic(button.dataset.musicTrack));
 });
-document.getElementById('host-music-volume').addEventListener('input', event => {
-    setHostMusicVolume(event.target.value);
+document.querySelectorAll('.host-music-volume').forEach(slider => {
+    slider.addEventListener('input', event => setHostMusicVolume(event.target.value));
 });
 
 document.getElementById('host-pair-room').addEventListener('input', event => {

@@ -187,7 +187,6 @@ def replay_state(game: Any, *, captured_at: float | None = None) -> dict[str, An
             "assassin_target_player_id": game.assassin_target,
         },
         "social": {
-            "spotlight_player_id": game.spotlight_player_id,
             "rematch_ready_player_ids": sorted(game.rematch_ready),
         },
     }
@@ -211,7 +210,7 @@ def classify_event(event_type: str, source: str) -> str:
         return "lifecycle"
     if event_type.startswith(("player_join", "spectator_join", "settings_", "avatar_", "selfie_", "player_ready", "player_renamed", "roster_", "beta_")):
         return "lobby"
-    if event_type.startswith(("chat_", "discussion_spotlight")):
+    if event_type.startswith("chat_"):
         return "social"
     if event_type.startswith(
         (

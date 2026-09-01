@@ -70,6 +70,11 @@ def test_security_headers_and_development_routes_are_closed():
     assert b'id="host-music-volume"' in host_response.data
     assert b"quiet-night.mp3" in host_script
     assert b"new-table-graphic.png" in host_css
+    assert b'flex-basis: clamp(170px, 14vw, 220px)' in host_css
+    assert b'flex-basis: clamp(172px, 14.5vw, 225px)' in host_css
+    assert b'flex: 0 0 calc((100% - 3.8rem) / 5)' in host_css
+    assert b"mobile-ui-bg.png" in player_css
+    assert client.get("/static/assets/ui/mobile-ui-bg.png").status_code == 200
 
 
 def test_player_pages_do_not_reference_portrait_or_audio_assets():
@@ -91,9 +96,26 @@ def test_paired_display_music_is_local_and_opt_in():
     host_script = client.get("/static/js/host.js").data.lower()
 
     assert b'id="host-music-player"' in host_page
-    assert b'data-music-track="off"' in host_page
+    assert host_page.count(b'data-music-track="off"') == 2
+    assert b'id="lobby-music-volume"' in host_page
+    assert b'tv-lobby-music' in host_page
     assert b"/static/music/loops/" in host_script
     assert b"player.play()" in host_script
+
+
+def test_accusation_spotlight_is_not_exposed():
+    client = server.app.test_client()
+    served_files = (
+        client.get("/").data,
+        client.get("/host").data,
+        client.get("/static/js/player.js").data,
+        client.get("/static/js/host.js").data,
+        client.get("/static/css/common.css").data,
+        client.get("/static/css/player.css").data,
+    )
+    combined = b"\n".join(served_files).lower()
+    assert b"accusation spotlight" not in combined
+    assert b"discussion_spotlight" not in combined
 
 
 def test_opening_cinematic_requires_player_confirmation():
@@ -105,6 +127,40 @@ def test_opening_cinematic_requires_player_confirmation():
     assert b"pendingGameStartingRole" in player_script
     assert b"continueGameStartingReveal" in player_script
     assert b"confirm_game_opening" in player_script
+
+
+def test_entry_art_is_optimized_and_future_cinematics_are_deferred():
+    client = server.app.test_client()
+    player_page = client.get("/").data
+    host_page = client.get("/host").data
+    entry_css = client.get("/static/css/entry.css").data
+    player_script = client.get("/static/js/player.js").data
+    host_script = client.get("/static/js/host.js").data
+
+    assert b"/static/assets/entry/avalon-title.webp" in player_page
+    assert b"/static/assets/entry/avalon-title.webp" in host_page
+    assert b"/static/assets/entry/join-page-bg.webp" in entry_css
+
+    for page, paths in (
+        (player_page, (
+            b"/static/assets/opening/avalon-game-start-mobile.png",
+            b"/static/assets/votes/cards-revealed-mobile.png",
+            b"/static/assets/quests/quest-begun-mobile.png",
+        )),
+        (host_page, (
+            b"/static/assets/opening/avalon-game-start-wide.png",
+            b"/static/assets/votes/cards-revealed-wide.png",
+            b"/static/assets/quests/quest-begins-alt.png",
+        )),
+    ):
+        for path in paths:
+            assert (b' data-src="' + path in page) or (
+                b' data-deferred-background="' + path in page
+            )
+            assert b' src="' + path not in page
+
+    assert b"loadDeferredArtwork();\n    joinedThisPage = true" in player_script
+    assert b"loadDeferredArtwork();\n    const roomChanged" in host_script
 
 
 def test_paired_display_room_change_clears_stale_game_chrome():
@@ -351,34 +407,6 @@ def test_discussion_setting_accepts_one_to_fifteen_minutes_and_unlimited(socket_
         "discussion_time must be Unlimited or at least 60 seconds"
     )
     assert game.discussion_time == 0
-
-
-def test_leader_can_spotlight_a_player_without_changing_gameplay(socket_client):
-    socket_client.emit("create_player_game", {"player_name": "Arthur"})
-    joined = packets_for(socket_client, "join_success")[0]
-    second = server.socketio.test_client(server.app)
-    second.emit(
-        "join_game",
-        {"room_code": joined["room_code"], "player_name": "Guinevere"},
-    )
-    game = server.games[joined["room_code"]]
-    game.phase = server.GamePhase.DISCUSSION
-    game.current_leader_index = game.player_order.index(joined["player_id"])
-    target_id = next(player_id for player_id in game.player_order if player_id != joined["player_id"])
-    target_name = game.players[target_id].name
-
-    socket_client.emit("set_discussion_spotlight", {"player_id": target_id})
-
-    assert game.spotlight_player_id == target_id
-    spotlight = packets_for(socket_client, "discussion_spotlight")[-1]
-    assert spotlight == {
-        "player_id": target_id,
-        "player_name": target_name,
-        "leader_name": "Arthur",
-    }
-    assert game.phase == server.GamePhase.DISCUSSION
-    assert game.proposed_team == []
-    second.disconnect()
 
 
 def test_all_players_can_run_it_back(socket_client):

@@ -851,7 +851,6 @@ def serialize_game(game: GameState) -> dict:
         "winner": game.winner,
         "win_reason": game.win_reason,
         "pending_mission_outcome": game.pending_mission_outcome,
-        "spotlight_player_id": game.spotlight_player_id,
         "rematch_ready": sorted(game.rematch_ready),
         "timer_kind": game.timer_kind,
         "timer_remaining": timer_remaining,
@@ -940,10 +939,6 @@ def deserialize_game(state: dict, *, saved_at: float) -> GameState:
     game.winner = state.get("winner")
     game.win_reason = state.get("win_reason")
     game.pending_mission_outcome = state.get("pending_mission_outcome")
-    spotlight_player_id = state.get("spotlight_player_id")
-    game.spotlight_player_id = (
-        spotlight_player_id if spotlight_player_id in game.players else None
-    )
     game.rematch_ready = {
         player_id
         for player_id in state.get("rematch_ready", [])
@@ -1720,7 +1715,6 @@ def start_round(game: GameState):
     )
     # Immediately go to discussion
     game.phase = GamePhase.DISCUSSION
-    game.spotlight_player_id = None
     phase_key = str(uuid.uuid4()) if game.discussion_time else None
     game.timer_phase_key = phase_key
     game.timer_kind = "discussion" if phase_key else None
@@ -1758,7 +1752,6 @@ def start_round(game: GameState):
 
 def transition_to_team_proposal(game: GameState):
     game.phase = GamePhase.TEAM_PROPOSAL
-    game.spotlight_player_id = None
     game.proposed_team = []
     game.votes = {}
     game.mission_cards = {}
@@ -2742,7 +2735,6 @@ def on_register_host_screen(data):
                 "mission_intro_ack_ids": sorted(game.mission_intro_acks),
                 "vote_reveal_ack_ids": sorted(game.vote_reveal_acks),
                 "mission_reveal_ack_ids": sorted(game.mission_reveal_acks),
-                "spotlight_player_id": game.spotlight_player_id,
                 "rematch_ready_ids": sorted(game.rematch_ready),
                 "vote_reveal_pending": game.pending_vote_result is not None,
                 "proposed_team": [
@@ -3778,51 +3770,6 @@ def on_night_phase_ack():
 
 
 # --- Discussion ---
-
-
-@socketio.on("set_discussion_spotlight")
-@rate_limited()
-def on_set_discussion_spotlight(data):
-    try:
-        game, leader = validate_caller(
-            request.sid,
-            require_phase=GamePhase.DISCUSSION,
-            require_leader=True,
-        )
-        data = require_object(data)
-        player_id = data.get("player_id")
-        if player_id is not None and not isinstance(player_id, str):
-            raise ValueError("player_id must be text or null")
-        if player_id is not None and player_id not in game.players:
-            raise ValueError("Player not found")
-        game.spotlight_player_id = player_id
-        target = game.players.get(player_id) if player_id else None
-        record_product_event(
-            "discussion_spotlight_changed",
-            game=game,
-            actor_type="player",
-            actor_id=leader.player_id,
-            analytics_id=leader.analytics_id,
-            payload={
-                "target_player_id": player_id,
-                "cleared": player_id is None,
-                "elapsed_ms": max(
-                    0, int((time.time() - game.phase_started_at) * 1000)
-                ),
-            },
-            visibility="research_secret",
-        )
-        emit_to_game(
-            game.code,
-            "discussion_spotlight",
-            {
-                "player_id": player_id,
-                "player_name": target.name if target else None,
-                "leader_name": leader.name,
-            },
-        )
-    except ValueError as error:
-        emit_validation_error(error)
 
 
 @socketio.on("skip_discussion")

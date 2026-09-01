@@ -337,7 +337,6 @@ def build_wrapped(
     leadership_proposals = 0
     approved_leadership_proposals = 0
     team_selections_received = 0
-    spotlight_received = 0
     chat_messages = event_counts["chat_sent"]
     disconnects = event_counts["player_disconnected"]
     reconnects = event_counts["player_reconnected"]
@@ -385,8 +384,6 @@ def build_wrapped(
             elif event_type == "team_vote" and pending_leader_id == player_id:
                 approved_leadership_proposals += int(bool(data.get("approved")))
                 pending_leader_id = None
-            elif event_type == "discussion_spotlight_changed":
-                spotlight_received += int(data.get("target_player_id") == player_id)
         others = store.research_participants(game["game_id"])
         for other in others:
             if (
@@ -457,7 +454,6 @@ def build_wrapped(
             ),
             "average_proposal_decision_ms": _average(proposal_decisions),
             "times_selected_for_quest": team_selections_received,
-            "times_spotlighted": spotlight_received,
         },
         "quests": {
             "quests_played": quest_appearances,

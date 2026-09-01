@@ -144,7 +144,7 @@ Visibility is an analysis hint:
 - randomized role/team assignment and seat order;
 - exact night acknowledgements and per-player acknowledgement latency;
 - round/mission number, leader, required team size, double-fail rule;
-- discussion duration, timer expiry/skip, and Accusation Spotlight target/time;
+- discussion duration and timer expiry/skip;
 - every intermediate team preview, final party, proposal latency, and leader;
 - each player's approve/reject vote and latency, full revealed vote, totals,
   acceptance, and rejection-track state;
@@ -196,7 +196,7 @@ document contains:
   night acknowledgements, and pending mission outcome;
 - timer kind/deadline/remaining value;
 - winner, reason, and assassin target;
-- spotlight and rematch state.
+- rematch state.
 
 It never contains raw or hashed reconnect/host/recovery/pairing capabilities,
 Socket.IO IDs, IP addresses, environment variables, cookies, or base64 selfie
@@ -225,7 +225,7 @@ change history.
 - first/last observation and whether the player's alignment won.
 
 Granular player measures—vote rate, proposal latency, quest deception, trust
-received, spotlight, reconnects, and feature engagement—come from joining
+received, reconnects, and feature engagement—come from joining
 participants to `research_events` on `(game_id, actor_id)`.
 
 The built-in views are `research_proposal_facts`,
@@ -249,7 +249,7 @@ HTML. Current sections include:
 - number of times trusted with a quest, quests played, Success/Fail cards, and
   card latency;
 - Assassin attempts/accuracy/latency;
-- chat, help, role-card, reconnect, spotlight, and rematch engagement;
+- chat, help, role-card, reconnect, and rematch engagement;
 - favorite UTC day/start hour, longest game, and most frequent pseudonymous
   co-player;
 - a compact `cards` array ready for a story/carousel UI plus per-game details.
