@@ -2057,38 +2057,30 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
 .chat-bubble.self { border-color: rgba(201,168,76,0.35); align-self: flex-end; }
 .chat-bubble.narrator,
 .chat-history-entry.narrator {
-    position: relative;
-    padding-left: 2.15rem;
     border-color: rgba(168, 125, 210, 0.62);
     background: linear-gradient(135deg, rgba(34,20,43,0.96), rgba(14,10,20,0.96));
     color: #d9cbe5;
     font-style: italic;
+    box-shadow: 0 0 0 1px rgba(217,185,242,0.08), 0 6px 20px rgba(54,25,70,0.38);
 }
-.chat-bubble.narrator::before,
-.chat-history-entry.narrator::before {
-    content: '♜';
-    position: absolute;
-    left: 0.55rem;
-    top: 50%;
-    display: grid;
-    width: 1.2rem;
-    height: 1.2rem;
+.chat-name .narrator-mark {
+    display: inline-grid;
+    width: 1.35rem;
+    height: 1.35rem;
+    margin-right: 0.28rem;
     place-items: center;
-    transform: translateY(-50%);
     border: 1px solid rgba(201,168,76,0.48);
     border-radius: 50%;
+    background: rgba(83,45,103,0.48);
     color: var(--gold-light);
+    font-size: 0.78rem;
     font-style: normal;
+    vertical-align: middle;
 }
-.chat-bubble.narrator .chat-name::after,
-.chat-history-entry.narrator .chat-name::after {
-    content: 'COURT NARRATOR';
-    margin-left: 0.3rem;
-    padding: 0.06rem 0.25rem;
-    border: 1px solid rgba(168,125,210,0.5);
-    border-radius: var(--radius-pill);
-    color: #d9b9f2;
-    font: normal 0.44rem var(--font-heading);
+.chat-name em.narrator-badge {
+    border-color: rgba(168,125,210,0.68);
+    background: rgba(83,45,103,0.34);
+    color: #e3c8f5;
     letter-spacing: 0.06em;
 }
 .chat-bubble.fading { opacity: 0; transform: translateY(-4px); }
@@ -3319,7 +3311,7 @@ body.board-visible.chat-visible #screen-assassin.presence-active > .presence-tab
     opacity: 0.9;
 }
 
-/* Keep the full-UI artwork continuous beneath its transparent top bar. */
+/* Keep the full-UI artwork visible beneath a 25%-transparent top bar. */
 body.board-visible.chat-visible::before {
     content: '';
     position: fixed;
@@ -3343,11 +3335,11 @@ body.board-visible.chat-visible::after {
 }
 
 body.board-visible.chat-visible .player-board {
-    background: transparent;
-    border-bottom-color: rgba(191,151,63,0.38);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    box-shadow: none;
+    background: rgba(5,6,9,0.75);
+    border-bottom-color: rgba(191,151,63,0.48);
+    -webkit-backdrop-filter: blur(8px) saturate(0.9);
+    backdrop-filter: blur(8px) saturate(0.9);
+    box-shadow: 0 5px 18px rgba(0,0,0,0.3);
 }
 
 body.board-visible.chat-visible #screen-discussion.presence-active,

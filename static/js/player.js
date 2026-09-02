@@ -651,11 +651,23 @@ function appendLinkifiedText(container, value) {
     container.append(document.createTextNode(text.slice(cursor)));
 }
 
-function createChatName(name, senderIsSpectator) {
+function createChatName(name, senderIsSpectator, actorType = 'player') {
     const element = document.createElement('span');
     element.className = 'chat-name';
-    element.textContent = name;
-    if (senderIsSpectator) {
+    if (actorType === 'narrator') {
+        const mark = document.createElement('span');
+        mark.className = 'narrator-mark';
+        mark.textContent = '🎭';
+        mark.setAttribute('aria-hidden', 'true');
+        element.append(mark, document.createTextNode(name));
+        const badge = document.createElement('em');
+        badge.className = 'narrator-badge';
+        badge.textContent = 'narrator';
+        element.append(' ', badge);
+    } else {
+        element.textContent = name;
+    }
+    if (senderIsSpectator && actorType !== 'narrator') {
         const badge = document.createElement('em');
         badge.textContent = 'spectator';
         element.append(' ', badge);
@@ -675,7 +687,7 @@ function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue 
     if (histList) {
         const entry = document.createElement('div');
         entry.className = `chat-history-entry${actorType === 'narrator' ? ' narrator' : ''}`;
-        const nameElement = createChatName(name, senderIsSpectator);
+        const nameElement = createChatName(name, senderIsSpectator, actorType);
         nameElement.style.color = playerColor;
         const timeElement = document.createElement('span');
         timeElement.className = 'chat-time';
@@ -708,7 +720,7 @@ function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue 
 
     const bubble = document.createElement('div');
     bubble.className = 'chat-bubble' + (isSelf ? ' self' : '') + (actorType === 'narrator' ? ' narrator' : '');
-    const nameElement = createChatName(name, senderIsSpectator);
+    const nameElement = createChatName(name, senderIsSpectator, actorType);
     nameElement.style.color = playerColor;
     bubble.appendChild(nameElement);
     appendLinkifiedText(bubble, message);
