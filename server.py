@@ -68,6 +68,7 @@ from narrator import (
     drain_pending,
     mission_candidates,
     new_runtime,
+    should_speak,
     validate_public_payload,
     vote_candidates,
 )
@@ -816,7 +817,77 @@ def narrator_public_state(game: GameState) -> PublicNarratorState:
     return PublicNarratorState(**payload)
 
 
-def emit_narrator(game: GameState, message: dict | None, **names: str) -> None:
+def consider_narrator(
+    game: GameState,
+    candidates: list[int],
+    *,
+    probability: float,
+    threshold: int,
+    mission_num: int | None = None,
+    queue: bool = False,
+) -> dict | None:
+    mission_num = mission_num or game.current_mission + 1
+    if not should_speak(
+        game.narrator_runtime,
+        mission_num=mission_num,
+        base_probability=probability,
+        rng=secure_random,
+    ):
+        return None
+    return choose_proactive(
+        game.narrator_runtime,
+        candidates,
+        mission_num=mission_num,
+        threshold=threshold,
+        queue=queue,
+        rng=secure_random,
+    )
+
+
+def schedule_narrator(
+    game: GameState,
+    message: dict | None,
+    *,
+    delay_range: tuple[float, float],
+    expires_in: float,
+    allowed_phases: set[GamePhase],
+    quiet_gap_range: tuple[float, float] = (4.0, 10.0),
+    names: dict[str, str] | None = None,
+    target_mission: int | None = None,
+) -> None:
+    """Persist one room-wide delivery time and start its cancellable worker."""
+    if not message:
+        return
+    now = time.time()
+    low, high = sorted((max(0.0, delay_range[0]), max(0.0, delay_range[1])))
+    gap_low, gap_high = sorted(
+        (max(0.0, quiet_gap_range[0]), max(0.0, quiet_gap_range[1]))
+    )
+    entry = {
+        "schedule_id": str(uuid.uuid4()),
+        "message": message,
+        "due_at": now + secure_random.uniform(low, high),
+        "expires_at": now + max(high, expires_in),
+        "allowed_phases": sorted(phase.value for phase in allowed_phases),
+        "quiet_gap": secure_random.uniform(gap_low, gap_high),
+        "names": dict(names or {}),
+        "target_mission": target_mission or game.current_mission + 1,
+    }
+    game.narrator_runtime.setdefault("scheduled", []).append(entry)
+    persist_game(game)
+    if not app.config.get("TESTING"):
+        socketio.start_background_task(
+            run_scheduled_narrator, game.code, entry["schedule_id"]
+        )
+
+
+def emit_narrator(
+    game: GameState,
+    message: dict | None,
+    *,
+    follow_up_phases: set[GamePhase] | None = None,
+    **names: str,
+) -> None:
     if not message:
         return
     rendered = dict(message)
@@ -830,6 +901,7 @@ def emit_narrator(game: GameState, message: dict | None, **names: str) -> None:
     rendered["timestamp"] = created_at.isoformat(timespec="seconds").replace("+00:00", "Z")
     rendered["color_index"] = -1
     emit_to_game(game.code, "narrator_message", rendered)
+    game.narrator_runtime["last_narrator_at"] = time.time()
     try:
         chat_store.save(
             room_code=game.code,
@@ -853,7 +925,84 @@ def emit_narrator(game: GameState, message: dict | None, **names: str) -> None:
         payload={"trigger_id": rendered["trigger_id"], "template_id": rendered["template_id"]},
     )
     if follow_up:
-        emit_narrator(game, follow_up, **names)
+        schedule_narrator(
+            game,
+            follow_up,
+            delay_range=(2.0, 7.0),
+            expires_in=12.0,
+            allowed_phases=follow_up_phases or {game.phase},
+            quiet_gap_range=(0.0, 0.0),
+            names=names,
+        )
+
+
+def run_scheduled_narrator(game_code: str, schedule_id: str) -> None:
+    """Deliver in a natural conversational gap or discard when stale."""
+    while True:
+        game = games.get(game_code)
+        if not game:
+            return
+        with game.lock:
+            entry = next(
+                (
+                    item
+                    for item in game.narrator_runtime.get("scheduled", ())
+                    if item.get("schedule_id") == schedule_id
+                ),
+                None,
+            )
+            if not entry:
+                return
+            wait_seconds = max(0.0, float(entry["due_at"]) - time.time())
+        if wait_seconds:
+            socketio.sleep(min(wait_seconds, 5.0))
+            continue
+        with game.lock:
+            entries = game.narrator_runtime.get("scheduled", [])
+            entry = next(
+                (item for item in entries if item.get("schedule_id") == schedule_id),
+                None,
+            )
+            if not entry:
+                return
+            now = time.time()
+            if now >= float(entry["expires_at"]):
+                entries.remove(entry)
+                persist_game(game)
+                return
+            if game.current_mission + 1 != int(entry.get("target_mission", 0)):
+                entries.remove(entry)
+                persist_game(game)
+                return
+            if game.suspended or game.phase.value not in set(
+                entry.get("allowed_phases", ())
+            ):
+                entry["due_at"] = min(float(entry["expires_at"]), now + 1.5)
+                persist_game(game)
+                continue
+            last_table_activity = max(
+                float(game.narrator_runtime.get("last_public_chat_at", 0.0)),
+                float(game.narrator_runtime.get("last_narrator_at", 0.0)),
+            )
+            conversational_opening = last_table_activity + float(entry["quiet_gap"])
+            if now < conversational_opening:
+                entry["due_at"] = min(float(entry["expires_at"]), conversational_opening)
+                persist_game(game)
+                continue
+            entries.remove(entry)
+            persist_game(game)
+            phases = {
+                GamePhase(value)
+                for value in entry.get("allowed_phases", ())
+                if value in GamePhase._value2member_map_
+            }
+            emit_narrator(
+                game,
+                entry["message"],
+                follow_up_phases=phases,
+                **entry.get("names", {}),
+            )
+            return
 
 
 def get_game(game_code: str) -> GameState | None:
@@ -1179,6 +1328,16 @@ def resume_game(game: GameState) -> None:
         elif game.timer_kind == "proposal":
             socketio.start_background_task(
                 run_proposal_timer, game.code, phase_key, game.timer_remaining
+            )
+    scheduled = game.narrator_runtime.get("scheduled", [])
+    now = time.time()
+    scheduled[:] = [
+        entry for entry in scheduled if float(entry.get("expires_at", 0)) > now
+    ]
+    if not app.config.get("TESTING"):
+        for entry in scheduled:
+            socketio.start_background_task(
+                run_scheduled_narrator, game.code, entry["schedule_id"]
             )
     game.timer_remaining = None
     emit_to_game(game.code, "room_resumed", {})
@@ -1715,12 +1874,15 @@ def run_discussion_timer(game_code: str, phase_key: str, duration: int):
                 f"final_15_spoken_{game.current_mission + 1}"
             ):
                 game.narrator_runtime[f"final_15_spoken_{game.current_mission + 1}"] = True
-                emit_narrator(
+                schedule_narrator(
                     game,
-                    choose_proactive(
-                        game.narrator_runtime, [6],
-                        mission_num=game.current_mission + 1,
+                    consider_narrator(
+                        game, [6], probability=0.26, threshold=80,
                     ),
+                    delay_range=(1.0, 4.5),
+                    expires_in=12.0,
+                    allowed_phases={GamePhase.DISCUSSION},
+                    quiet_gap_range=(2.0, 5.0),
                 )
             if remaining <= 0:
                 record_product_event(
@@ -1848,16 +2010,32 @@ def start_round(game: GameState):
             "leader_id": leader.player_id if leader else None,
         },
     )
-    # Discussion is the first chat-visible beat after quest cinematics.
+    # Discussion is the first chat-visible beat after quest cinematics, but
+    # queued observations wait for a conversational opening instead of firing
+    # on the phase transition.
     for queued in drain_pending(game.narrator_runtime):
-        emit_narrator(game, queued)
+        schedule_narrator(
+            game,
+            queued,
+            delay_range=(7.0, 35.0),
+            expires_in=max(42.0, float(game.discussion_time or 90)),
+            allowed_phases={GamePhase.DISCUSSION},
+            quiet_gap_range=(4.0, 10.0),
+        )
     if game.current_mission == 0 and not game.narrator_runtime.get("opening_spoken"):
         opening_trigger = 2 if game.previous_game_summary else 1
-        opening = choose_proactive(
-            game.narrator_runtime, [opening_trigger], mission_num=1
+        opening = consider_narrator(
+            game, [opening_trigger], probability=0.42, threshold=80, mission_num=1
         )
         game.narrator_runtime["opening_spoken"] = True
-        emit_narrator(game, opening)
+        schedule_narrator(
+            game,
+            opening,
+            delay_range=(8.0, 32.0),
+            expires_in=max(40.0, float(game.discussion_time or 90)),
+            allowed_phases={GamePhase.DISCUSSION},
+            quiet_gap_range=(4.0, 10.0),
+        )
     if phase_key:
         socketio.start_background_task(
             run_discussion_timer, game.code, phase_key, game.discussion_time
@@ -2057,11 +2235,21 @@ def submit_team_proposal(
         for item in game.proposal_history
     ):
         proposal_candidates.append(20)
-    proposal_message = choose_proactive(
-        game.narrator_runtime, proposal_candidates,
-        mission_num=game.current_mission + 1, threshold=76,
+    rare_proposal = any(item in proposal_candidates for item in (13, 14, 15, 17, 18, 20, 37))
+    proposal_message = consider_narrator(
+        game,
+        proposal_candidates,
+        probability=0.43 if rare_proposal else 0.16,
+        threshold=76,
     )
-    emit_narrator(game, proposal_message, leader=leader.name)
+    schedule_narrator(
+        game,
+        proposal_message,
+        delay_range=(4.0, 16.0),
+        expires_in=50.0,
+        allowed_phases={GamePhase.DISCUSSION, GamePhase.TEAM_PROPOSAL},
+        names={"leader": leader.name},
+    )
     if forced:
         public_proposal = {
             "mission_num": game.current_mission + 1,
@@ -2217,10 +2405,16 @@ def finish_mission(game: GameState, result: dict) -> None:
     final_card_at_ms = 1200 + max(0, len(result["cards_shuffled"]) - 1) * 1100
     pause((final_card_at_ms + 900) / 1000)
     latest_proposal = game.proposal_history[-1] if game.proposal_history else None
-    choose_proactive(
-        game.narrator_runtime,
-        mission_candidates(narrator_public_state(game), result, latest_proposal),
-        mission_num=game.current_mission + 1,
+    completed_candidates = mission_candidates(
+        narrator_public_state(game), result, latest_proposal
+    )
+    mission_probability = 0.30 if result["passed"] else 0.43
+    if any(item in completed_candidates for item in (42, 43, 45, 47, 50, 53, 54)):
+        mission_probability = 0.62
+    consider_narrator(
+        game,
+        completed_candidates,
+        probability=mission_probability,
         threshold=82,
         queue=True,
     )
@@ -2352,12 +2546,22 @@ def finish_vote(game: GameState, result: dict) -> None:
         },
     )
     emit_to_game(game.code, "vote_reveal", {**result, "team": public_vote["team"]})
-    choose_proactive(
-        game.narrator_runtime,
-        vote_candidates(narrator_public_state(game), result),
-        mission_num=game.current_mission + 1,
+    revealed_candidates = vote_candidates(narrator_public_state(game), result)
+    vote_probability = 0.22
+    if any(item in revealed_candidates for item in (21, 22, 23, 31, 36)):
+        vote_probability = 0.52
+    vote_message = consider_narrator(
+        game,
+        revealed_candidates,
+        probability=vote_probability,
         threshold=80,
-        queue=True,
+    )
+    schedule_narrator(
+        game,
+        vote_message,
+        delay_range=(6.0, 24.0),
+        expires_in=55.0,
+        allowed_phases={GamePhase.DISCUSSION, GamePhase.TEAM_PROPOSAL},
     )
     game.narrator_runtime.setdefault("vote_history", []).append(
         {"party": list(public_vote["team"]), "votes": dict(result.get("votes", {}))}
@@ -2681,13 +2885,19 @@ def on_disconnect(reason=None):
                 },
             )
             if game.game_id and game.narrator_runtime:
-                emit_narrator(
+                disconnect_message = consider_narrator(
                     game,
-                    choose_proactive(
-                        game.narrator_runtime, [55],
-                        mission_num=game.current_mission + 1,
-                    ),
-                    player=player.name,
+                    [55],
+                    probability=0.38,
+                    threshold=90,
+                )
+                schedule_narrator(
+                    game,
+                    disconnect_message,
+                    delay_range=(3.0, 12.0),
+                    expires_in=30.0,
+                    allowed_phases={GamePhase.DISCUSSION, GamePhase.TEAM_PROPOSAL},
+                    names={"player": player.name},
                 )
             record_product_event(
                 "player_disconnected",
@@ -3383,13 +3593,19 @@ def on_reconnect_game(data):
             reconnects = game.narrator_runtime.setdefault("reconnect_counts", {})
             reconnects[player.name] = int(reconnects.get(player.name, 0)) + 1
             trigger_id = 57 if reconnects[player.name] >= 2 else 56
-            emit_narrator(
+            reconnect_message = consider_narrator(
                 game,
-                choose_proactive(
-                    game.narrator_runtime, [trigger_id],
-                    mission_num=game.current_mission + 1,
-                ),
-                player=player.name,
+                [trigger_id],
+                probability=0.34 if trigger_id == 56 else 0.52,
+                threshold=90,
+            )
+            schedule_narrator(
+                game,
+                reconnect_message,
+                delay_range=(3.0, 12.0),
+                expires_in=30.0,
+                allowed_phases={GamePhase.DISCUSSION, GamePhase.TEAM_PROPOSAL},
+                names={"player": player.name},
             )
     except ValueError as error:
         emit("reconnect_failed", {"message": str(error)})
@@ -4468,6 +4684,7 @@ def on_send_chat(data):
     )
     runtime = game.narrator_runtime or new_runtime(game.previous_game_summary)
     game.narrator_runtime = runtime
+    runtime["last_public_chat_at"] = time.time()
     runtime.setdefault("chat_counts", {})[participant.name] = (
         int(runtime.setdefault("chat_counts", {}).get(participant.name, 0)) + 1
     )
@@ -4485,7 +4702,15 @@ def on_send_chat(data):
     reply = direct_reply(
         runtime, msg, mission_num=game.current_mission + 1, player=participant.name
     )
-    emit_narrator(game, reply, player=participant.name)
+    schedule_narrator(
+        game,
+        reply,
+        delay_range=(1.0, 5.0),
+        expires_in=24.0,
+        allowed_phases={GamePhase.DISCUSSION, GamePhase.TEAM_PROPOSAL},
+        quiet_gap_range=(1.0, 3.5),
+        names={"player": participant.name},
+    )
     if not reply:
         social_candidates = []
         if max(runtime.get("mention_counts", {}).values(), default=0) >= 3:
@@ -4494,9 +4719,10 @@ def on_send_chat(data):
             social_candidates.append(63)
         if int(runtime.get("certainty_count", 0)) >= 4:
             social_candidates.append(64)
-        social = choose_proactive(
-            runtime, social_candidates,
-            mission_num=game.current_mission + 1,
+        social = consider_narrator(
+            game,
+            social_candidates,
+            probability=0.32,
             threshold=78,
         )
         if social:
@@ -4504,7 +4730,14 @@ def on_send_chat(data):
                 runtime.get("mention_counts", {}) or {"someone": 0},
                 key=(runtime.get("mention_counts", {}) or {"someone": 0}).get,
             )
-            emit_narrator(game, social, player=most_mentioned)
+            schedule_narrator(
+                game,
+                social,
+                delay_range=(4.0, 14.0),
+                expires_in=32.0,
+                allowed_phases={GamePhase.DISCUSSION, GamePhase.TEAM_PROPOSAL},
+                names={"player": most_mentioned},
+            )
     record_product_event(
         "chat_sent",
         game=game,

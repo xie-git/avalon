@@ -21,6 +21,7 @@ DIRECT_LIMIT_PER_MISSION = 3
 PROACTIVE_SOFT_LIMIT = 1
 PROACTIVE_HARD_LIMIT = 2
 DOUBLE_ACT_CHANCE = 0.07
+SHORT_DELIVERY_CHANCE = 0.52
 
 
 TRIGGERS: dict[int, str] = {
@@ -301,6 +302,7 @@ def new_runtime(previous_game: dict[str, Any] | None = None) -> dict[str, Any]:
         "last_direct_at": 0.0, "used_line_ids": [],
         "recent_line_ids": list((previous_game or {}).get("narrator_line_ids", ())),
         "pending": [], "messages": [], "reconnect_counts": {},
+        "scheduled": [], "last_public_chat_at": 0.0, "last_narrator_at": 0.0,
         "chat_counts": {}, "mention_counts": {}, "accusation_counts": {},
         "certainty_count": 0, "previous_game": previous_game,
     }
@@ -321,6 +323,10 @@ def _line(trigger_id: int, runtime: dict[str, Any], rng: random.Random) -> dict[
             if f"{trigger_id}.{index}" not in used
         ] or list((f"{trigger_id}.{index}", text) for index, text in enumerate(COPY_BANKS[trigger_id], 1))
     line_id, copy = rng.choice(candidates)
+    # Sometimes stop after the authored premise.  Varying sentence length is
+    # less mechanical than attaching a courtly button to every observation.
+    if rng.random() < SHORT_DELIVERY_CHANCE:
+        copy = _PREMISES[trigger_id - 1]
     runtime.setdefault("used_line_ids", []).append(line_id)
     return {
         "actor_type": "narrator", "name": NARRATOR_NAME, "message": copy,
@@ -380,6 +386,24 @@ def choose_proactive(
         runtime.setdefault("pending", []).append(message)
         return None
     return message
+
+
+def should_speak(
+    runtime: dict[str, Any], *, mission_num: int, base_probability: float,
+    rng: random.Random | None = None,
+) -> bool:
+    """Probabilistic density control; silence is the most common alternative."""
+    selector = rng or random.SystemRandom()
+    probability = max(0.0, min(1.0, float(base_probability)))
+    counts = runtime.get("proactive_counts", {})
+    if int(counts.get(str(mission_num - 1), 0)):
+        probability *= 0.58
+    elif mission_num >= 3 and not any(
+        int(counts.get(str(previous), 0))
+        for previous in (mission_num - 1, mission_num - 2)
+    ):
+        probability = min(0.82, probability + 0.10)
+    return selector.random() < probability
 
 
 def drain_pending(runtime: dict[str, Any]) -> list[dict[str, Any]]:

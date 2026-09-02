@@ -2,6 +2,8 @@ import random
 
 import pytest
 
+import server
+from game_logic import GamePhase, GameState, add_player
 from narrator import (
     COPY_BANKS,
     DIRECT_LIMIT_PER_MISSION,
@@ -13,6 +15,7 @@ from narrator import (
     final_word,
     mission_candidates,
     new_runtime,
+    should_speak,
     validate_public_payload,
     vote_candidates,
 )
@@ -23,6 +26,11 @@ class AlwaysDoubleRandom(random.Random):
 
     def random(self):
         return 0.0
+
+
+class MidpointRandom:
+    def uniform(self, low, high):
+        return (low + high) / 2
 
 
 def public_state(**changes):
@@ -81,6 +89,54 @@ def test_cinematic_queue_is_durable_until_drained():
     assert len(runtime["pending"]) == 1
     assert drain_pending(runtime)[0]["trigger_id"] == 40
     assert drain_pending(runtime) == []
+
+
+def test_natural_density_is_probabilistic_and_recent_speech_reduces_it():
+    baseline = sum(
+        should_speak(
+            new_runtime(), mission_num=2, base_probability=0.5,
+            rng=random.Random(seed),
+        )
+        for seed in range(500)
+    )
+    recently_spoke = 0
+    for seed in range(500):
+        runtime = new_runtime()
+        runtime["proactive_counts"]["1"] = 1
+        recently_spoke += should_speak(
+            runtime, mission_num=2, base_probability=0.5,
+            rng=random.Random(seed),
+        )
+
+    assert 190 < baseline < 310
+    assert recently_spoke < baseline * 0.7
+
+
+def test_room_scheduler_never_emits_at_phase_start(monkeypatch):
+    game = GameState("TIME")
+    for index in range(6):
+        add_player(game, f"Player {index}", f"player-{index}")
+    game.phase = GamePhase.DISCUSSION
+    game.narrator_runtime = new_runtime()
+    message = choose_proactive(
+        game.narrator_runtime, [40], mission_num=2, rng=random.Random(4)
+    )
+    monkeypatch.setattr(server.time, "time", lambda: 100.0)
+    monkeypatch.setattr(server, "secure_random", MidpointRandom())
+
+    server.schedule_narrator(
+        game,
+        message,
+        delay_range=(7.0, 35.0),
+        expires_in=60.0,
+        allowed_phases={GamePhase.DISCUSSION},
+    )
+
+    scheduled = game.narrator_runtime["scheduled"]
+    assert len(scheduled) == 1
+    assert scheduled[0]["due_at"] == 121.0
+    assert scheduled[0]["expires_at"] == 160.0
+    assert game.narrator_runtime["last_narrator_at"] == 0.0
 
 
 def test_direct_replies_have_room_cooldown_and_per_mission_limit():
