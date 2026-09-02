@@ -102,6 +102,8 @@ body {
 .host-chat-strip div { display: flex; gap: 0.65rem; min-width: 0; font-size: clamp(0.82rem, 1.35vw, 1.05rem); line-height: 1.35; }
 .host-chat-strip strong { flex: 0 0 auto; font-family: var(--font-heading); }
 .host-chat-strip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.host-chat-strip .narrator { border-left: 2px solid #9e6bc0; padding-left: 0.55rem; font-style: italic; }
+.host-chat-strip .narrator strong { color: #d9b9f2 !important; }
 .host-chat-strip a { color: var(--gold-light); text-decoration: underline; pointer-events: auto; }
 .host-chronicle { width: 100%; }
 .host-chronicle #chronicle-host { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.4rem; }
@@ -2188,6 +2190,20 @@ body.host-entry-active #host-chat-strip {
     color: #a89a7d;
     font: italic clamp(0.86rem, 1.85dvh, 1.2rem)/1.2 var(--font-body);
 }
+#screen-game-over .narrator-final-word {
+    max-width: 72rem;
+    margin: 0.2rem auto 0;
+    color: #cfc0d8;
+    font: italic clamp(0.7rem, 1.45dvh, 0.98rem)/1.35 var(--font-body);
+}
+#screen-game-over .narrator-final-word::before {
+    content: 'Court Narrator · Final Word — ';
+    color: var(--finale-accent);
+    font: 600 clamp(0.5rem, 1dvh, 0.65rem) var(--font-heading);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+#screen-game-over .host-chronicle .chronicle-final-word { border-left-color: #9e6bc0; font-style: italic; }
 #screen-game-over .victory-group-card {
     width: 100%;
     min-height: 0;

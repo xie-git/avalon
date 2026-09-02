@@ -276,10 +276,15 @@ function appendLinkifiedText(container, value) {
 
 function renderTvChat() {
     const strip = document.getElementById('host-chat-strip');
-    strip.classList.toggle('hidden', !tvChatEnabled || !gameStartedAt || !tvChatMessages.length);
+    strip.classList.toggle(
+        'hidden',
+        !tvChatEnabled || !gameStartedAt || !tvChatMessages.length
+            || document.body.classList.contains('host-cinematic-active')
+    );
     strip.replaceChildren();
     tvChatMessages.slice(-3).forEach(item => {
         const line = document.createElement('div');
+        line.classList.toggle('narrator', item.actor_type === 'narrator');
         const name = document.createElement('strong');
         name.textContent = `${item.name}${item.is_spectator ? ' · spectator' : ''}`;
         name.style.color = presenceTable.colorForName(item.name, item.color_index);
@@ -935,6 +940,16 @@ function renderChronicle(container, summary) {
     finaleDetail.textContent = gameWinReason(summary);
     finale.append(finaleTitle, finaleDetail);
     container.appendChild(finale);
+    if (summary.final_word?.message) {
+        const word = document.createElement('section');
+        word.className = 'chronicle-entry chronicle-final-word';
+        const title = document.createElement('strong');
+        title.textContent = 'Court Narrator · Final Word';
+        const copy = document.createElement('span');
+        copy.textContent = summary.final_word.message;
+        word.append(title, copy);
+        container.appendChild(word);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1029,6 +1044,9 @@ function renderGameOver(summary, { announce = true } = {}) {
     hideGameHeader();
 
     reasonEl.textContent = gameWinReason(summary);
+    const finalWord = document.getElementById('final-word-host');
+    finalWord.textContent = summary.final_word?.message || '';
+    finalWord.classList.toggle('hidden', !summary.final_word?.message);
 
     grid.replaceChildren();
     grid.classList.add('hidden');
@@ -1678,6 +1696,13 @@ socket.on('rematch_status', data => {
 
 socket.on('chat_message', data => {
     tvChatMessages.push(data);
+    if (tvChatMessages.length > 20) tvChatMessages.shift();
+    renderTvChat();
+    playChatChime();
+});
+
+socket.on('narrator_message', data => {
+    tvChatMessages.push({ ...data, actor_type: 'narrator' });
     if (tvChatMessages.length > 20) tvChatMessages.shift();
     renderTvChat();
     playChatChime();

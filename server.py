@@ -60,6 +60,17 @@ from game_logic import (
     MISSION_SIZES,
     secure_random,
 )
+from narrator import (
+    NARRATOR_NAME,
+    PublicNarratorState,
+    choose_proactive,
+    direct_reply,
+    drain_pending,
+    mission_candidates,
+    new_runtime,
+    validate_public_payload,
+    vote_candidates,
+)
 
 APP_ENV = os.environ.get("APP_ENV", "development").lower()
 IS_PRODUCTION = APP_ENV == "production"
@@ -741,6 +752,11 @@ def recent_chat_payload(game: GameState, limit: int = 30) -> list[dict]:
                 "message": row["message"],
                 "color_index": colors.get(row["player_name"], 0),
                 **(
+                    {"actor_type": "narrator"}
+                    if row["player_name"] == NARRATOR_NAME
+                    else {}
+                ),
+                **(
                     {"is_spectator": True}
                     if row["player_name"] in spectator_names
                     else {}
@@ -757,6 +773,87 @@ def recent_chat_payload(game: GameState, limit: int = 30) -> list[dict]:
 
 def emit_to_player(sid: str, event: str, data: dict):
     socketio.emit(event, data, room=sid)
+
+
+def narrator_public_state(game: GameState) -> PublicNarratorState:
+    """Project live state through the narrator's public-only boundary."""
+    runtime = game.narrator_runtime or new_runtime(game.previous_game_summary)
+    game.narrator_runtime = runtime
+    safe_missions = tuple(
+        {
+            ("party" if key == "team" else key): value
+            for key, value in mission.items()
+            if key not in {"cards_shuffled", "cards_by_player", "team_ids"}
+        }
+        for mission in game.mission_history
+    )
+    payload = {
+        "mission_num": game.current_mission + 1,
+        "player_count": game.player_count(),
+        "player_names": tuple(player.name for player in game.player_order_list()),
+        "leader_name": game.current_leader().name if game.current_leader() else None,
+        "mission_results": tuple(game.mission_results),
+        "mission_history": safe_missions,
+        "proposal_history": tuple(
+            {
+                ("party" if key == "team" else key): value
+                for key, value in proposal.items()
+            }
+            for proposal in game.proposal_history
+        ),
+        "proposed_team": tuple(game.players[pid].name for pid in game.proposed_team),
+        "consecutive_rejections": game.consecutive_rejections,
+        "discussion_seconds": game.discussion_time,
+        "phase_elapsed_seconds": max(0, int(time.time() - game.phase_started_at)),
+        "reconnect_counts": dict(runtime.get("reconnect_counts", {})),
+        "chat_counts": dict(runtime.get("chat_counts", {})),
+        "mention_counts": dict(runtime.get("mention_counts", {})),
+        "accusation_counts": dict(runtime.get("accusation_counts", {})),
+        "vote_history": tuple(runtime.get("vote_history", ())),
+        "previous_game": runtime.get("previous_game"),
+    }
+    validate_public_payload(payload)
+    return PublicNarratorState(**payload)
+
+
+def emit_narrator(game: GameState, message: dict | None, **names: str) -> None:
+    if not message:
+        return
+    rendered = dict(message)
+    follow_up = rendered.pop("follow_up", None)
+    for key, value in names.items():
+        rendered["message"] = rendered["message"].replace(f"{{{key}}}", value)
+    rendered["message"] = rendered["message"].replace("{leader}", "the leader").replace(
+        "{player}", "someone"
+    )
+    created_at = datetime.now(timezone.utc)
+    rendered["timestamp"] = created_at.isoformat(timespec="seconds").replace("+00:00", "Z")
+    rendered["color_index"] = -1
+    emit_to_game(game.code, "narrator_message", rendered)
+    try:
+        chat_store.save(
+            room_code=game.code,
+            game_started_at=game.started_at,
+            player_name=NARRATOR_NAME,
+            message=rendered["message"],
+            message_id=str(uuid.uuid4()),
+            party_id=game.party_id,
+            game_id=game.game_id,
+            actor_type="narrator",
+            actor_id="court-narrator",
+            phase=game.phase.value,
+            mission_num=rendered.get("mission_num", game.current_mission + 1),
+            proposal_attempt=game.consecutive_rejections + 1,
+            created_at=created_at,
+        )
+    except Exception:
+        logger.exception("Could not persist narrator message")
+    record_product_event(
+        "narrator_spoke", game=game, actor_type="narrator", actor_id="court-narrator",
+        payload={"trigger_id": rendered["trigger_id"], "template_id": rendered["template_id"]},
+    )
+    if follow_up:
+        emit_narrator(game, follow_up, **names)
 
 
 def get_game(game_code: str) -> GameState | None:
@@ -852,6 +949,8 @@ def serialize_game(game: GameState) -> dict:
         "win_reason": game.win_reason,
         "pending_mission_outcome": game.pending_mission_outcome,
         "rematch_ready": sorted(game.rematch_ready),
+        "narrator_runtime": game.narrator_runtime,
+        "previous_game_summary": game.previous_game_summary,
         "timer_kind": game.timer_kind,
         "timer_remaining": timer_remaining,
         "seat_recovery_codes": [
@@ -944,6 +1043,8 @@ def deserialize_game(state: dict, *, saved_at: float) -> GameState:
         for player_id in state.get("rematch_ready", [])
         if player_id in game.players and not game.players[player_id].is_bot
     }
+    game.narrator_runtime = dict(state.get("narrator_runtime") or {})
+    game.previous_game_summary = state.get("previous_game_summary")
     game.timer_kind = state.get("timer_kind")
     remaining = state.get("timer_remaining")
     game.timer_remaining = max(0, int(remaining)) if remaining is not None else None
@@ -1610,6 +1711,17 @@ def run_discussion_timer(game_code: str, phase_key: str, duration: int):
                 0, math.ceil((game.timer_deadline or time.time()) - time.time())
             )
             emit_to_game(game_code, "discussion_tick", {"remaining_seconds": remaining})
+            if remaining == 15 and not game.narrator_runtime.get(
+                f"final_15_spoken_{game.current_mission + 1}"
+            ):
+                game.narrator_runtime[f"final_15_spoken_{game.current_mission + 1}"] = True
+                emit_narrator(
+                    game,
+                    choose_proactive(
+                        game.narrator_runtime, [6],
+                        mission_num=game.current_mission + 1,
+                    ),
+                )
             if remaining <= 0:
                 record_product_event(
                     "discussion_timer_expired",
@@ -1736,6 +1848,16 @@ def start_round(game: GameState):
             "leader_id": leader.player_id if leader else None,
         },
     )
+    # Discussion is the first chat-visible beat after quest cinematics.
+    for queued in drain_pending(game.narrator_runtime):
+        emit_narrator(game, queued)
+    if game.current_mission == 0 and not game.narrator_runtime.get("opening_spoken"):
+        opening_trigger = 2 if game.previous_game_summary else 1
+        opening = choose_proactive(
+            game.narrator_runtime, [opening_trigger], mission_num=1
+        )
+        game.narrator_runtime["opening_spoken"] = True
+        emit_narrator(game, opening)
     if phase_key:
         socketio.start_background_task(
             run_discussion_timer, game.code, phase_key, game.discussion_time
@@ -1896,6 +2018,50 @@ def submit_team_proposal(
     }
     log_game_event(game, "team_proposed", payload)
     emit_to_game(game.code, "team_proposed", payload)
+    previous = game.proposal_history[-1] if game.proposal_history else None
+    team_set = set(team_names)
+    proposal_candidates = []
+    if forced:
+        proposal_candidates.append(37)
+    if game.proposal_time and decision_ms >= game.proposal_time * 750:
+        proposal_candidates.append(9)
+    if game.proposal_time and decision_ms >= max(0, game.proposal_time - 5) * 1000:
+        proposal_candidates.append(10)
+    proposal_candidates.append(11 if leader.name in team_set else 12)
+    if previous and set(previous.get("team", ())) == team_set:
+        proposal_candidates.append(13)
+        if not previous.get("approved", False):
+            proposal_candidates.append(14)
+    if previous and len(set(previous.get("team", ())) ^ team_set) == 2:
+        proposal_candidates.append(19)
+    if any(set(item.get("team", ())) == team_set and not item.get("approved", False)
+           for item in game.proposal_history):
+        proposal_candidates.append(14)
+    for mission in game.mission_history:
+        overlap = len(set(mission.get("team", ())) & team_set)
+        if overlap >= max(2, len(team_set) - 1):
+            proposal_candidates.append(16 if mission.get("passed") else 15)
+    selected_missions = [set(item.get("team", ())) for item in game.mission_history]
+    for name in team_set:
+        if len(selected_missions) >= 2 and all(name in party for party in selected_missions[-2:]):
+            proposal_candidates.append(17)
+    if game.current_mission >= 2:
+        ever_selected = set().union(*selected_missions) if selected_missions else set()
+        if any(
+            player.name not in ever_selected and player.name not in team_set
+            for player in game.player_order_list()
+        ):
+            proposal_candidates.append(18)
+    if any(
+        item.get("leader_name") == leader.name and not item.get("approved", False)
+        for item in game.proposal_history
+    ):
+        proposal_candidates.append(20)
+    proposal_message = choose_proactive(
+        game.narrator_runtime, proposal_candidates,
+        mission_num=game.current_mission + 1, threshold=76,
+    )
+    emit_narrator(game, proposal_message, leader=leader.name)
     if forced:
         public_proposal = {
             "mission_num": game.current_mission + 1,
@@ -2050,6 +2216,14 @@ def finish_mission(game: GameState, result: dict) -> None:
     # directly to the outcome artwork on every connected screen.
     final_card_at_ms = 1200 + max(0, len(result["cards_shuffled"]) - 1) * 1100
     pause((final_card_at_ms + 900) / 1000)
+    latest_proposal = game.proposal_history[-1] if game.proposal_history else None
+    choose_proactive(
+        game.narrator_runtime,
+        mission_candidates(narrator_public_state(game), result, latest_proposal),
+        mission_num=game.current_mission + 1,
+        threshold=82,
+        queue=True,
+    )
     game.mission_history.append(history_item)
     log_game_event(
         game,
@@ -2178,6 +2352,16 @@ def finish_vote(game: GameState, result: dict) -> None:
         },
     )
     emit_to_game(game.code, "vote_reveal", {**result, "team": public_vote["team"]})
+    choose_proactive(
+        game.narrator_runtime,
+        vote_candidates(narrator_public_state(game), result),
+        mission_num=game.current_mission + 1,
+        threshold=80,
+        queue=True,
+    )
+    game.narrator_runtime.setdefault("vote_history", []).append(
+        {"party": list(public_vote["team"]), "votes": dict(result.get("votes", {}))}
+    )
     emit_to_game(
         game.code,
         "vote_reveal_ack_status",
@@ -2496,6 +2680,15 @@ def on_disconnect(reason=None):
                     "players": game.public_players(),
                 },
             )
+            if game.game_id and game.narrator_runtime:
+                emit_narrator(
+                    game,
+                    choose_proactive(
+                        game.narrator_runtime, [55],
+                        mission_num=game.current_mission + 1,
+                    ),
+                    player=player.name,
+                )
             record_product_event(
                 "player_disconnected",
                 game=game,
@@ -3186,6 +3379,18 @@ def on_reconnect_game(data):
                 "players": game.public_players(),
             },
         )
+        if game.game_id and game.narrator_runtime:
+            reconnects = game.narrator_runtime.setdefault("reconnect_counts", {})
+            reconnects[player.name] = int(reconnects.get(player.name, 0)) + 1
+            trigger_id = 57 if reconnects[player.name] >= 2 else 56
+            emit_narrator(
+                game,
+                choose_proactive(
+                    game.narrator_runtime, [trigger_id],
+                    mission_num=game.current_mission + 1,
+                ),
+                player=player.name,
+            )
     except ValueError as error:
         emit("reconnect_failed", {"message": str(error)})
 
@@ -3623,6 +3828,7 @@ def on_start_game():
         assign_roles(game)
         game.started_at = time.time()
         game.game_id = str(uuid.uuid4())
+        game.narrator_runtime = new_runtime(game.previous_game_summary)
         game.active_elapsed_seconds = 0.0
         game.active_since = game.started_at
         start_research_game(game)
@@ -4260,6 +4466,45 @@ def on_send_chat(data):
             "timestamp": timestamp,
         },
     )
+    runtime = game.narrator_runtime or new_runtime(game.previous_game_summary)
+    game.narrator_runtime = runtime
+    runtime.setdefault("chat_counts", {})[participant.name] = (
+        int(runtime.setdefault("chat_counts", {}).get(participant.name, 0)) + 1
+    )
+    lowered = msg.lower()
+    for named_player in game.player_order_list():
+        if named_player.name.lower() in lowered and named_player.name != participant.name:
+            mentions = runtime.setdefault("mention_counts", {})
+            mentions[named_player.name] = int(mentions.get(named_player.name, 0)) + 1
+            if any(word in lowered for word in ("evil", "sus", "suspicious", "traitor", "lying", "liar")):
+                accusations = runtime.setdefault("accusation_counts", {})
+                accusations[named_player.name] = int(accusations.get(named_player.name, 0)) + 1
+    runtime["certainty_count"] = int(runtime.get("certainty_count", 0)) + sum(
+        lowered.count(word) for word in ("trust", "sus", "obvious", "definitely")
+    )
+    reply = direct_reply(
+        runtime, msg, mission_num=game.current_mission + 1, player=participant.name
+    )
+    emit_narrator(game, reply, player=participant.name)
+    if not reply:
+        social_candidates = []
+        if max(runtime.get("mention_counts", {}).values(), default=0) >= 3:
+            social_candidates.append(62)
+        if max(runtime.get("accusation_counts", {}).values(), default=0) >= 3:
+            social_candidates.append(63)
+        if int(runtime.get("certainty_count", 0)) >= 4:
+            social_candidates.append(64)
+        social = choose_proactive(
+            runtime, social_candidates,
+            mission_num=game.current_mission + 1,
+            threshold=78,
+        )
+        if social:
+            most_mentioned = max(
+                runtime.get("mention_counts", {}) or {"someone": 0},
+                key=(runtime.get("mention_counts", {}) or {"someone": 0}).get,
+            )
+            emit_narrator(game, social, player=most_mentioned)
     record_product_event(
         "chat_sent",
         game=game,

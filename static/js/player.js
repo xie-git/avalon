@@ -198,6 +198,9 @@ let chatBubbleEls = [];
 let chatHistory = [];
 let chatHistoryOpen = false;
 const MAX_CHAT_HISTORY = 200;
+const NARRATOR_MUTED_KEY = 'avalon-narrator-muted';
+let narratorMuted = localStorage.getItem(NARRATOR_MUTED_KEY) === 'true';
+let pendingNarratorMessages = [];
 let presencePlayers = [];
 let wakeLock = null;
 let joinedThisPage = false;
@@ -590,6 +593,13 @@ function showChat() {
     if (settings && chatSlot && settings.parentElement !== chatSlot) chatSlot.appendChild(settings);
     document.getElementById('chat-container').classList.remove('hidden');
     document.body.classList.add('chat-visible');
+    if (!narratorMuted && pendingNarratorMessages.length) {
+        const queued = pendingNarratorMessages.splice(0);
+        queued.forEach(item => addChatBubble(
+            item.name, item.message, false, item.color_index, item.timestamp,
+            true, false, 'narrator'
+        ));
+    }
 }
 function hideChat() {
     toggleChatHistory(false);
@@ -653,7 +663,8 @@ function createChatName(name, senderIsSpectator) {
     return element;
 }
 
-function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue = null, showBubble = true, senderIsSpectator = false) {
+function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue = null, showBubble = true, senderIsSpectator = false, actorType = 'player') {
+    if (actorType === 'narrator' && narratorMuted) return;
     const timestamp = fmtChatTime(timestampValue);
     const playerColor = presenceTable.colorForName(name, colorIndex);
 
@@ -663,7 +674,7 @@ function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue 
     const histList = document.getElementById('chat-history-list');
     if (histList) {
         const entry = document.createElement('div');
-        entry.className = 'chat-history-entry';
+        entry.className = `chat-history-entry${actorType === 'narrator' ? ' narrator' : ''}`;
         const nameElement = createChatName(name, senderIsSpectator);
         nameElement.style.color = playerColor;
         const timeElement = document.createElement('span');
@@ -696,7 +707,7 @@ function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue 
     }
 
     const bubble = document.createElement('div');
-    bubble.className = 'chat-bubble' + (isSelf ? ' self' : '');
+    bubble.className = 'chat-bubble' + (isSelf ? ' self' : '') + (actorType === 'narrator' ? ' narrator' : '');
     const nameElement = createChatName(name, senderIsSpectator);
     nameElement.style.color = playerColor;
     bubble.appendChild(nameElement);
@@ -726,7 +737,8 @@ function restoreRecentChat(messages) {
             item.color_index,
             item.timestamp,
             false,
-            Boolean(item.is_spectator)
+            Boolean(item.is_spectator),
+            item.actor_type || 'player'
         );
     });
 }
@@ -1529,6 +1541,16 @@ function renderChronicle(container, summary) {
     finaleDetail.textContent = reasons[summary.win_reason] || 'The fate of Avalon was decided';
     finale.append(finaleTitle, finaleDetail);
     container.appendChild(finale);
+    if (summary.final_word?.message) {
+        const word = document.createElement('section');
+        word.className = 'chronicle-entry chronicle-final-word';
+        const title = document.createElement('strong');
+        title.textContent = 'Court Narrator · Final Word';
+        const copy = document.createElement('span');
+        copy.textContent = summary.final_word.message;
+        word.append(title, copy);
+        container.appendChild(word);
+    }
 }
 
 function completeGameOutcomeAnnouncement() {
@@ -1623,6 +1645,9 @@ function showGameOver(summary) {
     };
     const winReason = reasons[summary.win_reason] || summary.win_reason || 'The struggle for Avalon is over';
     document.getElementById('win-reason-player').textContent = winReason;
+    const finalWord = document.getElementById('final-word-player');
+    finalWord.textContent = summary.final_word?.message || '';
+    finalWord.classList.toggle('hidden', !summary.final_word?.message || narratorMuted);
     renderVictoryCard(document.getElementById('victory-group-card-player'), summary);
     rematchReady = false;
     const rematchButton = document.getElementById('btn-run-it-back');
@@ -2876,7 +2901,26 @@ socket.on('player_joined', data => {
 
 // Chat
 socket.on('chat_message', data => {
-    addChatBubble(data.name, data.message, data.name === myName, data.color_index, data.timestamp, true, Boolean(data.is_spectator));
+    addChatBubble(data.name, data.message, data.name === myName, data.color_index, data.timestamp, true, Boolean(data.is_spectator), data.actor_type || 'player');
+});
+
+socket.on('narrator_message', data => {
+    if (narratorMuted) return;
+    const chatVisible = !document.getElementById('chat-container').classList.contains('hidden')
+        && !cinematicScreenIds.has(document.querySelector('.screen.active')?.id);
+    if (!chatVisible) {
+        pendingNarratorMessages.push(data);
+        return;
+    }
+    addChatBubble(data.name, data.message, false, data.color_index, data.timestamp, true, false, 'narrator');
+});
+
+const narratorMuteInput = document.getElementById('mute-narrator');
+narratorMuteInput.checked = narratorMuted;
+narratorMuteInput.addEventListener('change', () => {
+    narratorMuted = narratorMuteInput.checked;
+    localStorage.setItem(NARRATOR_MUTED_KEY, String(narratorMuted));
+    if (narratorMuted) pendingNarratorMessages = [];
 });
 
 document.getElementById('btn-chat-send').addEventListener('click', sendChat);

@@ -2055,6 +2055,42 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
     pointer-events: none;
 }
 .chat-bubble.self { border-color: rgba(201,168,76,0.35); align-self: flex-end; }
+.chat-bubble.narrator,
+.chat-history-entry.narrator {
+    position: relative;
+    padding-left: 2.15rem;
+    border-color: rgba(168, 125, 210, 0.62);
+    background: linear-gradient(135deg, rgba(34,20,43,0.96), rgba(14,10,20,0.96));
+    color: #d9cbe5;
+    font-style: italic;
+}
+.chat-bubble.narrator::before,
+.chat-history-entry.narrator::before {
+    content: '♜';
+    position: absolute;
+    left: 0.55rem;
+    top: 50%;
+    display: grid;
+    width: 1.2rem;
+    height: 1.2rem;
+    place-items: center;
+    transform: translateY(-50%);
+    border: 1px solid rgba(201,168,76,0.48);
+    border-radius: 50%;
+    color: var(--gold-light);
+    font-style: normal;
+}
+.chat-bubble.narrator .chat-name::after,
+.chat-history-entry.narrator .chat-name::after {
+    content: 'COURT NARRATOR';
+    margin-left: 0.3rem;
+    padding: 0.06rem 0.25rem;
+    border: 1px solid rgba(168,125,210,0.5);
+    border-radius: var(--radius-pill);
+    color: #d9b9f2;
+    font: normal 0.44rem var(--font-heading);
+    letter-spacing: 0.06em;
+}
 .chat-bubble.fading { opacity: 0; transform: translateY(-4px); }
 .chat-bubble a,
 .chat-history-entry a {
@@ -2137,6 +2173,30 @@ body.chat-visible .screen  { padding-bottom: calc(2rem + 54px + env(safe-area-in
 }
 .chat-history-entry .chat-name { color: var(--gold-light); font-family: var(--font-heading); font-size: 0.65rem; margin-right: 0.25rem; font-weight: 700; }
 .chat-history-entry .chat-time { color: var(--text-dim); font-size: 0.6rem; margin-left: 0.3rem; float: right; }
+
+.narrator-mute-setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem;
+    border: 1px solid rgba(168,125,210,0.42);
+    border-radius: var(--radius-sm);
+    background: rgba(35,20,43,0.35);
+}
+.narrator-mute-setting span { display: grid; gap: 0.16rem; }
+.narrator-mute-setting strong { color: #d9cbe5; font: 0.76rem var(--font-heading); }
+.narrator-mute-setting small { color: var(--text-dim); }
+.narrator-mute-setting input { width: 1.15rem; height: 1.15rem; accent-color: #9e6bc0; }
+
+#screen-game-over .narrator-final-word {
+    max-width: 36rem;
+    margin: 0.3rem auto 0;
+    color: #d7c8df;
+    font: italic 0.78rem/1.4 var(--font-body);
+}
+#screen-game-over .narrator-final-word::before { content: 'Court Narrator · Final Word — '; color: var(--finale-accent); font: 600 0.58rem var(--font-heading); letter-spacing: 0.08em; text-transform: uppercase; }
+#screen-game-over .chronicle-final-word { border-left-color: #9e6bc0; font-style: italic; }
 
 .chat-input-row {
     display: flex;

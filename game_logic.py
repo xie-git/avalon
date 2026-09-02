@@ -233,6 +233,11 @@ class GameState:
 
         self.rematch_ready: set[str] = set()
 
+        # Public-information narrator memory.  It is intentionally a plain,
+        # serializable structure; role and mission-card data never enter it.
+        self.narrator_runtime: dict = {}
+        self.previous_game_summary: dict | None = None
+
         # Timer cancellation flag
         self.timer_phase_key: str | None = None
         self.timer_deadline: float | None = None
@@ -282,6 +287,16 @@ class GameState:
 
     def reset(self) -> None:
         """Return the same connected group to the lobby for another game."""
+        if self.started_at:
+            self.previous_game_summary = {
+                "winner": self.winner,
+                "win_reason": self.win_reason,
+                "mission_results": list(self.mission_results),
+                "player_names": [player.name for player in self.player_order_list()],
+                "narrator_line_ids": list(
+                    self.narrator_runtime.get("used_line_ids", ())
+                )[-80:],
+            }
         self.phase = GamePhase.LOBBY
         for player in self.players.values():
             player.role = None
@@ -316,6 +331,7 @@ class GameState:
         self.display_pair_codes = {}
         self.pending_mission_outcome = None
         self.rematch_ready = set()
+        self.narrator_runtime = {}
         self.started_at = None
         self.game_id = None
         self.phase_started_at = time.time()
@@ -620,7 +636,7 @@ def process_assassination(game: GameState, target_player_id: str) -> dict:
 
 
 def get_game_summary(game: GameState) -> dict:
-    return {
+    summary = {
         "winner": game.winner,
         "win_reason": game.win_reason,
         "roles": {
@@ -644,6 +660,20 @@ def get_game_summary(game: GameState) -> dict:
             for player in game.player_order_list()
         ],
     }
+    if game.winner:
+        # Finale narration is the sole role-aware path and is generated only
+        # after secrecy has ended.  Cache it so every client/reconnect sees the
+        # exact same Final Word.
+        from narrator import final_word, new_runtime
+
+        if not game.narrator_runtime:
+            game.narrator_runtime = new_runtime(game.previous_game_summary)
+        if not game.narrator_runtime.get("final_word"):
+            game.narrator_runtime["final_word"] = final_word(
+                game.narrator_runtime, summary
+            )
+        summary["final_word"] = game.narrator_runtime["final_word"]
+    return summary
 
 
 # ---------------------------------------------------------------------------

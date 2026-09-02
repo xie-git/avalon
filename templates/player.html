@@ -424,6 +424,7 @@
                 <div class="finale-crown" aria-hidden="true">♛</div>
                 <div class="game-over-result" id="game-over-result-player"></div>
                 <p class="waiting-text" id="win-reason-player"></p>
+                <blockquote class="narrator-final-word" id="final-word-player"></blockquote>
             </header>
             <div class="my-role-reveal" id="my-role-reveal-display"></div>
             <section class="victory-group-card" id="victory-group-card-player" aria-label="Winning players">
@@ -474,6 +475,10 @@
     <div class="role-overlay-box" style="max-width:320px">
         <div class="role-overlay-name" style="font-size:1.2rem;margin-bottom:1.25rem">Settings</div>
         <div style="width:100%;text-align:left;display:flex;flex-direction:column;gap:0.75rem">
+            <label class="narrator-mute-setting">
+                <span><strong>Court Narrator</strong><small>Mute quips on this device</small></span>
+                <input type="checkbox" id="mute-narrator">
+            </label>
             <div id="settings-game-actions" class="hidden" style="display:flex;flex-direction:column;gap:0.5rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border-gold)">
                 <section class="settings-session-card" aria-label="Room and shared display pairing">
                     <div class="settings-code-row">
