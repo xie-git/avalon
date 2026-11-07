@@ -126,3 +126,39 @@ connections.
 - [Production deployment and operations](docs/deployment.md)
 - [Data, privacy, backups, and history tools](docs/data-and-privacy.md)
 - [Canonical research data specification](docs/research-data.md)
+
+## Interface languages
+
+English is the default. The entry screen's **Language** selector and every
+phone's **Settings → Language** offer English and Simplified Chinese (中文).
+The shared display has its own **Settings → Language** control, available before
+and after pairing. Choices persist in that browser; the phone and `/host` use
+separate preference keys, so a Chinese display can accompany English phones,
+and each phone can choose independently. Switching updates the current screen
+immediately without sending a room-setting event or reconnecting.
+
+The Chinese copy keeps the game's medieval adventure voice and the Court
+Narrator's wit. Player names, chat, room/pairing codes, and game protocol values
+remain unchanged. The development-only `/dev` console is an operator tool and
+is outside the translated game interface.
+
+`static/js/zh-CN.js` is the authored translation catalog. `static/js/i18n.js`
+translates presentation text and accessibility labels, remembers original
+English per DOM node, and observes newly rendered content. Authored templates
+preserve interpolated names and codes; use `data-i18n-skip` on user-authored
+content. Add translations for new interface text and retain these boundaries.
+The small, self-hosted `static/fonts/avalon-chinese.woff2` is a regular-weight
+Noto Serif SC subset covering the authored Chinese copy; its OFL license is
+beside it. Update the subset when introducing Chinese characters it lacks.
+System CJK fonts provide fallback for names and other user content.
+
+The browser regression check covers all game phases, device-local preferences,
+live switching, persistence, user text, and every authored narrator delivery.
+With Node.js, Playwright, and its Chromium browser installed, run:
+
+```bash
+node tests/browser_language.cjs
+```
+
+It uses intercepted test pages and a stub socket, without creating production
+rooms. Set `AVALON_CHROMIUM` to use an existing Chromium executable if needed.

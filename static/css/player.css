@@ -1621,9 +1621,9 @@ body.mission-cinematic-active #connection-status {
     filter: blur(3px);
     transform: scale(1.025);
 }
-#screen-game-over.winner-good::before { background-image: url('/static/assets/results/good-wins.png?v=20260824'); }
+#screen-game-over.winner-good::before { background-image: url('/static/assets/results/good-wins.webp?v=20260824'); }
 #screen-game-over.winner-evil::before {
-    background-image: url('/static/assets/results/evil-wins.png?v=20260824');
+    background-image: url('/static/assets/results/evil-wins.webp?v=20260824');
     opacity: 0.72;
 }
 #screen-game-over::after {
@@ -1701,11 +1701,11 @@ body.mission-cinematic-active #connection-status {
     background-size: auto 100%;
 }
 #screen-game-over.winner-good::before {
-    background-image: url('/static/assets/results/good-wins-finale-wide.png?v=20260829');
+    background-image: url('/static/assets/results/good-wins-finale-wide.webp?v=20260829');
     background-position: 31% calc(50% - 100px);
 }
 #screen-game-over.winner-evil::before {
-    background-image: url('/static/assets/results/evil-wins-finale-wide.png?v=20260829');
+    background-image: url('/static/assets/results/evil-wins-finale-wide.webp?v=20260829');
 }
 #screen-game-over.winner-good::after,
 #screen-game-over.winner-evil::after {
@@ -2899,7 +2899,7 @@ body.board-visible.chat-visible #screen-assassin.presence-active {
             rgba(5,6,9,0.7) 0,
             rgba(5,6,9,0.5) 48px,
             rgba(3,4,9,0.26) 100%),
-        center / cover no-repeat url('/static/assets/ui/mobile-ui-bg.png?v=20260901-v2');
+        center / cover no-repeat url('/static/assets/ui/mobile-ui-bg.webp?v=20260901-v2');
     background-color: #050609;
 }
 
@@ -3326,7 +3326,7 @@ body.board-visible.chat-visible::before {
             rgba(5,6,9,0.34) 0,
             rgba(5,6,9,0.22) 48px,
             rgba(3,4,9,0.2) 100%),
-        center / cover no-repeat url('/static/assets/ui/mobile-ui-bg.png?v=20260901-v2');
+        center / cover no-repeat url('/static/assets/ui/mobile-ui-bg.webp?v=20260901-v2');
     pointer-events: none;
 }
 

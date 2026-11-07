@@ -269,13 +269,28 @@
                 'Minion of Mordred': 'Min',
             };
             this.manifest.replaceChildren();
+            // One chip per character with a count (e.g. three Loyal Servants), so each stays legible.
+            const counts = new Map();
+            this.roleManifest.forEach(item => {
+                if (item && item.role) counts.set(item.role, (counts.get(item.role) || 0) + 1);
+            });
+            const shown = new Set();
             this.roleManifest.forEach(item => {
                 if (!item || !item.role || !['good', 'evil'].includes(item.team)) return;
+                if (shown.has(item.role)) return;
+                shown.add(item.role);
                 const badge = document.createElement('button');
                 badge.type = 'button';
                 badge.className = `presence-character ${item.team}`;
                 badge.textContent = `${item.team === 'good' ? '✦' : '◆'} ${abbreviations[item.role] || item.role.slice(0, 3)}`;
                 badge.title = item.role;
+                if (counts.get(item.role) > 1) {
+                    const count = document.createElement('small');
+                    count.className = 'presence-character-count';
+                    count.setAttribute('data-i18n-skip', '');
+                    count.textContent = `×${counts.get(item.role)}`;
+                    badge.appendChild(count);
+                }
                 badge.setAttribute('aria-label', `${item.team}, ${item.role}. Tap for role description.`);
                 badge.addEventListener('click', event => {
                     event.stopPropagation();
@@ -423,6 +438,7 @@
                 const name = document.createElement('span');
                 name.className = 'presence-name';
                 name.textContent = player.name;
+                name.dataset.i18nSkip = "";
                 node.append(portrait, name);
                 if (reveal) {
                     const role = document.createElement('span');

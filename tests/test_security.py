@@ -60,7 +60,7 @@ def test_security_headers_and_development_routes_are_closed():
     player_css = client.get("/static/css/player.css").data
     host_css = client.get("/static/css/host.css").data
     player_page = response.data
-    assert b"new-table-graphic.png" in common_css
+    assert b"new-table-graphic.webp" in common_css
     assert b"mission-outcome-suspense" not in common_css
     assert b"assassin-target-identity" in player_script
     assert b"My Role" in player_page
@@ -69,12 +69,12 @@ def test_security_headers_and_development_routes_are_closed():
     assert b"grid-template-rows: repeat(2, auto)" in player_css
     assert b'id="host-music-volume"' in host_response.data
     assert b"quiet-night.mp3" in host_script
-    assert b"new-table-graphic.png" in host_css
+    assert b"new-table-graphic.webp" in host_css
     assert b'flex-basis: clamp(170px, 14vw, 220px)' in host_css
     assert b'flex-basis: clamp(172px, 14.5vw, 225px)' in host_css
     assert b'flex: 0 0 calc((100% - 3.8rem) / 5)' in host_css
-    assert b"mobile-ui-bg.png" in player_css
-    assert client.get("/static/assets/ui/mobile-ui-bg.png").status_code == 200
+    assert b"mobile-ui-bg.webp" in player_css
+    assert client.get("/static/assets/ui/mobile-ui-bg.webp").status_code == 200
 
 
 def test_player_pages_do_not_reference_portrait_or_audio_assets():
@@ -143,14 +143,14 @@ def test_entry_art_is_optimized_and_future_cinematics_are_deferred():
 
     for page, paths in (
         (player_page, (
-            b"/static/assets/opening/avalon-game-start-mobile.png",
-            b"/static/assets/votes/cards-revealed-mobile.png",
-            b"/static/assets/quests/quest-begun-mobile.png",
+            b"/static/assets/opening/avalon-game-start-mobile.webp",
+            b"/static/assets/votes/cards-revealed-mobile.webp",
+            b"/static/assets/quests/quest-begun-mobile.webp",
         )),
         (host_page, (
-            b"/static/assets/opening/avalon-game-start-wide.png",
-            b"/static/assets/votes/cards-revealed-wide.png",
-            b"/static/assets/quests/quest-begins-alt.png",
+            b"/static/assets/opening/avalon-game-start-wide.webp",
+            b"/static/assets/votes/cards-revealed-wide.webp",
+            b"/static/assets/quests/quest-begins-alt.webp",
         )),
     ):
         for path in paths:
@@ -1284,3 +1284,155 @@ def test_every_supported_party_size_reaches_first_mission(
 
     for client in clients:
         client.disconnect()
+
+
+def test_static_text_assets_are_gzip_compressed_and_media_is_not():
+    import gzip as gzip_module
+
+    client = server.app.test_client()
+    plain = client.get("/static/js/player.js?v=test")
+    assert plain.status_code == 200
+    assert "Content-Encoding" not in plain.headers
+    assert "Accept-Encoding" in plain.headers["Vary"]
+
+    for _ in range(2):  # second request is served from the per-version cache
+        response = client.get("/static/js/player.js?v=test", headers={"Accept-Encoding": "gzip, br"})
+        assert response.status_code == 200
+        assert response.headers["Content-Encoding"] == "gzip"
+        assert response.headers["Cache-Control"] == "public, max-age=31536000, immutable"
+        assert int(response.headers["Content-Length"]) < len(plain.data) / 2
+        assert gzip_module.decompress(response.data) == plain.data
+        assert response.headers["ETag"].endswith('-gzip"')
+
+    image = client.get("/static/assets/ui/mobile-ui-bg.webp", headers={"Accept-Encoding": "gzip"})
+    assert image.status_code == 200
+    assert "Content-Encoding" not in image.headers
+    ranged = client.get("/static/css/host.css", headers={"Accept-Encoding": "gzip", "Range": "bytes=0-9"})
+    assert "Content-Encoding" not in ranged.headers
+
+
+def test_runtime_artwork_is_webp_and_every_referenced_asset_exists():
+    from pathlib import Path
+
+    root = Path(server.app.root_path)
+    sources = [*root.glob("templates/*.html"), *root.glob("static/js/*.js"), *root.glob("static/css/*.css")]
+    referenced = set()
+    for source in sources:
+        referenced.update(re.findall(r"/static/assets/[A-Za-z0-9_./-]+", source.read_text(encoding="utf-8")))
+    assert referenced
+    assert not [path for path in referenced if path.endswith(".png")]
+    missing = [path for path in referenced if not (root / path.lstrip("/")).is_file()]
+    assert missing == []
+
+
+def test_later_phases_cancel_a_pending_quest_outcome_screen():
+    """A stale quest-outcome timer must not pull a screen back from the finale."""
+    from pathlib import Path
+
+    root = Path(server.app.root_path) / "static" / "js"
+    for name, helper, events in (
+        ("host.js", "cancelPendingHostMissionOutcome", ("round_start", "assassin_phase_start", "game_over", "return_to_lobby")),
+        ("player.js", "cancelPendingMissionOutcome", ("round_start", "assassin_phase_start", "game_over", "return_to_lobby", "state_snapshot")),
+    ):
+        source = (root / name).read_text(encoding="utf-8")
+        for event in events:
+            start = source.index(f"socket.on('{event}', data => {{")
+            assert f"{helper}();" in source[start:start + 200], (name, event)
+
+
+def test_tabletop_display_can_create_and_host_its_own_room(create_game):
+    """A table screen (Avalon Table app) may open a room and run it; phones only play."""
+    server.app.config["TESTING"] = False  # creation must work in production, not just tests
+    try:
+        table = server.socketio.test_client(server.app)
+        created = create_game(table)
+        game = server.games[created["room_code"]]
+        assert game.host_player_id is None
+        table.emit("register_host_screen", {"game_code": game.code, "host_token": created["host_token"]})
+        assert packets_for(table, "host_registered")
+    finally:
+        server.app.config["TESTING"] = True
+
+    phones = []
+    for name in ("Arthur", "Gwen", "Lance", "Percy", "Morgan", "Mordy"):
+        phone = server.socketio.test_client(server.app)
+        phone.emit("join_game", {"room_code": game.code, "player_name": name})
+        joined = packets_for(phone, "join_success")
+        assert joined and joined[0]["is_host"] is False
+        phones.append(phone)
+
+    phones[0].emit("start_game")
+    assert "Host authorization required" in packets_for(phones[0], "error")[-1]["message"]
+
+    table.emit("update_settings", {"discussion_time": 300, "proposal_time": 0})
+    assert (game.discussion_time, game.proposal_time) == (300, 0)
+    table.emit("start_game")
+    assert game.phase != server.GamePhase.LOBBY
+    table.emit("end_game")
+    assert game.code not in server.games
+
+
+def test_tabletop_host_returning_resumes_its_suspended_room(create_game):
+    table = server.socketio.test_client(server.app)
+    created = create_game(table)
+    game = server.games[created["room_code"]]
+    table.disconnect()
+    assert game.suspended
+
+    again = server.socketio.test_client(server.app)
+    again.emit("register_host_screen", {"game_code": game.code, "host_token": created["host_token"]})
+    assert packets_for(again, "host_registered")
+    assert not game.suspended
+    again.emit("update_settings", {"discussion_time": 120})
+    assert game.discussion_time == 120
+
+
+def test_tabletop_host_can_end_a_room_that_players_abandoned(create_game):
+    table = server.socketio.test_client(server.app)
+    created = create_game(table)
+    game = server.games[created["room_code"]]
+    table.emit("register_host_screen", {"game_code": game.code, "host_token": created["host_token"]})
+    phone = server.socketio.test_client(server.app)
+    phone.emit("join_game", {"room_code": game.code, "player_name": "Arthur"})
+    phone.disconnect()
+    assert game.suspended
+    table.emit("end_game")
+    assert game.code not in server.games
+
+
+def test_refinement_layer_and_self_hosted_fonts_are_served():
+    client = server.app.test_client()
+    for page in ("/", "/host"):
+        html = client.get(page).get_data(as_text=True)
+        assert re.search(r'/static/css/polish\.css\?v=[\w-]+', html), page
+    css = client.get("/static/css/polish.css").get_data(as_text=True)
+    fonts = re.findall(r"url\('(/static/fonts/[\w-]+\.woff2)'\)", css)
+    assert len(fonts) == 3
+    for font in fonts:
+        response = client.get(font)
+        assert response.status_code == 200
+        assert response.get_data()[:4] == b"wOF2"
+    # Fonts are OFL-licensed and their licences ship beside them.
+    for licence in ("OFL-Cinzel.txt", "OFL-CrimsonPro.txt"):
+        assert os.path.exists(os.path.join("static", "fonts", licence))
+
+
+def test_phone_ui_uses_svg_icons_and_keeps_settings_out_of_the_status_board():
+    with open("templates/player.html", encoding="utf-8") as f:
+        html = f.read()
+    for emoji in ("🛡", "📜", "🗡"):
+        assert emoji not in html
+    assert html.count('class="av-icon"') >= 4
+    with open("static/js/player.js", encoding="utf-8") as f:
+        js = f.read()
+    show_chat = js[js.index("function showChat()"):js.index("function hideChat()")]
+    assert "getElementById('settings-chat-slot')" in show_chat
+
+
+def test_display_clears_saved_game_notices_when_a_room_ends():
+    with open("static/js/host.js", encoding="utf-8") as f:
+        js = f.read()
+    handler = js[js.index("socket.on('game_ended'"):]
+    handler = handler[:handler.index("});")]
+    assert "hideSuspendedDisplayRecovery()" in handler
+    assert "hideConnectionStatus()" in handler

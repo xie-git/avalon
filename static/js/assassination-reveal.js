@@ -2,8 +2,8 @@
 (function () {
     'use strict';
 
-    const PORTRAIT_ART_PATH = '/static/assets/results/assassin-kills-merlin.png?v=20260825';
-    const LANDSCAPE_ART_PATH = '/static/assets/results/assassin-kills-merlin-wide.png?v=20260827-production-polish';
+    const PORTRAIT_ART_PATH = '/static/assets/results/assassin-kills-merlin.webp?v=20260825';
+    const LANDSCAPE_ART_PATH = '/static/assets/results/assassin-kills-merlin-wide.webp?v=20260827-production-polish';
     const STYLE_ID = 'assassination-merlin-reveal-styles';
     const REVEAL_ID = 'assassination-merlin-reveal';
     let lastRevealKey = null;

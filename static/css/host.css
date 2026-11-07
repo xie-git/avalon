@@ -2125,10 +2125,10 @@ body.host-entry-active #host-chat-strip {
     pointer-events: none;
 }
 #screen-game-over.winner-good::before {
-    background: center / cover no-repeat url('/static/assets/results/good-wins-finale-wide.png?v=20260829');
+    background: center / cover no-repeat url('/static/assets/results/good-wins-finale-wide.webp?v=20260829');
 }
 #screen-game-over.winner-evil::before {
-    background: center / cover no-repeat url('/static/assets/results/evil-wins-finale-wide.png?v=20260829');
+    background: center / cover no-repeat url('/static/assets/results/evil-wins-finale-wide.webp?v=20260829');
 }
 #screen-game-over.winner-good::after,
 #screen-game-over.winner-evil::after {
@@ -2622,7 +2622,7 @@ body.host-cinematic-active .screen.active {
     background:
         linear-gradient(180deg, rgba(3, 5, 7, 0.32), rgba(3, 5, 7, 0.62)),
         radial-gradient(circle at 50% 42%, rgba(3, 5, 7, 0.08), rgba(3, 5, 7, 0.5) 88%),
-        center / cover no-repeat url('/static/assets/lobby/join-screen-bg.png?v=20260830');
+        center / cover no-repeat url('/static/assets/lobby/join-screen-bg.webp?v=20260830');
 }
 #screen-lobby .tv-lobby-join-panel > .room-code-block,
 #screen-lobby .tv-lobby-join-panel > .join-tools,
@@ -2659,7 +2659,7 @@ body.host-cinematic-active .screen.active {
 
 /* Use the supplied round-table artwork on every paired-TV table state. */
 .presence-table.presence-host.presence-round-table .presence-field::before {
-    background-image: url('/static/assets/ui/new-table-graphic.png?v=20260828');
+    background-image: url('/static/assets/ui/new-table-graphic.webp?v=20260828');
     background-position: center;
     background-repeat: no-repeat;
     background-size: 100% 100%;
@@ -2686,7 +2686,7 @@ body.host-cinematic-active .screen.active {
             rgba(3,4,7,0.25) 235px,
             rgba(3,4,7,0.14) 100%),
         center calc(50% + 12px) / cover no-repeat
-            url('/static/assets/ui/bg-4k.png?v=20260830-paired-ui-replacement');
+            url('/static/assets/ui/bg-4k.webp?v=20260830-paired-ui-replacement');
     background-color: #030407;
 }
 #screen-night.presence-active > .presence-game-panel,

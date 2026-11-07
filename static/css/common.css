@@ -174,7 +174,7 @@ body::after {
     z-index: 0;
     inset: 0;
     border-radius: inherit;
-    background: url('/static/assets/ui/new-table-graphic.png?v=20260828') center / 100% 100% no-repeat;
+    background: url('/static/assets/ui/new-table-graphic.webp?v=20260828') center / 100% 100% no-repeat;
     filter: saturate(0.92) brightness(0.9);
     pointer-events: none;
 }
@@ -533,7 +533,7 @@ body::after {
 .mission-result-card.sealed {
     border-color: transparent;
     background: transparent center / contain no-repeat
-        url('/static/assets/ui/avalon-card-back.png?v=20260830-stone-banner');
+        url('/static/assets/ui/avalon-card-back.webp?v=20260830-stone-banner');
     box-shadow: 0 14px 34px rgba(0,0,0,0.62);
 }
 .cinematic-quest-card:not(.sealed) { animation: cinematic-card-turn 0.82s cubic-bezier(.2,.75,.2,1) both; }

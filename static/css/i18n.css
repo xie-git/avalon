@@ -1,0 +1,52 @@
+@font-face { font-family: "Avalon Chinese"; src: url('/static/fonts/avalon-chinese.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+/* Native CJK glyphs and measured spacing retain the gilded, medieval treatment. */
+html[lang="zh-CN"] {
+    --font-ui: "Avalon Chinese", "Noto Serif CJK SC", "Songti SC", serif;
+    --font-title: "Avalon Chinese", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+    --font-heading: "Avalon Chinese", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+    --font-body: "Avalon Chinese", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+html[lang="zh-CN"] :is(h1,h2,h3,button,.screen-title-small,.role-overlay-name) { letter-spacing: .06em; }
+html[lang="zh-CN"] :is(p,small,.role-overlay-desc,.role-overlay-knowledge) { line-height: 1.65; }
+.language-setting { display: flex; align-items: center; justify-content: space-between; gap: 1rem; text-align: left; }
+.language-setting span { display: grid; gap: .3rem; }
+.language-setting small { color: var(--text-dim); font-size: .7rem; }
+[data-language-select] { color: var(--gold-light); background: #19160e; border: 1px solid var(--border-gold); border-radius: 6px; padding: .5rem; font: 1rem var(--font-body); min-width: 6.5rem; }
+.entry-language { position: fixed; z-index: 205; top: max(.6rem, env(safe-area-inset-top)); left: max(.6rem, env(safe-area-inset-left)); display: flex; gap: .5rem; align-items: center; padding: .3rem .5rem; border-radius: 8px; background: rgba(10,10,12,.9); color: var(--gold-light); font-size: .7rem; }
+body:not(:has(.entry-screen.active)) .entry-language { display: none; }
+.display-settings-button { position: fixed; right: max(.7rem, env(safe-area-inset-right)); top: max(.7rem, env(safe-area-inset-top)); z-index: 250; background: #19160e; color: var(--gold-light); border: 1px solid var(--border-gold); border-radius: 8px; padding: .6rem .8rem; cursor: pointer; }
+.display-settings-panel { position: fixed; right: .7rem; top: 3.6rem; z-index: 260; width: min(320px, calc(100vw - 1.4rem)); padding: 1.25rem; box-sizing: border-box; background: #14120e; border: 1px solid var(--gold); border-radius: 12px; box-shadow: 0 8px 30px #000; }
+.display-settings-panel[hidden] { display: none; }
+.display-settings-panel .btn { margin-top: 1rem; width: 100%; }
+.entry-brand-chinese { display: none; }
+html[lang="zh-CN"] .entry-title-art { visibility: hidden; }
+html[lang="zh-CN"] .entry-brand { position: relative; }
+html[lang="zh-CN"] .entry-brand-chinese { display: flex; position: absolute; inset: 0; flex-direction: column; align-items: center; justify-content: center; gap: .5rem; text-shadow: 0 3px 18px #000, 0 0 22px #b8923f; color: var(--gold-light); }
+.entry-brand-chinese strong { font: 700 clamp(2.8rem, 11vw, 6rem)/1.2 var(--font-title); letter-spacing: .2em; }
+.entry-brand-chinese span { font: .85rem/1.4 var(--font-heading); letter-spacing: .1em; }
+html[lang="zh-CN"] .presence-game-panel::before { content: '征程战况'; }
+html[lang="zh-CN"] #screen-night .presence-game-panel::before { content: '夜幕降临'; }
+html[lang="zh-CN"] :is(#screen-round,#screen-discussion) .presence-game-panel::before { content: '远征议事'; }
+html[lang="zh-CN"] #screen-proposal .presence-game-panel::before { content: '远征队伍'; }
+html[lang="zh-CN"] #screen-vote .presence-game-panel::before { content: '同伴表决'; }
+html[lang="zh-CN"] #screen-vote-reveal .presence-game-panel::before { content: '表决揭晓'; }
+html[lang="zh-CN"] #screen-mission .presence-game-panel::before { content: '远征进行中'; }
+html[lang="zh-CN"] #screen-mission-reveal .presence-game-panel::before { content: '远征结局'; }
+html[lang="zh-CN"] #screen-assassin .presence-game-panel::before { content: '最终抉择'; }
+html[lang="zh-CN"] #screen-game-over .presence-game-panel::before { content: '最终审判'; }
+@media (min-width: 900px) { body:has(#host-top-meta) #host-top-meta { padding-right: 7rem; } }
+
+html[lang="zh-CN"] #chat-history-list:empty::before { content: '尚无留言 · 议会暂且静默'; }
+html[lang="zh-CN"] #screen-game-over .narrator-final-word::before { content: '宫廷史官 · 终章评语 — '; }
+
+.entry-screen#screen-join { padding-top: max(4rem, env(safe-area-inset-top)); }
+
+/* Personal language settings stay reachable throughout the cinematic screens. */
+html body.player-cinematic-active #player-utility-dock,
+html body.role-reveal-active #player-utility-dock,
+html body.quest-reveal-active #player-utility-dock,
+html body.game-over-active #player-utility-dock,
+html body.mission-cinematic-active #player-utility-dock,
+html body.vote-cinematic-active #player-utility-dock { display: flex !important; }
+html[lang="zh-CN"] :is(button,input,select,textarea) { font-family: var(--font-body); }
+.display-settings-button { font: .85rem var(--font-heading); }

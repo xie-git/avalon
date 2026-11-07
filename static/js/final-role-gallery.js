@@ -101,6 +101,7 @@
         const playerName = document.createElement('strong');
         playerName.className = 'final-role-player';
         playerName.textContent = name;
+        playerName.dataset.i18nSkip = "";
         const roleName = document.createElement('span');
         roleName.className = 'final-role-name';
         roleName.textContent = roleInfo.role || 'Unknown role';

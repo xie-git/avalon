@@ -165,6 +165,14 @@ let chatAudioContext = null;
 let hostMissionRevealSequence = 0;
 let hostMissionOutcomeTimer = null;
 let hostMissionOutcomeReadyAt = 0;
+
+// A later phase can arrive before the quest-outcome animation timer fires (for
+// example when players continue quickly after the final quest). Cancel it so a
+// stale timer cannot pull this screen back to the finished quest's result.
+function cancelPendingHostMissionOutcome() {
+    clearTimeout(hostMissionOutcomeTimer);
+    hostMissionOutcomeTimer = null;
+}
 let hostVoteRevealSequence = 0;
 let latestHostMissionReveal = null;
 let gameOutcomeTimer = null;
@@ -197,13 +205,13 @@ const VOTE_RESULT_FLAVOR = {
 };
 
 const QUEST_OUTCOME_ART = {
-    success: '/static/assets/quests/quest-success-alt.png?v=20260830',
-    fail: '/static/assets/quests/quest-failed-wide.png?v=20260827-production-polish',
+    success: '/static/assets/quests/quest-success-alt.webp?v=20260830',
+    fail: '/static/assets/quests/quest-failed-wide.webp?v=20260827-production-polish',
 };
 
 const GAME_OUTCOME_ART = {
-    good: '/static/assets/results/good-wins-finale-wide.png?v=20260829-reference-finale',
-    evil: '/static/assets/results/evil-wins-finale-wide.png?v=20260829-reference-finale',
+    good: '/static/assets/results/good-wins-finale-wide.webp?v=20260829-reference-finale',
+    evil: '/static/assets/results/evil-wins-finale-wide.webp?v=20260829-reference-finale',
 };
 
 function hostSession() {
@@ -286,11 +294,15 @@ function renderTvChat() {
         const line = document.createElement('div');
         line.classList.toggle('narrator', item.actor_type === 'narrator');
         const name = document.createElement('strong');
-        name.textContent = `${item.name}${item.is_spectator ? ' · spectator' : ''}`;
+        name.textContent = item.name;
+        if (item.actor_type !== 'narrator') name.dataset.i18nSkip = '';
+        const spectatorLabel = document.createElement('em');
+        spectatorLabel.textContent = item.is_spectator ? ' · spectator' : '';
         name.style.color = presenceTable.colorForName(item.name, item.color_index);
         const message = document.createElement('span');
+        if (item.actor_type !== 'narrator') message.dataset.i18nSkip = '';
         appendLinkifiedText(message, item.message);
-        line.append(name, message);
+        line.append(name, spectatorLabel, message);
         strip.appendChild(line);
     });
 }
@@ -306,7 +318,10 @@ function renderNightPending(names = []) {
     }
     const label = document.createElement('strong');
     label.textContent = 'Still waiting: ';
-    pending.append(label, document.createTextNode(cleanNames.join(', ')));
+    const namesElement = document.createElement('span');
+    namesElement.dataset.i18nSkip = '';
+    namesElement.textContent = cleanNames.join(', ');
+    pending.append(label, namesElement);
 }
 
 
@@ -564,6 +579,7 @@ function createLeaderIdentity(name) {
     }
     const label = document.createElement('span');
     label.textContent = name || '—';
+    label.dataset.i18nSkip = "";
     identity.appendChild(label);
     return identity;
 }
@@ -624,7 +640,7 @@ function renderReorderList(playerList) {
     playerList.forEach((p, i) => {
         const li = document.createElement('li');
         li.className = 'reorder-item';
-        li.innerHTML = `<span class="reorder-num">${i + 1}</span>${escapeHtml(p.name)}${p.ready ? '<span class="ready-mark">✓ Ready</span>' : ''}`;
+        li.innerHTML = `<span class="reorder-num">${i + 1}</span><span data-i18n-skip>${escapeHtml(p.name)}</span>${p.ready ? '<span class="ready-mark">✓ Ready</span>' : ''}`;
         list.appendChild(li);
     });
 }
@@ -744,6 +760,7 @@ function animateVoteReveal(votes) {
         const label = document.createElement('span');
         label.className = 'cinematic-vote-name';
         label.textContent = name;
+        label.dataset.i18nSkip = "";
         const stamp = document.createElement('span');
         stamp.className = 'cinematic-vote-stamp';
         stamp.innerHTML = `<b>${vote === 'approve' ? '✓' : '×'}</b><strong>${vote.toUpperCase()}</strong>`;
@@ -816,6 +833,7 @@ function renderHostCinematicParty(container, names = []) {
         const label = document.createElement('span');
         label.className = 'identity-avatar-name';
         label.textContent = name;
+        label.dataset.i18nSkip = "";
         member.append(portrait, label);
         container.appendChild(member);
     });
@@ -1092,6 +1110,7 @@ function renderVictoryCard(card, summary) {
         }
         const name = document.createElement('strong');
         name.textContent = player.name;
+        name.dataset.i18nSkip = "";
         const role = document.createElement('small');
         role.textContent = player.role;
         person.append(portrait, name, role);
@@ -1268,6 +1287,7 @@ socket.on('host_registered', data => {
             updateTimerRing('timer-ring', timerMax, data.discussion_time);
         } else if (data.phase === 'TEAM_VOTE' || data.phase === 'VOTE_REVEAL') {
             proposedTeam = data.proposed_team || [];
+            document.getElementById('vote-team-names').dataset.i18nSkip = '';
             document.getElementById('vote-team-names').textContent =
                 proposedTeam.join(', ');
             document.getElementById('vote-leader-label').textContent =
@@ -1285,6 +1305,7 @@ socket.on('host_registered', data => {
                 card.className = 'mission-member-card';
                 card.dataset.playerId = proposedTeamIds[index] || '';
                 card.textContent = name;
+                card.dataset.i18nSkip = "";
                 display.appendChild(card);
             });
             renderMissionStatus({
@@ -1423,6 +1444,7 @@ socket.on('night_phase_complete', () => {
 });
 
 socket.on('round_start', data => {
+    cancelPendingHostMissionOutcome();
     currentMission = data.mission_num - 1;
     currentLeaderName = data.leader_name;
     presenceTable.setGameStatus({ mode: 'game', leaderName: data.leader_name });
@@ -1492,6 +1514,7 @@ socket.on('team_preview', data => {
         const chip = document.createElement('div');
         chip.className = 'proposed-player-chip selected';
         chip.textContent = name;
+        chip.dataset.i18nSkip = "";
         container.appendChild(chip);
     });
 });
@@ -1504,6 +1527,7 @@ socket.on('team_proposed', data => {
         const chip = document.createElement('div');
         chip.className = 'proposed-player-chip selected';
         chip.textContent = name;
+        chip.dataset.i18nSkip = "";
         container.appendChild(chip);
     });
 });
@@ -1513,7 +1537,8 @@ socket.on('vote_start', data => {
     proposedTeam = data.team || [];
     pendingVoters = players.map(p => p.name);
     presenceTable.setGameStatus({ mode: 'vote', leaderName: currentLeaderName });
-    document.getElementById('vote-team-names').textContent = proposedTeam.join(', ');
+    document.getElementById('vote-team-names').dataset.i18nSkip = '';
+            document.getElementById('vote-team-names').textContent = proposedTeam.join(', ');
     document.getElementById('vote-leader-label').textContent = `${currentLeaderName} proposes:`;
     renderVoteStatus([], pendingVoters);
     transition('screen-vote');
@@ -1579,6 +1604,7 @@ socket.on('mission_start', data => {
         card.dataset.name = name;
         card.dataset.playerId = teamIds[index] || '';
         card.textContent = name;
+        card.dataset.i18nSkip = "";
         display.appendChild(card);
     });
     document.getElementById('mission-played').textContent = 0;
@@ -1668,6 +1694,7 @@ socket.on('mission_complete', () => {
 });
 
 socket.on('assassin_phase_start', data => {
+    cancelPendingHostMissionOutcome();
     document.getElementById('assassin-choosing-text').textContent =
         `${data.assassin_name} deliberates...`;
     hideGameHeader();
@@ -1683,6 +1710,7 @@ socket.on('assassination_result', data => {
 });
 
 socket.on('game_over', data => {
+    cancelPendingHostMissionOutcome();
     renderGameOver(data, { announce: false });
     transition('screen-game-over');
     window.setTimeout(() => showGameOutcomeAnnouncement(data), 320);
@@ -1709,6 +1737,7 @@ socket.on('narrator_message', data => {
 });
 
 socket.on('return_to_lobby', data => {
+    cancelPendingHostMissionOutcome();
     setHostMusic('off');
     clearInterval(gameClockInterval); gameClockInterval = null; gameStartedAt = null;
     resetGameOutcomeAnnouncement();
@@ -1732,6 +1761,9 @@ socket.on('return_to_lobby', data => {
 });
 
 socket.on('game_ended', () => {
+    // A room closed while paused must not leave its "game saved" notices behind.
+    hideSuspendedDisplayRecovery();
+    hideConnectionStatus();
     setHostMusic('off');
     clearInterval(gameClockInterval);
     resetGameOutcomeAnnouncement();

@@ -9,12 +9,17 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Avalon</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/css/common.css?v=20260901-1">
-<link rel="stylesheet" href="/static/css/player.css?v=20260902-narrator-header-1">
+<link rel="stylesheet" href="/static/css/common.css?v=20261107-webp-1">
+<link rel="stylesheet" href="/static/css/player.css?v=20261107-webp-1">
 <link rel="stylesheet" href="/static/css/entry.css?v=20260830-entry-webp-1">
+<link rel="stylesheet" href="/static/css/i18n.css?v=20261024-1">
+<script src="/static/js/zh-CN.js?v=20261024-1"></script>
+<script src="/static/js/i18n.js?v=20261024-1"></script>
+<link rel="stylesheet" href="/static/css/polish.css?v=20261107-polish-2">
 </head>
 <body data-force-new="{{ 'true' if force_new else 'false' }}">
 
+<label class="entry-language" for="entry-language"><span>Language</span><select id="entry-language" data-language-select aria-label="Language for this device" data-i18n-skip><option value="en" lang="en">English</option><option value="zh-CN" lang="zh-CN">中文</option></select></label>
 <div id="connection-status" class="connection-status hidden" role="status" aria-live="polite"></div>
 <div id="page-transition"></div>
 <div id="flash-overlay"></div>
@@ -51,7 +56,7 @@
         <div id="chat-history-list" class="chat-history-list"></div>
     </div>
     <div class="chat-input-row">
-        <button class="chat-history-btn" id="btn-history-toggle" title="Show chat history">📜</button>
+        <button class="chat-history-btn" id="btn-history-toggle" title="Show chat history" aria-label="Show chat history"><svg class="av-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 4h10a2 2 0 0 1 0 4h-2"/><path d="M8 4a2 2 0 0 0-2 2v11a3 3 0 0 0 3 3h8a2 2 0 0 0 2-2v-1H10v1a2 2 0 0 1-4 0"/><path d="M10 9h4M10 12.5h4"/></svg></button>
         <span id="settings-chat-slot"></span>
         <input type="text" id="chat-input" placeholder="Quick quip..." maxlength="500" autocomplete="off" autocorrect="off">
         <button class="chat-send-btn" id="btn-chat-send">Send</button>
@@ -64,6 +69,7 @@
     <div class="screen entry-screen active" id="screen-join">
         <header class="entry-brand">
             <img class="entry-title-art" src="/static/assets/entry/avalon-title.webp?v=20260830-entry-webp-1" alt="Avalon — The Resistance Awaits" decoding="async" fetchpriority="high">
+        <div class="entry-brand-chinese" aria-hidden="true"><strong>阿瓦隆</strong><span>誓约与暗影，皆在圆桌之间</span></div>
         </header>
         <div id="resume-card" class="dashboard-resume hidden">
             <span>Continue your adventure</span>
@@ -133,7 +139,7 @@
     <!-- ============ LOBBY SCREEN ============ -->
     <div class="screen" id="screen-lobby">
         <header class="phone-lobby-header">
-            <div><span>Room</span><strong id="lobby-code-display">----</strong></div>
+            <div><span>Room</span><strong data-i18n-skip id="lobby-code-display">----</strong></div>
         </header>
         <div id="spectator-banner" class="spectator-banner hidden">◈ Spectator · watching only</div>
         <section id="phone-lobby-settings" class="hidden phone-lobby-settings host-setup-card">
@@ -159,7 +165,7 @@
                     <strong>Pair a shared display</strong>
                     <span>On the TV, choose Pair a Shared Display, then enter both codes shown here.</span>
                     <button type="button" class="btn" id="btn-request-display-pairing">Generate Code</button>
-                    <div id="display-pairing-result" class="hidden" aria-live="polite"></div>
+                    <div data-i18n-skip id="display-pairing-result" class="hidden" aria-live="polite"></div>
                 </div>
                 <div class="phone-turn-order">
                     <div class="lobby-section-heading"><strong>Leader rotation</strong><small>Move players into turn order</small></div>
@@ -203,7 +209,7 @@
 
     <!-- ============ GAME OPENING CINEMATIC ============ -->
     <div class="screen game-starting-screen" id="screen-game-starting" aria-live="polite">
-        <img class="game-starting-art" data-src="/static/assets/opening/avalon-game-start-mobile.png?v=20260828" alt="The fellowship gathers around the Round Table beneath the title Avalon">
+        <img class="game-starting-art" data-src="/static/assets/opening/avalon-game-start-mobile.webp?v=20260828" alt="The fellowship gathers around the Round Table beneath the title Avalon">
         <div class="game-starting-scrim" aria-hidden="true"></div>
         <div class="game-starting-copy">
             <span>Your allegiance is about to be revealed.</span>
@@ -276,7 +282,7 @@
 
     <!-- ============ VOTE REVEAL — all phones ============ -->
     <div class="screen" id="screen-vote-reveal-player">
-        <img class="vote-reveal-background" data-src="/static/assets/votes/cards-revealed-mobile.png?v=20260829-cards2" alt="The fellowship journeys toward Avalon as the court's votes are revealed">
+        <img class="vote-reveal-background" data-src="/static/assets/votes/cards-revealed-mobile.webp?v=20260829-cards2" alt="The fellowship journeys toward Avalon as the court's votes are revealed">
         <div class="vote-reveal-scrim" aria-hidden="true"></div>
         <div class="vote-reveal-stage" role="status" aria-live="polite">
             <div class="player-reveal-cards" id="player-vote-reveal-cards"></div>
@@ -310,7 +316,7 @@
     </div>
 
     <!-- ============ MISSION CARDS — suspense before the outcome ============ -->
-    <div class="screen" id="screen-mission-cards-player" data-deferred-background="/static/assets/votes/cards-revealed-mobile.png?v=20260829-cards2">
+    <div class="screen" id="screen-mission-cards-player" data-deferred-background="/static/assets/votes/cards-revealed-mobile.webp?v=20260829-cards2">
         <div class="quest-card-reveal-stage" id="player-quest-card-stage" role="status" aria-live="polite">
             <p class="cinematic-reveal-eyebrow">The fellowship returns</p>
             <h1>The cards are unsealed</h1>
@@ -347,11 +353,11 @@
         </div>
         <div class="vote-buttons" id="vote-buttons">
             <button class="btn btn-approve" id="btn-approve">
-                <span class="vote-icon">🛡</span>
+                <span class="vote-icon"><svg class="av-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l7 3v5c0 4.6-3 8.3-7 10-4-1.7-7-5.4-7-10V6z"/><path d="M8.6 12.2l2.3 2.3 4.5-4.7"/></svg></span>
                 Approve
             </button>
             <button class="btn btn-reject" id="btn-reject">
-                <span class="vote-icon">✗</span>
+                <span class="vote-icon"><svg class="av-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></span>
                 Reject
             </button>
         </div>
@@ -363,8 +369,8 @@
     <!-- ============ MISSION SCREEN ============ -->
     <div class="screen" id="screen-mission">
         <div class="cinematic-reveal mission-begins-product" id="mission-begins-product" role="status" aria-live="polite">
-            <img class="cinematic-reveal-backdrop" data-src="/static/assets/quests/quest-begun-mobile.png?v=20260828" alt="" aria-hidden="true">
-            <img class="cinematic-reveal-art" data-src="/static/assets/quests/quest-begun-mobile.png?v=20260828" alt="A fellowship setting out toward Avalon">
+            <img class="cinematic-reveal-backdrop" data-src="/static/assets/quests/quest-begun-mobile.webp?v=20260828" alt="" aria-hidden="true">
+            <img class="cinematic-reveal-art" data-src="/static/assets/quests/quest-begun-mobile.webp?v=20260828" alt="A fellowship setting out toward Avalon">
             <div class="cinematic-reveal-scrim"></div>
             <div class="cinematic-reveal-copy mission-begins-copy">
                 <p class="cinematic-reveal-eyebrow">The fate of Avalon rests with you</p>
@@ -401,7 +407,7 @@
         </div>
         <div class="assassin-target-list" id="assassin-target-list"></div>
         <button class="btn btn-danger assassin-strike-button" id="btn-assassinate" disabled>
-            <span class="assassin-strike-icon" aria-hidden="true">🗡</span>
+            <span class="assassin-strike-icon" aria-hidden="true"><svg class="av-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2.5l1.8 2.7V15h-3.6V5.2z"/><path d="M7.5 15h9"/><path d="M12 15v4.5"/><circle cx="12" cy="20.6" r="1.1"/></svg></span>
             <span><small>Seal their fate</small><strong>Assassinate</strong></span>
         </button>
         <p class="waiting-text hidden" id="assassin-waiting">The Assassin is deliberating...</p>
@@ -447,7 +453,7 @@
             </div>
             <footer class="finale-footer">
                 <span class="finale-footer-crown" aria-hidden="true">♛</span>
-                <strong>Room <span id="finale-room-code-player">----</span></strong>
+                <strong>Room <span data-i18n-skip id="finale-room-code-player">----</span></strong>
                 <i aria-hidden="true">•</i>
                 <span>Thanks for playing Avalon</span>
             </footer>
@@ -475,6 +481,7 @@
     <div class="role-overlay-box" style="max-width:320px">
         <div class="role-overlay-name" style="font-size:1.2rem;margin-bottom:1.25rem">Settings</div>
         <div style="width:100%;text-align:left;display:flex;flex-direction:column;gap:0.75rem">
+            <label class="language-setting" for="phone-language"><span><strong>Language</strong><small>This phone only</small></span><select id="phone-language" data-language-select aria-label="Language for this device" data-i18n-skip><option value="en" lang="en">English</option><option value="zh-CN" lang="zh-CN">中文</option></select></label>
             <label class="narrator-mute-setting">
                 <span><strong>Court Narrator</strong><small>Mute quips on this device</small></span>
                 <input type="checkbox" id="mute-narrator">
@@ -483,11 +490,11 @@
                 <section class="settings-session-card" aria-label="Room and shared display pairing">
                     <div class="settings-code-row">
                         <span>Room code</span>
-                        <strong id="settings-room-code">----</strong>
+                        <strong data-i18n-skip id="settings-room-code">----</strong>
                     </div>
                     <div class="settings-code-row">
                         <span>Display pairing code</span>
-                        <strong id="settings-display-code">------</strong>
+                        <strong data-i18n-skip id="settings-display-code">------</strong>
                     </div>
                     <small id="settings-display-code-status">A fresh code will be created when needed.</small>
                     <button type="button" class="settings-pair-refresh" id="btn-settings-refresh-pairing">Refresh Display Code</button>
@@ -658,9 +665,9 @@
 </style>
 
 <script src="/static/js/socket.io.min.js"></script>
-<script src="/static/js/presence.js?v=20260828-round-table-ui-1"></script>
-<script src="/static/js/player.js?v=20260902-narrator-header-1"></script>
-<script src="/static/js/assassination-reveal.js?v=20260827-production-polish-v3"></script>
+<script src="/static/js/presence.js?v=20261107-polish-1"></script>
+<script src="/static/js/player.js?v=20261107-polish-1"></script>
+<script src="/static/js/assassination-reveal.js?v=20261107-webp-1"></script>
 <script src="/static/js/final-role-gallery.js?v=20260829-finale-redesign-1"></script>
 </body>
 </html>

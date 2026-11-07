@@ -207,6 +207,14 @@ let joinedThisPage = false;
 let missionRevealSequence = 0;
 let missionOutcomeTimer = null;
 let missionOutcomeReadyAt = 0;
+
+// A later phase can arrive before the quest-outcome animation timer fires (for
+// example when players continue quickly after the final quest). Cancel it so a
+// stale timer cannot pull this screen back to the finished quest's result.
+function cancelPendingMissionOutcome() {
+    clearTimeout(missionOutcomeTimer);
+    missionOutcomeTimer = null;
+}
 let gameOutcomeTimer = null;
 let lastGameOutcomeAnnouncementKey = null;
 let voteRevealSequence = 0;
@@ -275,6 +283,7 @@ function renderSpectatorRoles(players = []) {
         row.className = `spectator-role-row ${player.team || ''}`;
         const name = document.createElement('strong');
         name.textContent = player.name;
+        name.dataset.i18nSkip = "";
         const role = document.createElement('span');
         role.textContent = player.role;
         row.append(name, role);
@@ -401,6 +410,16 @@ document.addEventListener('visibilitychange', () => {
 // ---------------------------------------------------------------------------
 // Screen management
 // ---------------------------------------------------------------------------
+// Short vibrations on Android phones for decisive taps and "your turn" moments.
+const HAPTIC_PATTERNS = { tap: 12, commit: [18, 40, 18], turn: [30, 70, 30] };
+function haptic(kind) {
+    try { if (navigator.vibrate && document.visibilityState === 'visible') navigator.vibrate(HAPTIC_PATTERNS[kind] || 12); } catch (_) { /* optional */ }
+}
+document.addEventListener('click', event => {
+    const target = event.target.closest?.('#btn-approve, #btn-reject, #btn-success, #btn-fail, #btn-lock-team, #btn-assassinate');
+    if (target && !target.disabled) haptic('commit');
+}, true);
+
 function showScreen(id) {
     const previousScreenId = document.querySelector('.screen.active')?.id || null;
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -423,9 +442,10 @@ function showScreen(id) {
     else presenceTable.hide();
     const settingsButton = document.getElementById('btn-settings');
     if (settingsButton) {
-        settingsButton.classList.toggle('hidden', !isHost || id === 'screen-join' || id === 'screen-lobby');
+        settingsButton.classList.toggle('hidden', !gameCode || id === 'screen-join');
     }
     if (target && previousScreenId !== id) {
+        if (id === 'screen-proposal') haptic('turn');
         track('screen_viewed', {
             screen_id: id,
             previous_screen_id: previousScreenId || 'none',
@@ -453,6 +473,7 @@ function createIdentityAvatar(name, className = 'identity-avatar') {
     const label = document.createElement('span');
     label.className = 'identity-avatar-name';
     label.textContent = name;
+    label.dataset.i18nSkip = "";
     identity.append(portrait, label);
     return identity;
 }
@@ -665,7 +686,10 @@ function createChatName(name, senderIsSpectator, actorType = 'player') {
         badge.textContent = 'narrator';
         element.append(' ', badge);
     } else {
-        element.textContent = name;
+        const playerName = document.createElement('span');
+        playerName.dataset.i18nSkip = '';
+        playerName.textContent = name;
+        element.appendChild(playerName);
     }
     if (senderIsSpectator && actorType !== 'narrator') {
         const badge = document.createElement('em');
@@ -693,7 +717,10 @@ function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue 
         timeElement.className = 'chat-time';
         timeElement.textContent = timestamp;
         entry.appendChild(nameElement);
-        appendLinkifiedText(entry, message);
+        const messageElement = document.createElement('span');
+        if (actorType !== 'narrator') messageElement.dataset.i18nSkip = '';
+        appendLinkifiedText(messageElement, message);
+        entry.appendChild(messageElement);
         entry.appendChild(timeElement);
         histList.appendChild(entry);
         while (histList.children.length > MAX_CHAT_HISTORY) {
@@ -723,7 +750,10 @@ function addChatBubble(name, message, isSelf, colorIndex = null, timestampValue 
     const nameElement = createChatName(name, senderIsSpectator, actorType);
     nameElement.style.color = playerColor;
     bubble.appendChild(nameElement);
-    appendLinkifiedText(bubble, message);
+    const messageElement = document.createElement('span');
+    if (actorType !== 'narrator') messageElement.dataset.i18nSkip = '';
+    appendLinkifiedText(messageElement, message);
+    bubble.appendChild(messageElement);
     container.appendChild(bubble);
     chatBubbleEls.push(bubble);
 
@@ -808,27 +838,27 @@ const ROLE_FLAVOR = {
 };
 
 const ROLE_ART = {
-    'Merlin': '/static/assets/roles/merlin.png?v=20260824',
-    'Percival': '/static/assets/roles/percival.png?v=20260824',
-    'Assassin': '/static/assets/roles/assassin.png?v=20260824',
-    'Morgana': '/static/assets/roles/morgana.png?v=20260824',
-    'Mordred': '/static/assets/roles/mordred.png?v=20260824',
-    'Oberon': '/static/assets/roles/oberon.png?v=20260824',
+    'Merlin': '/static/assets/roles/merlin.webp?v=20260824',
+    'Percival': '/static/assets/roles/percival.webp?v=20260824',
+    'Assassin': '/static/assets/roles/assassin.webp?v=20260824',
+    'Morgana': '/static/assets/roles/morgana.webp?v=20260824',
+    'Mordred': '/static/assets/roles/mordred.webp?v=20260824',
+    'Oberon': '/static/assets/roles/oberon.webp?v=20260824',
 };
 
 const LOYAL_SERVANT_ART = [
-    '/static/assets/roles/loyal-servant.png?v=20260824',
-    '/static/assets/roles/loyal-servant-female.png?v=20260824',
+    '/static/assets/roles/loyal-servant.webp?v=20260824',
+    '/static/assets/roles/loyal-servant-female.webp?v=20260824',
 ];
 
 const QUEST_OUTCOME_ART = {
-    success: '/static/assets/quests/quest-successful.png?v=20260825-cinematic',
-    fail: '/static/assets/quests/quest-failed.png?v=20260825-cinematic',
+    success: '/static/assets/quests/quest-successful.webp?v=20260825-cinematic',
+    fail: '/static/assets/quests/quest-failed.webp?v=20260825-cinematic',
 };
 
 const GAME_OUTCOME_ART = {
-    good: '/static/assets/results/good-wins.png?v=20260825-cinematic',
-    evil: '/static/assets/results/evil-wins.png?v=20260825-cinematic',
+    good: '/static/assets/results/good-wins.webp?v=20260825-cinematic',
+    evil: '/static/assets/results/evil-wins.webp?v=20260825-cinematic',
 };
 
 function chooseRoleArt(role) {
@@ -901,6 +931,7 @@ function renderPhoneReorderList() {
         const item = document.createElement('li');
         const label = document.createElement('span');
         label.textContent = `${index + 1}. ${name}`;
+        label.dataset.i18nSkip = "";
         const actions = document.createElement('span');
         const up = document.createElement('button');
         const down = document.createElement('button');
@@ -1169,6 +1200,7 @@ function showDiscussion(data) {
     const missionInfo = document.getElementById('discussion-mission-info');
     missionInfo.textContent = `Mission ${data.mission_num || '?'} — ${data.mission_size || '?'} members needed`;
     const leaderName = data.leader_name || window._currentLeaderName || 'Unknown';
+    document.getElementById('discussion-leader-name').dataset.i18nSkip = '';
     document.getElementById('discussion-leader-name').textContent = leaderName;
     const leaderBanner = document.getElementById('leader-banner');
     const amLeader = myPlayerId === data.leader_id || myPlayerId === currentLeaderId;
@@ -1209,6 +1241,7 @@ function showVoteReveal(data) {
         const label = document.createElement('span');
         label.className = 'cinematic-vote-name';
         label.textContent = name;
+        label.dataset.i18nSkip = "";
         const stamp = document.createElement('span');
         stamp.className = 'cinematic-vote-stamp';
         stamp.innerHTML = `<b>${vote === 'approve' ? '✓' : '×'}</b><strong>${vote === 'approve' ? 'APPROVE' : 'REJECT'}</strong>`;
@@ -1355,6 +1388,7 @@ function showProposalScreen(data) {
             const label = document.createElement('span');
             label.className = 'party-avatar-name';
             label.textContent = name;
+            label.dataset.i18nSkip = "";
             const check = document.createElement('span');
             check.className = 'party-avatar-check';
             check.textContent = '✓';
@@ -1390,6 +1424,7 @@ function showProposalScreen(data) {
 // ---------------------------------------------------------------------------
 function showVoteScreen(data) {
     const team = data.team || [];
+    document.getElementById('vote-leader-name-player').dataset.i18nSkip = '';
     document.getElementById('vote-leader-name-player').textContent =
         data.leader_name || window._currentLeaderName || 'Leader';
     const teamList = document.getElementById('vote-team-names-player');
@@ -1723,6 +1758,7 @@ function renderVictoryCard(card, summary) {
         }
         const name = document.createElement('strong');
         name.textContent = player.name;
+        name.dataset.i18nSkip = "";
         const role = document.createElement('small');
         role.textContent = player.role;
         person.append(portrait, name, role);
@@ -1787,7 +1823,7 @@ function applyStateSnapshot(snap) {
     document.getElementById('lobby-host-controls').classList.toggle('hidden', !isHost);
     document.getElementById('phone-lobby-settings').classList.toggle('hidden', !isHost);
     document.getElementById('settings-game-actions').classList.toggle('hidden', !isHost);
-    document.getElementById('btn-settings').classList.toggle('hidden', !isHost || snap.phase === 'LOBBY');
+    document.getElementById('btn-settings').classList.toggle('hidden', !gameCode);
 
     // Restore mission board state
     if (snap.mission_sizes && snap.mission_sizes.length) {
@@ -1983,6 +2019,7 @@ socket.on('spectator_roles_revealed', data => {
 });
 
 socket.on('state_snapshot', data => {
+    cancelPendingMissionOutcome();
     joinedThisPage = true;
     hideConnectionStatus();
     applyStateSnapshot(data);
@@ -2115,7 +2152,7 @@ socket.on('game_starting', data => {
     pendingNightPhaseAck = false;
     flash('white', 400);
     showChat();
-    document.getElementById('btn-settings').classList.toggle('hidden', !isHost);
+    document.getElementById('btn-settings').classList.toggle('hidden', !gameCode);
     document.getElementById('phone-lobby-settings').classList.add('hidden');
     document.getElementById('btn-back-to-lobby').classList.remove('hidden');
 });
@@ -2145,6 +2182,7 @@ socket.on('night_phase_complete', () => {
 });
 
 socket.on('round_start', data => {
+    cancelPendingMissionOutcome();
     window._playerOrder = data.player_order || window._playerOrder || [];
     window._playerNameToId = data.player_name_to_id || window._playerNameToId || {};
     window._currentLeaderName = data.leader_name;
@@ -2176,6 +2214,7 @@ socket.on('discussion_start', data => {
         : 'Unlimited';
     const missionInfo = document.getElementById('discussion-mission-info');
     missionInfo.textContent = `Mission ${data.mission_num || ''} — ${missionRequiredSize} member${missionRequiredSize !== 1 ? 's' : ''} needed`;
+    document.getElementById('discussion-leader-name').dataset.i18nSkip = '';
     document.getElementById('discussion-leader-name').textContent = data.leader_name || window._currentLeaderName || 'Unknown';
     const leaderBanner = document.getElementById('leader-banner');
     leaderBanner.classList.toggle('hidden', myPlayerId !== currentLeaderId);
@@ -2355,6 +2394,7 @@ socket.on('mission_tracker_update', data => {
 });
 
 socket.on('assassin_phase_start', data => {
+    cancelPendingMissionOutcome();
     showAssassinScreen(data);
     if (data.assassin_id === myPlayerId) requestAttention('Choose Merlin');
 });
@@ -2362,6 +2402,7 @@ socket.on('assassin_phase_start', data => {
 socket.on('assassination_result', () => {});
 
 socket.on('game_over', data => {
+    cancelPendingMissionOutcome();
     showGameOver(data);
     track('victory_screen_viewed', { context: data.win_reason || 'unknown' });
     if (!isSpectator) track('rematch_prompt_viewed', { context: 'player' });
@@ -2377,6 +2418,7 @@ socket.on('rematch_status', data => {
 });
 
 socket.on('return_to_lobby', data => {
+    cancelPendingMissionOutcome();
     cancelGameStartingReveal();
     stopGameClock();
     resetGameOutcomeAnnouncement();
@@ -2790,9 +2832,16 @@ function populateRoleOverlay() {
     roleDesc.textContent = ROLE_DESCRIPTIONS[myRole] || '';
     const info = nightInfo || window._nightInfoPending;
     if (info && info.sees_label) {
-        knowledge.textContent = info.sees && info.sees.length
-            ? `${info.sees_label}: ${info.sees.join(', ')}`
-            : info.sees_label;
+        knowledge.replaceChildren();
+        const label = document.createElement('span');
+        label.textContent = info.sees_label;
+        knowledge.appendChild(label);
+        if (info.sees && info.sees.length) {
+            const names = document.createElement('span');
+            names.dataset.i18nSkip = '';
+            names.textContent = ': ' + info.sees.join(', ');
+            knowledge.appendChild(names);
+        }
     } else {
         knowledge.textContent = '';
     }
@@ -2820,8 +2869,8 @@ document.getElementById('btn-close-overlay').addEventListener('click', () => {
 
 // Settings button
 document.getElementById('btn-settings').addEventListener('click', () => {
-    document.getElementById('phone-lobby-settings').classList.add('hidden');
-    document.getElementById('btn-back-to-lobby').classList.remove('hidden');
+    document.getElementById('btn-back-to-lobby').classList.toggle('hidden', !isHost || document.getElementById('screen-lobby').classList.contains('active'));
+    document.getElementById('settings-game-actions').classList.toggle('hidden', !isHost);
     renderSettingsSessionCodes();
     requestSettingsDisplayCode();
     document.getElementById('settings-overlay').classList.remove('hidden');

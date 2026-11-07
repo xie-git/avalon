@@ -1,5 +1,6 @@
 import base64
 import binascii
+import gzip
 import hmac
 import hashlib
 import io
@@ -194,6 +195,56 @@ def apply_response_headers(response):
         response.headers["Strict-Transport-Security"] = (
             "max-age=31536000; includeSubDomains"
         )
+    return compress_static_response(response)
+
+
+# Funnel and Gunicorn do not compress responses. Script and stylesheet bundles
+# are several hundred kilobytes, so gzip them once per file version and reuse
+# the bytes. Media is already compressed and is never touched here.
+COMPRESSIBLE_STATIC_TYPES = frozenset({
+    "text/css", "text/javascript", "application/javascript",
+    "application/json", "image/svg+xml", "text/plain",
+})
+GZIP_MIN_BYTES = 1024
+GZIP_CACHE_MAX_ENTRIES = 256
+gzip_cache: dict[tuple[str, str], bytes] = {}
+gzip_cache_lock = threading.Lock()
+
+
+def compress_static_response(response):
+    if not request.path.startswith("/static/") or response.mimetype not in COMPRESSIBLE_STATIC_TYPES:
+        return response
+    response.vary.add("Accept-Encoding")
+    if (
+        response.status_code != 200
+        or request.method != "GET"
+        or "Content-Encoding" in response.headers
+        or request.headers.get("Range")
+        or "gzip" not in request.headers.get("Accept-Encoding", "").lower()
+    ):
+        return response
+    etag, _weak = response.get_etag()
+    key = (request.path, etag or "")
+    with gzip_cache_lock:
+        compressed = gzip_cache.get(key) if etag else None
+    if compressed is None:
+        response.direct_passthrough = False
+        body = response.get_data()
+        if len(body) < GZIP_MIN_BYTES:
+            return response
+        compressed = gzip.compress(body, compresslevel=6, mtime=0)
+        if etag:
+            with gzip_cache_lock:
+                if len(gzip_cache) >= GZIP_CACHE_MAX_ENTRIES:
+                    gzip_cache.clear()
+                gzip_cache[key] = compressed
+    else:
+        response.direct_passthrough = False
+    response.set_data(compressed)
+    response.headers["Content-Encoding"] = "gzip"
+    response.headers.pop("Accept-Ranges", None)
+    if etag:
+        response.set_etag(f"{etag}-gzip")
     return response
 
 
@@ -1641,12 +1692,10 @@ def validate_host(sid: str, *, require_phase=None, allow_suspended: bool = False
         info.get("player_id")
         and info.get("player_id") == game.host_player_id
     )
-    # Paired shared displays are deliberately read-only. The display-host
-    # capability remains accepted only for the legacy test-only room creator.
-    is_legacy_test_host = bool(
-        app.config.get("TESTING") and is_display and game.host_player_id is None
-    )
-    if not is_creator and not is_legacy_test_host:
+    # A display that created its own room (a tabletop screen; no host phone)
+    # hosts that room. Displays paired into a phone-hosted room stay read-only.
+    is_table_host = bool(is_display and game.host_player_id is None)
+    if not is_creator and not is_table_host:
         raise ValueError("Host authorization required")
     if game.suspended and not allow_suspended:
         raise ValueError("The room is suspended until a player resumes it")
@@ -3079,6 +3128,9 @@ def on_register_host_screen(data):
             disconnect_replaced_socket(game.host_sid)
         game.host_sid = sid
         join_room(game_code)
+        if game.host_player_id is None and game.suspended:
+            # The tabletop host itself returned; it can run the room again.
+            resume_game(game)
         sid_to_info[sid] = {
             "game_code": game_code,
             "is_host_screen": True,
@@ -3190,8 +3242,6 @@ def on_register_host_screen(data):
 @rate_limited("create_game")
 def on_create_game(data=None):
     try:
-        if not app.config.get("TESTING"):
-            raise ValueError("Create rooms from a player phone, then pair this display")
         analytics_id = valid_analytics_id(data.get("analytics_id")) if isinstance(data, dict) else None
         cleanup_stale_games()
         with state_lock:
@@ -4605,7 +4655,9 @@ def on_return_to_lobby():
 @rate_limited()
 def on_end_game():
     try:
-        game = validate_host(request.sid)
+        # Ending is always available to the host, even while the room waits for
+        # players to return, so an abandoned room never traps the host screen.
+        game = validate_host(request.sid, allow_suspended=True)
         game_code = game.code
         discard_game(game_code, notify=True)
     except ValueError as error:

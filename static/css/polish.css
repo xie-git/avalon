@@ -1,0 +1,244 @@
+/* ============================================================
+   AVALON — Refinement layer (November 2026)
+   Loaded last on the phone and display pages. It refines type, touch
+   feedback and a few layouts without changing game behaviour.
+   Fonts: Cinzel and Crimson Pro (SIL OFL 1.1, see /static/fonts).
+   ============================================================ */
+
+@font-face {
+    font-family: "Cinzel";
+    src: url('/static/fonts/cinzel.woff2') format('woff2');
+    font-weight: 400 900;
+    font-style: normal;
+    font-display: swap;
+}
+/* Crimson Pro has a small x-height; size-adjust keeps the existing layouts' rhythm. */
+@font-face {
+    font-family: "Crimson Pro";
+    src: url('/static/fonts/crimson-pro.woff2') format('woff2');
+    font-weight: 200 900;
+    font-style: normal;
+    font-display: swap;
+    size-adjust: 112%;
+}
+@font-face {
+    font-family: "Crimson Pro";
+    src: url('/static/fonts/crimson-pro-italic.woff2') format('woff2');
+    font-weight: 200 900;
+    font-style: italic;
+    font-display: swap;
+    size-adjust: 112%;
+}
+
+:root {
+    --font-title:  "Cinzel", Georgia, serif;
+    --font-heading:"Cinzel", Georgia, serif;
+    --font-body:   "Crimson Pro", Georgia, serif;
+    --font-ui:     "Cinzel", Georgia, serif;
+    --ease-out: cubic-bezier(.2, .8, .2, 1);
+    --focus-ring: 0 0 0 2px #0a0a0f, 0 0 0 4px rgba(232, 212, 139, 0.9);
+}
+
+html { text-rendering: optimizeLegibility; font-kerning: normal; }
+body { font-feature-settings: "kern", "liga"; }
+
+/* ---- Touch: no double-tap zoom delay, no grey flash, tactile press ---- */
+button, [role="button"], a, label, select, summary, input[type="checkbox"], input[type="radio"], input[type="range"] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+button:not(:disabled), [role="button"], summary {
+    transition: scale 0.09s var(--ease-out), filter 0.15s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+/* `scale` composes with any centring transform the game already uses. */
+button:not(:disabled):active, [role="button"]:active, summary:active { scale: 0.965; filter: brightness(1.14); }
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: none; box-shadow: var(--focus-ring) !important; }
+input:focus-visible, select:focus-visible { box-shadow: var(--focus-ring) !important; }
+
+/* Timers and counters keep a steady width while ticking. */
+.timer, .timer-small, [id$="-timer"], [id$="-time"], #pb-game-time, #host-game-time,
+.proposal-timer-player strong, .discussion-clock-player, #proposal-selected-count {
+    font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* Codes people read aloud or type: plain, bold, evenly spaced capitals. */
+#lobby-code-display, #settings-room-code, #room-code-display, #finale-room-code-host, #finale-room-code-player,
+#host-room-code-badge strong, .phone-lobby-header strong {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* Inline icons replacing platform emoji (consistent on every phone). */
+.av-icon { display: inline-block; width: 1em; height: 1em; vertical-align: -0.14em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.vote-icon .av-icon { width: 1.15em; height: 1.15em; }
+.btn-approve .vote-icon { color: #9fd3ff; filter: drop-shadow(0 0 6px rgba(46,134,222,0.55)); }
+.btn-reject .vote-icon { color: #ff9a90; filter: drop-shadow(0 0 6px rgba(192,57,43,0.55)); }
+.chat-history-btn .av-icon { width: 17px; height: 17px; }
+
+/* Role manifest: one chip per character, with a count, and readable text. */
+.presence-character {
+    font-size: clamp(0.56rem, 2.45vw, 0.72rem) !important;
+    padding: 0.24rem 0.34rem !important;
+    max-width: 7rem;
+}
+.presence-character-count { margin-left: 0.22em; opacity: 0.78; font-size: 0.86em; font-variant-numeric: lining-nums; }
+
+/* Sealed quest cards: art fills the same card shape as revealed cards and is
+   toned to the night palette instead of glowing bright yellow. */
+.cinematic-quest-card.sealed,
+.mission-result-card.sealed {
+    border: 1px solid rgba(201,168,76,0.55);
+    background-size: cover;
+    background-position: center;
+    filter: sepia(0.28) saturate(0.72) brightness(0.74) contrast(1.06);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.6), inset 0 0 26px rgba(0,0,0,0.55), 0 14px 34px rgba(0,0,0,0.62);
+    overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    button:not(:disabled):active, [role="button"]:active { scale: none; }
+}
+
+/* ============================================================
+   PHONE
+   ============================================================ */
+
+/* Settings lives in the chat bar during play, so the status board keeps its
+   right edge (the floating gear used to cover "My Role" and the clock). */
+.chat-input-row #settings-chat-slot .settings-float-btn {
+    position: static;
+    flex: 0 0 38px;
+    width: 38px;
+    height: 38px;
+    font-size: 0.95rem;
+}
+.chat-history-btn, .chat-send-btn { min-height: 38px; }
+.chat-history-btn { width: 38px; height: 38px; }
+
+/* Status board: slightly larger labels now that the corner is free. */
+.player-board .pb-stats { flex-basis: 6.6rem; width: 6.6rem; min-width: 6.6rem; }
+.player-board .pb-stat span { font-size: 0.5rem; }
+.player-board .pb-stat strong { font-size: 0.7rem; }
+#player-board .pb-role-peek { font-size: 0.58rem; min-height: 22px; }
+.player-board .pb-proposal-circles i,
+.player-board .pb-fail-circles i { width: 7px; height: 7px; }
+
+/* Leader's party picker: the Lock In button always stays in reach. */
+body.board-visible.chat-visible #screen-proposal.presence-active #btn-lock-team,
+#screen-proposal #btn-lock-team {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    min-height: 48px;
+    margin-top: 0.6rem;
+    box-shadow: 0 -14px 18px 4px rgba(10,9,8,0.92), inset 0 0 0 1px rgba(255,230,166,0.12);
+}
+body.board-visible.chat-visible #screen-assassin.presence-active #btn-assassinate {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+}
+/* Sticky, so it must be opaque in every state; a fade shows the list scrolling beneath. */
+#screen-proposal #btn-lock-team {
+    background: linear-gradient(160deg, #2a210f, #0f0d09 75%);
+}
+#screen-proposal #btn-lock-team:disabled {
+    opacity: 1;
+    color: rgba(232, 212, 139, 0.42);
+    border-color: rgba(201, 168, 76, 0.28);
+    filter: none;
+}
+#screen-proposal #btn-lock-team:not(:disabled) {
+    background: linear-gradient(160deg, #6a5320, #2c2210 75%);
+    color: #fff3cf;
+    border-color: rgba(232, 212, 139, 0.8);
+}
+#screen-proposal #btn-lock-team::before {
+    content: "";
+    position: absolute;
+    left: -2px;
+    right: -2px;
+    bottom: 100%;
+    height: 22px;
+    background: linear-gradient(180deg, transparent, rgba(12, 10, 8, 0.92));
+    pointer-events: none;
+}
+#screen-proposal .party-avatar-name { font-size: clamp(0.66rem, 3vw, 0.78rem) !important; }
+#screen-proposal .select-count, #screen-proposal .proposal-timer-player { font-size: 0.78rem !important; }
+
+/* Approve / reject: large, unmistakable targets. */
+#screen-vote .vote-buttons .btn { min-height: 64px; font-size: 0.9rem; letter-spacing: 0.14em; }
+
+/* Lobby fine print was 9–10px; bring it to a legible minimum. */
+#screen-lobby small, #screen-lobby .phone-bot-copy small, #screen-lobby .lobby-section-heading small,
+#screen-lobby .display-pair-card span, #screen-lobby .phone-proposal-setting small {
+    font-size: max(0.62rem, 11px);
+    line-height: 1.35;
+}
+#screen-lobby .host-setup-details > summary { font-size: max(0.66rem, 12px); padding-block: 0.5rem; cursor: pointer; }
+
+/* Vote-reveal names under each portrait. */
+.cinematic-vote-name { font-size: max(0.6rem, 10px) !important; }
+
+/* Player panels: crisper gilded edge, softer depth. */
+.presence-player-panel, .lobby-identity-card, .panel {
+    border-radius: 14px;
+}
+
+/* Everyone but the Assassin waits here: a centred, breathing omen instead of an empty box. */
+#screen-assassin #assassin-waiting:not(.hidden) {
+    display: grid;
+    justify-items: center;
+    gap: 0.9rem;
+    margin: clamp(1rem, 5dvh, 2.4rem) auto 0;
+    max-width: 18rem;
+    color: #e6cfc8;
+    font-size: 1.08rem;
+    text-align: center;
+}
+#screen-assassin #assassin-waiting:not(.hidden)::before {
+    content: "";
+    width: 64px;
+    height: 64px;
+    background: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e2574a' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2.5l1.8 2.7V15h-3.6V5.2z'/%3E%3Cpath d='M7.5 15h9'/%3E%3Cpath d='M12 15v4.5'/%3E%3Ccircle cx='12' cy='20.6' r='1.1'/%3E%3C/svg%3E");
+    filter: drop-shadow(0 0 10px rgba(225,33,23,0.55));
+}
+@media (prefers-reduced-motion: no-preference) {
+    #screen-assassin #assassin-waiting:not(.hidden)::before { animation: av-omen 2.6s ease-in-out infinite; }
+}
+@keyframes av-omen { 0%, 100% { opacity: 0.55; scale: 0.96; } 50% { opacity: 1; scale: 1.04; } }
+
+/* ============================================================
+   SHARED DISPLAY (TV / table)
+   ============================================================ */
+
+/* The Settings button sits in the top-right corner; keep the stats clear of it. */
+#game-header { padding-right: calc(8.75rem + env(safe-area-inset-right)); }
+
+/* Mid-size displays (720p TVs, laptops, the Pocket DS): keep the header
+   clusters from colliding. The quest chronicle stays one tap away on the shields. */
+@media (max-width: 1500px) {
+    #host-top-meta.host-top-meta {
+        left: auto;
+        right: calc(env(safe-area-inset-right) + 20.75rem);
+        transform: none;
+        width: auto;
+        max-width: calc(100vw - 47rem);
+        justify-content: end;
+        justify-items: end;
+    }
+    #host-top-meta .host-music-controls > span,
+    #host-top-meta .host-volume-control > span,
+    #host-top-meta .host-music-volume-output { display: none; }
+    #host-top-meta .host-music-volume { width: 76px; }
+    .host-mission-rail { display: none !important; }
+}
+@media (max-width: 1100px) {
+    #host-top-meta .host-music-controls { display: none; }
+}
+
+/* Chronicle and finale text sized for reading across a table. */
+#screen-game-over .chronicle-entry, #screen-game-over .game-over-chronicle { font-size: max(0.72rem, 12px); }
