@@ -13,12 +13,19 @@ Two families of clips exist:
   audio cannot pronounce player names, so the spoken premise is written
   name-free while the chat copy keeps its names.
 
-Clip ids are stable: ``e.<cue>.<take>``, ``n<trigger>``, ``d<delivery>`` and
-``n<trigger>f<followup>``.  Changing text only requires re-running the
+Clip ids are stable: ``e.<cue>.<take>``, ``n<trigger>``, ``d<delivery>``,
+``n<trigger>f<followup>`` and ``n<trigger>v<line>`` (standalone lines for
+triggers 95+, imported from ``narrator.EXTRA_LINES``).  Changing text only requires re-running the
 generator; changing ids also requires updating the clients.
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from narrator import EXTRA_LINES  # noqa: E402  (standalone lines, triggers 95+)
 
 # ---------------------------------------------------------------------------
 # Event cues (display-driven moments)
@@ -345,6 +352,100 @@ EVENT_CUES: dict[str, tuple[str, ...]] = {
         "Everyone wants a rematch already! Healing is overrated.",
         "A unanimous rematch! Nobody learned a thing. Wonderful.",
     ),
+    # Obscure moments the display notices (public information only) --------
+    "vote.speedrun": (
+        "Every vote in, in record time. Either total clarity, or nobody read the names.",
+        "That was the fastest vote in Camelot's history. Suspiciously decisive.",
+        "Done already? Somebody voted before the party had finished loading.",
+    ),
+    "vote.holdout": (
+        "One vote outstanding. The rest of the court has started to age.",
+        "We're waiting on a single ballot. Somebody is clearly weighing their entire life.",
+        "All but one have voted. The last one is either thinking deeply, or asleep.",
+    ),
+    "vote.leader_reject": (
+        "The leader voted against their own party. Performance art, or a cry for help?",
+        "Rejecting your own proposal. Even the author didn't like the book.",
+    ),
+    "proposal.indecisive": (
+        "The leader has rearranged this party more times than a royal seating chart.",
+        "In, out, in again. This is a proposal, not a country dance.",
+        "Our leader keeps changing their mind. Very relatable. Very suspicious.",
+    ),
+    "discussion.skipped_fast": (
+        "Discussion skipped already? A leader of few words, and fewer explanations.",
+        "No discussion at all. Bold. Democracy has been put on mute.",
+    ),
+    "streak.first_try": (
+        "A third quest approved on the very first try. This table is either brilliant, or doomed.",
+        "First-try approvals, again. Such harmony. I don't trust it one bit.",
+    ),
+    "mission1.fail": (
+        "The very first quest, failed. Evil didn't even wait for the appetisers.",
+        "Quest one fails. Somebody skipped the warm-up and went straight to treason.",
+    ),
+    "lobby.rename": (
+        "A name change! New name, same suspicious face.",
+        "Changing your name before the game even starts. Planning ahead, I see.",
+    ),
+    "lobby.ready_flip": (
+        "Ready, not ready, ready again. Do make up your mind. The dragon won't wait.",
+        "Someone keeps toggling ready. Commitment issues already? Splendid.",
+    ),
+    "tv.back": (
+        "Ah, the great screen returns. Did I miss any lies? Of course I did.",
+        "Apologies. The castle lost its looking glass for a moment. Do carry on betraying.",
+    ),
+    "room.resumed": (
+        "The castle wakes from its slumber. Pick up where you left off. The suspicion certainly did.",
+        "And we're back. Does everyone remember who they were lying to?",
+    ),
+    "game.ten": (
+        "Ten players! A full court. Statistically, four of you are lying already.",
+        "A full table of ten. More knights, more lies, more fun.",
+    ),
+    "game.six": (
+        "Six players. An intimate little conspiracy. How cosy.",
+        "Six of you. Small enough to know everyone, large enough to doubt them all.",
+    ),
+    # Meta commentary about the game, the table and the narrator itself -----
+    "meta.first_game": (
+        "First game with me? Don't worry. Nobody ever really knows what they're doing. That's the fun.",
+    ),
+    "meta.late": (
+        "It's very late. Merlin needs his sleep, and frankly, so do the rest of you.",
+        "Past midnight. This is when the truly terrible proposals come out.",
+        "The hour grows late. Decisions made now will be regretted at breakfast.",
+    ),
+    "meta.marathon": (
+        "Another game tonight! At this point, the traitors are on salary.",
+        "Game after game. I'm starting to think you enjoy being lied to.",
+        "Back again! Your loyalty to this table is touching. Your loyalty to each other, less so.",
+    ),
+    "meta.ambient": (
+        "A reminder from management: lying is not only allowed, it is encouraged.",
+        "I am a pre-recorded raven. I was right about you before you even arrived.",
+        "Fun fact: I can't see your roles. I simply assume the worst. It's usually accurate.",
+        "Eyes on your own phone, please. That glow on your face is practically a confession.",
+        "If anything breaks, it's a feature. If the feature breaks, blame Mordred.",
+        "This screen sees everything public and nothing private. Rather like a good butler.",
+        "Do remember to breathe. Merlin can't win this for you if you pass out.",
+        "Somewhere, the person who built this game is quietly regretting giving me opinions.",
+        "The rules say discuss. They don't say discuss well.",
+        "I have narrated a great many games. This is certainly one of them.",
+        "Please keep your phones charged. Treason at five percent battery is just sad.",
+        "Statistically, the quietest person here is either Merlin, or the problem.",
+        "I'd offer advice, but you'd only ignore it, then blame me. Which is fair.",
+        "If you're not sure who to trust, congratulations. You understand the game.",
+    ),
+    "end.long": (
+        "That game lasted longer than some actual crusades. Well fought, everyone.",
+        "A long and bitter campaign. My quill has quite run dry.",
+    ),
+    "end.quick": (
+        "Over already? I had barely finished clearing my throat.",
+        "That was quick. Hardly time to establish a single decent grudge.",
+    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -543,4 +644,7 @@ def all_clips() -> dict[str, str]:
     for trigger_id, takes in NARRATOR_FOLLOWUPS.items():
         for index, text in enumerate(takes, 1):
             clips[f"n{trigger_id}f{index}"] = text
+    for trigger_id, takes in EXTRA_LINES.items():
+        for index, text in enumerate(takes, 1):
+            clips[f"n{trigger_id}v{index}"] = text
     return clips

@@ -919,3 +919,33 @@ Object.assign(window.AVALON_ZH_CN, {
   "APPROVE": "赞成",
   "REJECT": "反对"
 });
+
+Object.assign(window.AVALON_ZH_CN, {
+  "Waiting on": "正在等待",
+  "offline": "离线",
+  "to enter Avalon": "进入阿瓦隆",
+  "to confirm their role": "确认身份",
+  "to enter the quest": "进入任务",
+  "to play a quest card": "打出任务牌",
+  "to vote": "投票",
+  "to continue": "继续",
+  "Host: Settings › Force continue": "房主：设置 › 强制继续",
+  "Game flow": "游戏进程",
+  "Stuck waiting on someone? Continue without them.": "卡在等人？可以不等他们继续。",
+  "Nobody is holding up the table.": "目前没有人拖慢进度。",
+  "Force continue": "强制继续",
+  "Start the night without them": "不等他们，开始夜晚",
+  "End the night without them": "不等他们，结束夜晚",
+  "Open the quest without them": "不等他们，开启任务",
+  "Continue without them": "不等他们，继续",
+  "Votes cannot be skipped": "投票不能跳过",
+  "Quest cards cannot be skipped": "任务牌不能跳过",
+  "Skips confirmations only. Votes and quest cards always wait for their player.": "只跳过确认步骤。投票和任务牌始终等待本人操作。",
+  "The host rides on": "房主决定继续",
+  "Ready. Waiting for the others…": "已准备，等待其他人…",
+  "Narrator chattiness": "旁白频率",
+  "How often the narrator chimes in": "旁白插话的频率",
+  "Quiet": "安静",
+  "Normal": "正常",
+  "Chatty": "话多"
+});

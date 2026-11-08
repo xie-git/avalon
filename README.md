@@ -18,14 +18,23 @@ browser—there are no accounts or app installations.
 - Built-in avatars or voluntary 128 × 128 selfies, cinematic role/quest/result
   artwork, a draggable round table, public vote reveals, and a post-game
   Chronicle.
-- A voiced Court Narrator on the shared display: about 330 pre-recorded,
-  name-free lines (offline Kokoro TTS, see `tools/voice/`) spoken at every
-  phase, with an animated raven herald, captions, and music ducking. The
+- A voiced Court Narrator on the shared display: about 450 pre-recorded,
+  name-free lines (Chatterbox TTS rendered offline on a GPU, best take of
+  several; see `tools/voice/`), with an animated raven herald, captions, and
+  music ducking. It chimes in intermittently (paced by a speaking budget and a
+  Quiet/Normal/Chatty setting), answers some chat (role claims, "trust me",
+  "who failed?"), notices odd moments (speed votes, indecisive leaders, a
+  phone that has dropped five or ten times) and comments on the game itself.
+  The
   display also adds sound effects, title cards, curtain transitions, particle
   effects, night candles, a live vote tally, quest-card shuffles, and an
   end-of-game Royal Honours ceremony. Phones stay quiet unless someone turns
   on **Narrator & sound on this phone** for a game without a TV. All of this
   is presentation only (`static/js/showtime*.js`) and reacts to public events.
+- Every all-hands step (opening, night, entering a quest, continuing after a
+  reveal) shows who the table is waiting on and whether they are offline; the
+  host can **Force continue** from Settings. Votes and quest cards always wait
+  for their player.
 - Durable SQLite storage for active-room recovery, chat, game history,
   first-party product events, private selfie metadata, and canonical research
   streams.

@@ -13,7 +13,7 @@ import script  # noqa: E402
 
 
 def test_every_narrator_line_has_a_name_free_voice():
-    assert set(script.NARRATOR_PREMISES) == set(narrator.TRIGGERS)
+    assert set(script.NARRATOR_PREMISES) == set(narrator.TRIGGERS) - set(narrator.EXTRA_LINES)
     assert len(script.NARRATOR_DELIVERIES) == len(narrator._DELIVERIES)
     assert {k: len(v) for k, v in script.NARRATOR_FOLLOWUPS.items()} == {
         k: len(v) for k, v in narrator.DOUBLE_ACT_FOLLOWUPS.items()
@@ -30,7 +30,10 @@ def test_narrator_messages_reference_existing_clips():
             runtime = narrator.new_runtime()
             message = narrator._line(trigger_id, runtime, rng)
             assert message["voice"] and all(clip in clips for clip in message["voice"])
-            assert message["voice"][0] == f"n{trigger_id}"
+            if trigger_id in narrator.EXTRA_LINES:
+                assert message["voice"][0].startswith(f"n{trigger_id}v")
+            else:
+                assert message["voice"][0] == f"n{trigger_id}"
 
 
 def test_manifest_covers_every_clip_with_a_file():

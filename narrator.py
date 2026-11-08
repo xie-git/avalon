@@ -61,6 +61,18 @@ TRIGGERS: dict[int, str] = {
     88: "defended_evil", 89: "votes_supported_evil", 90: "votes_opposed_evil",
     91: "many_failed_quests", 92: "many_successful_quests",
     93: "rematch_requests", 94: "instant_unanimous_rematch",
+    # Added with the Showtime voice pass: each has its own small bank of
+    # standalone lines (``EXTRA_LINES``) instead of premise + delivery.
+    95: "disconnect_five", 96: "disconnect_ten", 97: "disconnect_legend",
+    98: "claim_merlin", 99: "claim_percival", 100: "claim_evil",
+    101: "claim_good", 102: "waiting_straggler", 103: "waiting_offline",
+    104: "outing_merlin", 105: "trust_me", 106: "sworn_oath",
+    107: "laughter", 108: "confusion", 109: "apology", 110: "chat_essay",
+    111: "chat_shouting", 112: "chat_flood", 113: "who_failed",
+    114: "it_wasnt_me", 115: "early_good_game", 116: "approve_campaign",
+    117: "reject_campaign", 118: "role_question", 119: "claims_to_know",
+    120: "assassin_phase_claim", 121: "host_forced_continue",
+    122: "long_game",
 }
 
 # One authored premise per situation, expanded through twenty authored delivery
@@ -177,10 +189,143 @@ _DELIVERIES = (
 )
 
 assert len(_PREMISES) == 94
+
+# Standalone lines for triggers 95+.  They are written name-free so the
+# pre-recorded voice and the chat text are identical.
+EXTRA_LINES: dict[int, tuple[str, ...]] = {
+    95: (
+        "Five disconnections from one phone. At this point it isn't a connection, it's a commute.",
+        "That's the fifth time one of you has vanished. I've started leaving a candle in the window.",
+        "Five departures, five returns. That phone is having a more eventful quest than anyone at the table.",
+    ),
+    96: (
+        "Ten disconnections. Ten! The Wi-Fi has been knighted for services to chaos.",
+        "That phone has now left us ten times. Somewhere, a router is writing its memoirs.",
+        "Ten disconnects. Please, someone hold that phone up to the window like a sacred relic.",
+    ),
+    97: (
+        "Another disconnection. This is no longer a bad signal. It is a lifestyle.",
+        "And they're gone again. The bards have stopped counting and started composing.",
+    ),
+    98: (
+        "Ah, a self-declared Merlin. The real one is either delighted or quietly furious.",
+        "Announcing that you're Merlin. Bold. The Assassin thanks you for your service.",
+        "A Merlin claim, in writing. The Assassin has started taking notes. In calligraphy.",
+    ),
+    99: (
+        "Percival has stepped into the light. Wonderful. Morgana is absolutely thrilled.",
+        "A Percival claim! Nothing protects Merlin quite like a giant arrow pointing at your own thumbs.",
+        "Percival, revealed. Somewhere the Assassin just crossed one name off and circled another.",
+    ),
+    100: (
+        "A confession! Evil, out in the open. Either the bravest bluff in Camelot or the worst.",
+        "Someone just claimed to be Evil. I adore honesty, mostly because it's never real.",
+        "Admitting to treason in the chat. That isn't a strategy. That's a cry for help.",
+    ),
+    101: (
+        "Ah yes, I'm good. The battle cry of absolutely everyone, including the traitors.",
+        "A declaration of loyalty. Evil says that too, just with better posture.",
+        "Another loyal servant, by their own account. The court is drowning in self-reported virtue.",
+    ),
+    102: (
+        "Everyone is ready except one. No pressure. The whole kingdom is merely watching.",
+        "We are waiting on one last soul. Take your time. The candles are only melting.",
+        "One phone left. I won't say whose. The list on the screen says it for me.",
+        "The entire court waits on a single tap. History will remember this tap.",
+    ),
+    103: (
+        "Our last player's phone has wandered off entirely. Host, there's a Force Continue in Settings for exactly this.",
+        "We're waiting on someone who has left the castle. Host, you may ride on without them from the Settings menu.",
+    ),
+    104: (
+        "Did someone just name Merlin in the chat? The Assassin would like to send flowers.",
+        "Pointing at Merlin, out loud. A bold plan. Let's see which side it helps.",
+    ),
+    105: (
+        "Trust me. Two words that have started more wars than dragons.",
+        "Whenever someone says trust me, a little bell rings in the Assassin's heart.",
+        "Trust me, they say. The traditional opening line of every great betrayal.",
+    ),
+    106: (
+        "A sworn oath, in a group chat. Legally binding in no kingdom whatsoever.",
+        "Swearing on things, are we? Please swear on something you'd actually miss.",
+    ),
+    107: (
+        "Laughter. Lovely. Nothing says innocence like a nervous giggle.",
+        "Someone finds this funny. Make a note of who's enjoying themselves.",
+        "Ah, the sound of joy. Usually the last sound before a quest fails.",
+    ),
+    108: (
+        "Confusion in the court. Excellent. That's where the finest mistakes are made.",
+        "If you're confused, imagine Merlin, knowing everything and saying nothing.",
+    ),
+    109: (
+        "An apology! In Avalon! Write it down. It may never happen again.",
+        "Sorry is a lovely word. It does nothing for your quest record, but it's lovely.",
+    ),
+    110: (
+        "That message had chapters. I'll wait for the audiobook.",
+        "Someone has written a manifesto in the chat. The scribes are exhausted.",
+        "A full essay. The longer the defence, the shorter the trust, I always say.",
+    ),
+    111: (
+        "No need to shout. I can hear the guilt perfectly well at normal volume.",
+        "Capital letters! The traditional font of the innocent, and the deeply suspicious.",
+    ),
+    112: (
+        "Someone is typing faster than the plot can keep up.",
+        "That's a great many messages from one person. Either very helpful, or very nervous.",
+    ),
+    113: (
+        "Who failed? A beautiful question. Nobody in history has ever answered it honestly.",
+        "They ask who failed, as though the guilty will politely raise a hand.",
+    ),
+    114: (
+        "It wasn't me. Said every saboteur in the history of round tables.",
+        "Not you? Of course not. It never is. The quest simply failed itself.",
+    ),
+    115: (
+        "Good game already? Somebody's feeling either very confident, or very doomed.",
+        "Calling the game early. Bold. The quests have not finished with you yet.",
+    ),
+    116: (
+        "Someone is campaigning very hard for an approval. A fascinating hobby.",
+        "A rousing call to approve. I'm sure it's purely out of love for the kingdom.",
+    ),
+    117: (
+        "A rallying cry to reject. Somebody is very keen to keep certain boots at home.",
+        "Reject, reject, they cry. Either a sharp eye or a very convenient one.",
+    ),
+    118: (
+        "Asking someone their role. Adorable. You'll get an answer, and it'll be worth nothing.",
+        "What's your role, they ask. The answer is always loyal servant, and it's always suspicious.",
+    ),
+    119: (
+        "Someone claims to know everything. Either Merlin is getting careless, or someone is bluffing beautifully.",
+        "I know who it is, they say. Lovely. Kindly keep that knowledge alive until the end.",
+    ),
+    120: (
+        "Claiming Merlin during the Assassin's turn. Either a heroic bluff, or a confession with a bow on it.",
+        "Oh, now everyone's Merlin. How convenient. The Assassin is unmoved, and slightly amused.",
+    ),
+    121: (
+        "The host has invoked royal prerogative. We ride on without the stragglers.",
+        "By order of the crown, the court moves on. Do catch up.",
+        "The host waited, the kingdom waited, and now the kingdom is leaving.",
+    ),
+    122: (
+        "We are well past the forty-minute mark. The snacks are now evidence.",
+        "This game has gone on so long that the first proposal is considered ancient history.",
+        "A long campaign. The candles have been replaced twice and nobody trusts anybody.",
+    ),
+}
+
 COPY_BANKS: dict[int, tuple[str, ...]] = {
     trigger_id: tuple(f"{premise} {delivery}" for delivery in _DELIVERIES)
     for trigger_id, premise in enumerate(_PREMISES, 1)
 }
+COPY_BANKS.update(EXTRA_LINES)
+assert set(COPY_BANKS) == set(TRIGGERS)
 
 PRIORITY = {
     **{key: 70 for key in range(1, 95)},
@@ -191,10 +336,26 @@ PRIORITY = {
     23: 98, 36: 96, 37: 100, 43: 96, 54: 100, 55: 94, 56: 92, 57: 95,
     58: 96, 77: 100, 78: 94,
     **{key: 88 for key in range(87, 93)},
+    **{key: 90 for key in range(95, 123)},
+    95: 95, 96: 97, 97: 96, 98: 92, 99: 92, 100: 91, 103: 96, 120: 95,
+    121: 100,
 }
 FINAL_TRIGGER_IDS = frozenset(range(79, 95))
 DIRECT_TRIGGER_IDS = frozenset(range(65, 77))
-EXCEPTIONAL_TRIGGER_IDS = frozenset({23, 36, 37, 43, 55, 57, 58, 78})
+EXCEPTIONAL_TRIGGER_IDS = frozenset({
+    23, 36, 37, 43, 55, 57, 58, 78, 95, 96, 97, 102, 103, 121,
+})
+AMBIENT_TRIGGER_IDS = frozenset(range(98, 121)) - {102, 103}
+AMBIENT_COOLDOWN_SECONDS = 70
+AMBIENT_LIMIT_PER_MISSION = 2
+# How often an overheard message earns a reply.  Role claims are the comedy
+# gold; everything else is deliberately rare so the narrator feels like it
+# is listening, not moderating.
+AMBIENT_CHANCE = {
+    98: 0.7, 99: 0.7, 100: 0.65, 104: 0.6, 119: 0.55, 120: 0.85,
+    101: 0.3, 110: 0.4, 111: 0.35, 112: 0.45,
+}
+AMBIENT_DEFAULT_CHANCE = 0.2
 
 # Rare second beats are written as continuations, not interchangeable one-liners.
 # A double-act consumes both proactive slots for the mission at once.
@@ -323,6 +484,13 @@ def _line(trigger_id: int, runtime: dict[str, Any], rng: random.Random) -> dict[
             if f"{trigger_id}.{index}" not in used
         ] or list((f"{trigger_id}.{index}", text) for index, text in enumerate(COPY_BANKS[trigger_id], 1))
     line_id, copy = rng.choice(candidates)
+    if trigger_id in EXTRA_LINES:
+        runtime.setdefault("used_line_ids", []).append(line_id)
+        return {
+            "actor_type": "narrator", "name": NARRATOR_NAME, "message": copy,
+            "trigger_id": trigger_id, "template_id": line_id,
+            "voice": [f"n{trigger_id}v{int(line_id.split('.')[1])}"],
+        }
     # Pre-rendered voice clips (static/voice): name-free premise + delivery.
     voice = [f"n{trigger_id}", f"d{int(line_id.split('.')[1])}"]
     # Sometimes stop after the authored premise.  Varying sentence length is
@@ -452,6 +620,91 @@ def direct_reply(
         reply["message"] = reply["message"].replace("{player}", player)
     runtime["direct_counts"][key] = count + 1
     runtime["last_direct_at"] = now
+    runtime.setdefault("messages", []).append(reply)
+    return reply
+
+
+_CLAIM = r"\b(?:i'?m|i am|im)\s+(?:the\s+|a\s+|an\s+|literally\s+|actually\s+|really\s+)?"
+
+
+def classify_ambient(message: str, *, phase: str | None = None) -> int | None:
+    """Recognise overheard chat worth a (rare) unprompted reply."""
+    text = message.strip()
+    lowered = text.lower()
+    if not lowered:
+        return None
+    if re.search(_CLAIM + r"merlin\b", lowered):
+        return 120 if phase == "ASSASSIN_PHASE" else 98
+    if re.search(_CLAIM + r"perc(?:ival|y)?\b", lowered): return 99
+    if re.search(_CLAIM + r"(?:evil|assassin|morgana|mordred|oberon|minion|bad guy|traitor|spy|baddie)\b", lowered):
+        return 100
+    if re.search(r"\b(?!i\b|im\b)\w+\s+(?:is|=)\s+(?:def(?:initely)?\s+|obviously\s+|probably\s+)?merlin\b|\bmerlin is\s+\w+", lowered):
+        return 104
+    if re.search(r"\bi know who(?:'s| is)?\s*(?:merlin|evil|bad|the assassin)", lowered): return 119
+    if re.search(_CLAIM + r"(?:so\s+)?(?:good|loyal|a loyal servant|servant|innocent|on the good team|blue)\b", lowered):
+        return 101
+    if re.search(r"\bwho (?:failed|put (?:a |the )?fail|played (?:a |the )?fail|threw)\b", lowered): return 113
+    if re.search(r"\b(?:it )?(?:wasn'?t|was not) me\b|^\s*not me\b", lowered): return 114
+    if re.search(r"\btrust me\b", lowered): return 105
+    if re.search(r"\bi swear\b|\bi promise\b|\bon my (?:life|mother|mom|mum|soul|honou?r)\b", lowered): return 106
+    if re.search(r"what(?:'s| is)? your role|\bwhat role\b|\bwhat are you\?", lowered): return 118
+    if re.search(r"\b(?:just |everyone )?approve (?:it|this|pls|please|plz)\b|\beveryone approve\b", lowered): return 116
+    if re.search(r"\b(?:just |everyone )?reject (?:it|this|pls|please|plz)\b|\beveryone reject\b", lowered): return 117
+    if re.search(r"^\s*gg\b|\bgood game\b", lowered): return 115
+    letters = [char for char in text if char.isalpha()]
+    if len(letters) >= 12 and sum(char.isupper() for char in letters) / len(letters) > 0.85:
+        return 111
+    if len(text) >= 180: return 110
+    if re.search(r"\b(?:sorry|my bad|apologi[sz]e)\b", lowered): return 109
+    if re.search(r"\b(?:wtf|huh|wait what|i'?m confused|confused)\b|\?\?\?", lowered): return 108
+    if re.search(r"\b(?:lol|lmao|lmfao|rofl|ha(?:ha)+|he(?:he)+|xd)\b|\U0001F602|\U0001F923", lowered): return 107
+    return None
+
+
+def ambient_reply(
+    runtime: dict[str, Any], message: str, *, mission_num: int,
+    player: str | None = None, phase: str | None = None,
+    now: float | None = None, rng: random.Random | None = None,
+) -> dict[str, Any] | None:
+    """Occasionally answer chat that was not addressed to the narrator."""
+    now = time.time() if now is None else now
+    selector = rng or random.SystemRandom()
+    trigger_id = classify_ambient(message, phase=phase)
+    if player:
+        stamps = [
+            stamp for stamp in runtime.setdefault("chat_times", {}).get(player, [])
+            if now - float(stamp) < 45
+        ]
+        stamps.append(now)
+        runtime["chat_times"][player] = stamps[-12:]
+        if trigger_id is None and len(stamps) >= 6 and not runtime.get(f"flood_{mission_num}"):
+            runtime[f"flood_{mission_num}"] = True
+            trigger_id = 112
+    if trigger_id is None:
+        return None
+    if now - float(runtime.get("last_ambient_at", 0.0)) < AMBIENT_COOLDOWN_SECONDS:
+        return None
+    if now - float(runtime.get("last_direct_at", 0.0)) < 20:
+        return None
+    key = str(mission_num)
+    count = int(runtime.setdefault("ambient_counts", {}).get(key, 0))
+    claim = trigger_id in {98, 99, 100, 104, 119, 120}
+    if count >= AMBIENT_LIMIT_PER_MISSION and not claim:
+        return None
+    seen = runtime.setdefault("ambient_seen", {})
+    seen[str(trigger_id)] = int(seen.get(str(trigger_id), 0)) + 1
+    chance = AMBIENT_CHANCE.get(trigger_id, AMBIENT_DEFAULT_CHANCE)
+    # The same joke twice is half as funny: decay per repeat.
+    chance *= 0.5 ** max(0, int(runtime.get("ambient_spoken", {}).get(str(trigger_id), 0)))
+    if selector.random() >= chance:
+        return None
+    reply = _line(trigger_id, runtime, selector)
+    reply["mission_num"] = mission_num
+    runtime["ambient_counts"][key] = count + 1
+    runtime.setdefault("ambient_spoken", {})[str(trigger_id)] = int(
+        runtime.get("ambient_spoken", {}).get(str(trigger_id), 0)
+    ) + 1
+    runtime["last_ambient_at"] = now
     runtime.setdefault("messages", []).append(reply)
     return reply
 

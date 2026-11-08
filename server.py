@@ -64,6 +64,8 @@ from game_logic import (
 from narrator import (
     NARRATOR_NAME,
     PublicNarratorState,
+    _line as narrator_line,
+    ambient_reply,
     choose_proactive,
     direct_reply,
     drain_pending,
@@ -905,6 +907,7 @@ def schedule_narrator(
     quiet_gap_range: tuple[float, float] = (4.0, 10.0),
     names: dict[str, str] | None = None,
     target_mission: int | None = None,
+    require_waiting_key: str | None = None,
 ) -> None:
     """Persist one room-wide delivery time and start its cancellable worker."""
     if not message:
@@ -923,6 +926,7 @@ def schedule_narrator(
         "quiet_gap": secure_random.uniform(gap_low, gap_high),
         "names": dict(names or {}),
         "target_mission": target_mission or game.current_mission + 1,
+        "require_waiting_key": require_waiting_key,
     }
     game.narrator_runtime.setdefault("scheduled", []).append(entry)
     persist_game(game)
@@ -987,6 +991,101 @@ def emit_narrator(
         )
 
 
+AMBIENT_REPLY_PHASES = {
+    GamePhase.DISCUSSION, GamePhase.TEAM_PROPOSAL, GamePhase.TEAM_VOTE,
+    GamePhase.VOTE_REVEAL, GamePhase.MISSION_REVEAL, GamePhase.ASSASSIN_PHASE,
+}
+
+
+# Connection drama.  A phone locking for a moment is ordinary and never
+# narrated; repeated trouble is.  Milestones: 5th and 10th disconnect of one
+# player, then every fifth; or several players dropping at once.
+DISCONNECT_MILESTONES = {5: 95, 10: 96}
+CONNECTION_NARRATION_PHASES = {
+    GamePhase.DISCUSSION, GamePhase.TEAM_PROPOSAL, GamePhase.TEAM_VOTE,
+    GamePhase.VOTE_REVEAL, GamePhase.MISSION_REVEAL,
+}
+CONNECTION_LINES_PER_GAME = 3
+
+
+def note_disconnect_for_narrator(game: GameState, name: str) -> None:
+    runtime = game.narrator_runtime
+    now = time.time()
+    counts = runtime.setdefault("disconnect_counts", {})
+    counts[name] = int(counts.get(name, 0)) + 1
+    runtime.setdefault("disconnected_at", {})[name] = now
+    recent = [
+        item for item in runtime.get("recent_disconnects", ())
+        if now - float(item[1]) < 45
+    ]
+    recent.append([name, now])
+    runtime["recent_disconnects"] = recent[-20:]
+    if int(runtime.get("connection_lines", 0)) >= CONNECTION_LINES_PER_GAME:
+        return
+    count = counts[name]
+    trigger = DISCONNECT_MILESTONES.get(count)
+    if trigger is None and count > 10 and count % 5 == 0:
+        trigger = 97
+    probability = 0.9
+    if trigger is None:
+        distinct = {item[0] for item in recent}
+        mission_key = f"mass_{game.current_mission + 1}"
+        if len(distinct) >= max(3, game.player_count() // 3) and not runtime.get(mission_key):
+            runtime[mission_key] = True
+            trigger, probability = 58, 0.7
+    if trigger is None:
+        return
+    message = consider_narrator(game, [trigger], probability=probability, threshold=70)
+    if not message:
+        return
+    runtime["connection_lines"] = int(runtime.get("connection_lines", 0)) + 1
+    schedule_narrator(
+        game,
+        message,
+        delay_range=(4.0, 12.0),
+        expires_in=90.0,
+        allowed_phases=CONNECTION_NARRATION_PHASES,
+        names={"player": name},
+    )
+
+
+def note_reconnect_for_narrator(game: GameState, name: str) -> None:
+    runtime = game.narrator_runtime
+    reconnects = runtime.setdefault("reconnect_counts", {})
+    reconnects[name] = int(reconnects.get(name, 0)) + 1
+    left_at = runtime.get("disconnected_at", {}).pop(name, None)
+    # Only a genuinely long absence earns a welcome back.
+    if left_at is None or time.time() - float(left_at) < 150:
+        return
+    if int(runtime.get("connection_lines", 0)) >= CONNECTION_LINES_PER_GAME:
+        return
+    message = consider_narrator(game, [56], probability=0.6, threshold=70)
+    if not message:
+        return
+    runtime["connection_lines"] = int(runtime.get("connection_lines", 0)) + 1
+    schedule_narrator(
+        game,
+        message,
+        delay_range=(4.0, 10.0),
+        expires_in=60.0,
+        allowed_phases=CONNECTION_NARRATION_PHASES,
+        names={"player": name},
+    )
+
+
+def waiting_key(game: GameState, wait: dict) -> str:
+    straggler = wait["pending"][0]
+    state = "on" if straggler["connected"] else "off"
+    return f"{wait['stage']}:{wait['mission_num']}:{game.consecutive_rejections}:{straggler['player_id']}:{state}"
+
+
+def waiting_key_still_holds(game: GameState, key: str) -> bool:
+    wait = current_wait(game)
+    if not wait or len(wait["pending"]) != 1:
+        return False
+    return key == waiting_key(game, wait)
+
+
 def run_scheduled_narrator(game_code: str, schedule_id: str) -> None:
     """Deliver in a natural conversational gap or discard when stale."""
     while True:
@@ -1022,6 +1121,12 @@ def run_scheduled_narrator(game_code: str, schedule_id: str) -> None:
                 persist_game(game)
                 return
             if game.current_mission + 1 != int(entry.get("target_mission", 0)):
+                entries.remove(entry)
+                persist_game(game)
+                return
+            if entry.get("require_waiting_key") and not waiting_key_still_holds(
+                game, entry["require_waiting_key"]
+            ):
                 entries.remove(entry)
                 persist_game(game)
                 return
@@ -1272,6 +1377,10 @@ def deserialize_game(state: dict, *, saved_at: float) -> GameState:
 
 def persist_game(game: GameState) -> None:
     global room_persistence_error_logged
+    try:
+        emit_waiting_status(game)
+    except Exception:
+        logger.exception("Could not emit waiting status")
     if app.config.get("TESTING") and not app.config.get("PERSIST_ROOMS_IN_TESTS"):
         return
     try:
@@ -2071,6 +2180,18 @@ def start_round(game: GameState):
             allowed_phases={GamePhase.DISCUSSION},
             quiet_gap_range=(4.0, 10.0),
         )
+    elapsed = game.active_elapsed_seconds + (
+        time.time() - game.active_since if game.active_since else 0
+    )
+    if elapsed > 40 * 60 and not game.narrator_runtime.get("long_game_spoken"):
+        game.narrator_runtime["long_game_spoken"] = True
+        schedule_narrator(
+            game,
+            consider_narrator(game, [122], probability=0.8, threshold=70),
+            delay_range=(6.0, 25.0),
+            expires_in=max(40.0, float(game.discussion_time or 90)),
+            allowed_phases={GamePhase.DISCUSSION, GamePhase.TEAM_PROPOSAL},
+        )
     if game.current_mission == 0 and not game.narrator_runtime.get("opening_spoken"):
         opening_trigger = 2 if game.previous_game_summary else 1
         opening = consider_narrator(
@@ -2403,6 +2524,213 @@ def opening_ack_payload(game: GameState) -> dict:
     payload = reveal_ack_payload(game, game.opening_acks)
     payload["pending_names"] = opening_pending_names(game)
     return payload
+
+
+# --- "Who are we waiting on?" and host force-continue ----------------------
+#
+# Every all-hands step (opening, night, entering the quest, the two reveal
+# confirmations) can stall on one locked phone.  The room is always told who
+# is still pending and whether they are online; the host may continue without
+# them.  Votes and quest cards are decisions, never forced; they only show
+# who is pending.
+
+FORCE_CONTINUE_MIN_SECONDS = {
+    "opening": 12.0,
+    "night": 12.0,
+    "mission_intro": 8.0,
+    "mission_reveal": 12.0,
+}
+
+
+def current_wait(game: GameState) -> dict | None:
+    phase = game.phase
+    humans = human_player_ids(game)
+    everyone = set(game.players)
+    if phase == GamePhase.ROLE_ASSIGNMENT:
+        stage, required, done = "opening", humans, game.opening_acks
+    elif phase == GamePhase.NIGHT_PHASE:
+        stage, required, done = "night", everyone, game.night_acks
+    elif phase == GamePhase.MISSION and not game.mission_choices_open:
+        stage, required, done = "mission_intro", humans, game.mission_intro_acks
+    elif phase == GamePhase.MISSION:
+        stage, required, done = "mission_cards", set(game.proposed_team), set(game.mission_cards)
+    elif phase == GamePhase.TEAM_VOTE:
+        stage, required, done = "vote", everyone, set(game.votes)
+    elif phase == GamePhase.VOTE_REVEAL and game.pending_vote_result is not None:
+        stage, required, done = "vote_reveal", humans, game.vote_reveal_acks
+    elif phase == GamePhase.MISSION_REVEAL and game.pending_mission_outcome:
+        stage, required, done = "mission_reveal", humans, game.mission_reveal_acks
+    else:
+        return None
+    pending = [
+        {
+            "player_id": player.player_id,
+            "name": player.name,
+            "connected": bool(player.connected or player.is_bot),
+        }
+        for player in game.player_order_list()
+        if player.player_id in required and player.player_id not in done
+    ]
+    if stage == "vote_reveal":
+        minimum = vote_reveal_seconds(game) + 4.0
+    else:
+        minimum = FORCE_CONTINUE_MIN_SECONDS.get(stage)
+    return {
+        "stage": stage,
+        "phase": phase.value,
+        "mission_num": game.current_mission + 1,
+        "pending": pending,
+        "pending_names": [item["name"] for item in pending],
+        "offline_names": [item["name"] for item in pending if not item["connected"]],
+        "acknowledged_count": len(required & done),
+        "required_count": len(required),
+        "forceable": minimum is not None and bool(pending),
+        "force_after_unix": (game.phase_started_at + minimum) if minimum is not None else None,
+        "force_in_seconds": (
+            max(0.0, round(game.phase_started_at + minimum - time.time(), 1))
+            if minimum is not None
+            else None
+        ),
+    }
+
+
+def emit_waiting_status(game: GameState, *, force: bool = False) -> None:
+    """Broadcast the public waiting list whenever it changes (deduplicated)."""
+    wait = current_wait(game)
+    signature = repr(
+        None
+        if wait is None
+        else (wait["stage"], wait["mission_num"], tuple(
+            (item["player_id"], item["connected"]) for item in wait["pending"]
+        ), wait["acknowledged_count"])
+    )
+    if not force and getattr(game, "_waiting_signature", None) == signature:
+        return
+    game._waiting_signature = signature
+    emit_to_game(game.code, "waiting_status", wait or {"stage": None, "pending": []})
+    note_waiting_for_narrator(game, wait)
+
+
+def note_waiting_for_narrator(game: GameState, wait: dict | None) -> None:
+    """When a lone player holds up an all-hands step, the court may notice."""
+    runtime = game.narrator_runtime
+    if not runtime or not game.game_id or not wait:
+        return
+    if wait["stage"] not in {"vote_reveal", "mission_reveal", "night", "mission_intro"}:
+        return
+    if len(wait["pending"]) != 1 or wait["required_count"] < 4:
+        return
+    straggler = wait["pending"][0]
+    key = waiting_key(game, wait)
+    if runtime.get("last_waiting_key") == key:
+        return
+    runtime["last_waiting_key"] = key
+    if straggler["connected"]:
+        message = consider_narrator(game, [102], probability=0.55, threshold=70)
+    elif secure_random.random() < 0.8:
+        # Useful, not just colour: it tells the host Force continue exists, so
+        # it does not compete for the per-mission quip budget.
+        message = narrator_line(103, runtime, secure_random)
+        message["mission_num"] = game.current_mission + 1
+    else:
+        message = None
+    schedule_narrator(
+        game,
+        message,
+        delay_range=(14.0, 22.0),
+        expires_in=60.0,
+        allowed_phases={game.phase},
+        quiet_gap_range=(2.0, 5.0),
+        names={"player": straggler["name"]},
+        require_waiting_key=key,
+    )
+
+
+def force_continue(game: GameState) -> dict:
+    wait = current_wait(game)
+    if not wait or not wait["forceable"]:
+        raise ValueError("There is nothing to continue past right now")
+    if time.time() < float(wait["force_after_unix"] or 0):
+        raise ValueError("Give the table a few more seconds first")
+    stage = wait["stage"]
+    ids = {item["player_id"] for item in wait["pending"]}
+    record_product_event(
+        "host_forced_continue",
+        game=game,
+        actor_type="host",
+        payload={
+            "stage": stage,
+            "skipped_count": len(ids),
+            "offline_count": len(wait["offline_names"]),
+        },
+    )
+    emit_to_game(
+        game.code,
+        "flow_forced",
+        {"stage": stage, "skipped_names": wait["pending_names"]},
+    )
+    if game.narrator_runtime is not None and game.game_id:
+        game.narrator_runtime["forced_continues"] = int(
+            game.narrator_runtime.get("forced_continues", 0)
+        ) + 1
+        line = narrator_line(121, game.narrator_runtime, secure_random)
+        line["mission_num"] = game.current_mission + 1
+        emit_narrator(game, line)
+    if stage == "opening":
+        game.opening_acks |= ids
+        emit_to_game(game.code, "game_opening_ack_status", opening_ack_payload(game))
+        transition_to_night_phase(game)
+    elif stage == "night":
+        game.night_acks |= ids
+        emit_to_game(
+            game.code,
+            "night_phase_progress",
+            {
+                "confirmed": len(game.night_acks),
+                "total": game.player_count(),
+                "pending_names": night_pending_names(game),
+            },
+        )
+        complete_night_phase(game)
+    elif stage == "mission_intro":
+        game.mission_intro_acks |= ids
+        emit_to_game(
+            game.code,
+            "mission_intro_status",
+            reveal_ack_payload(game, game.mission_intro_acks),
+        )
+        persist_game(game)
+        open_mission_choices(game)
+    elif stage == "vote_reveal":
+        game.vote_reveal_acks |= ids
+        emit_to_game(
+            game.code,
+            "vote_reveal_ack_status",
+            reveal_ack_payload(game, game.vote_reveal_acks),
+        )
+        persist_game(game)
+        advance_after_vote(game)
+    elif stage == "mission_reveal":
+        game.mission_reveal_acks |= ids
+        emit_to_game(
+            game.code,
+            "mission_reveal_ack_status",
+            reveal_ack_payload(game, game.mission_reveal_acks),
+        )
+        persist_game(game)
+        advance_after_mission(game)
+    persist_game(game)
+    return wait
+
+
+def complete_night_phase(game: GameState) -> None:
+    if game.phase != GamePhase.NIGHT_PHASE:
+        return
+    game.phase = GamePhase.ROUND_START  # Prevent re-entry
+    emit_to_game(game.code, "night_phase_complete", {})
+    persist_game(game)
+    pause(1)
+    start_round(game)
 
 
 def vote_reveal_seconds(game: GameState) -> float:
@@ -2934,20 +3262,7 @@ def on_disconnect(reason=None):
                 },
             )
             if game.game_id and game.narrator_runtime:
-                disconnect_message = consider_narrator(
-                    game,
-                    [55],
-                    probability=0.38,
-                    threshold=90,
-                )
-                schedule_narrator(
-                    game,
-                    disconnect_message,
-                    delay_range=(3.0, 12.0),
-                    expires_in=30.0,
-                    allowed_phases={GamePhase.DISCUSSION, GamePhase.TEAM_PROPOSAL},
-                    names={"player": player.name},
-                )
+                note_disconnect_for_narrator(game, player.name)
             record_product_event(
                 "player_disconnected",
                 game=game,
@@ -3148,6 +3463,7 @@ def on_register_host_screen(data):
             "host_registered",
             {
                 "code": game_code,
+                "can_host": game.host_player_id is None,
                 "join_url": public_base_url(),
                 "players": game.public_players(),
                 "player_order": [game.players[player_id].name for player_id in game.player_order],
@@ -3190,6 +3506,7 @@ def on_register_host_screen(data):
                 "mission_intro_ack_ids": sorted(game.mission_intro_acks),
                 "vote_reveal_ack_ids": sorted(game.vote_reveal_acks),
                 "mission_reveal_ack_ids": sorted(game.mission_reveal_acks),
+                "waiting": current_wait(game),
                 "rematch_ready_ids": sorted(game.rematch_ready),
                 "vote_reveal_pending": game.pending_vote_result is not None,
                 "proposed_team": [
@@ -3521,6 +3838,7 @@ def on_join_spectator(data):
         }
         snapshot = spectator_snapshot(game, spectator)
         snapshot["recent_chat"] = recent_chat_payload(game)
+        snapshot["waiting"] = current_wait(game)
         emit(
             "spectator_join_success",
             {"session_token": token, "snapshot": snapshot},
@@ -3579,6 +3897,7 @@ def on_reconnect_game(data):
             }
             snapshot = spectator_snapshot(game, spectator)
             snapshot["recent_chat"] = recent_chat_payload(game)
+            snapshot["waiting"] = current_wait(game)
             emit("state_snapshot", snapshot)
             emit_spectator_count(game)
             record_product_event(
@@ -3629,6 +3948,7 @@ def on_reconnect_game(data):
         )
         snapshot = build_state_snapshot(game, player_id)
         snapshot["recent_chat"] = recent_chat_payload(game)
+        snapshot["waiting"] = current_wait(game)
         emit("state_snapshot", snapshot)
         emit_to_game(
             game_code,
@@ -3640,23 +3960,8 @@ def on_reconnect_game(data):
             },
         )
         if game.game_id and game.narrator_runtime:
-            reconnects = game.narrator_runtime.setdefault("reconnect_counts", {})
-            reconnects[player.name] = int(reconnects.get(player.name, 0)) + 1
-            trigger_id = 57 if reconnects[player.name] >= 2 else 56
-            reconnect_message = consider_narrator(
-                game,
-                [trigger_id],
-                probability=0.34 if trigger_id == 56 else 0.52,
-                threshold=90,
-            )
-            schedule_narrator(
-                game,
-                reconnect_message,
-                delay_range=(3.0, 12.0),
-                expires_in=30.0,
-                allowed_phases={GamePhase.DISCUSSION, GamePhase.TEAM_PROPOSAL},
-                names={"player": player.name},
-            )
+            note_reconnect_for_narrator(game, player.name)
+        persist_game(game)
     except ValueError as error:
         emit("reconnect_failed", {"message": str(error)})
 
@@ -3760,6 +4065,7 @@ def on_claim_player_seat(data):
         )
         snapshot = build_state_snapshot(game, player.player_id)
         snapshot["recent_chat"] = recent_chat_payload(game)
+        snapshot["waiting"] = current_wait(game)
         emit(
             "seat_recovered",
             {"session_token": new_token, "snapshot": snapshot},
@@ -4234,11 +4540,22 @@ def on_night_phase_ack():
         },
     )
     if confirmed >= total:
-        game.phase = GamePhase.ROUND_START  # Prevent re-entry
-        emit_to_game(game.code, "night_phase_complete", {})
+        complete_night_phase(game)
+    else:
         persist_game(game)
-        pause(1)
-        start_round(game)
+
+
+# --- Host flow control ---
+
+
+@socketio.on("force_continue")
+@rate_limited()
+def on_force_continue(data=None):
+    try:
+        game = validate_host(request.sid)
+        force_continue(game)
+    except ValueError as error:
+        emit_validation_error(error)
 
 
 # --- Discussion ---
@@ -4763,7 +5080,26 @@ def on_send_chat(data):
         quiet_gap_range=(1.0, 3.5),
         names={"player": participant.name},
     )
-    if not reply:
+    ambient = None
+    if not reply and game.game_id and player is not None:
+        ambient = ambient_reply(
+            runtime,
+            msg,
+            mission_num=game.current_mission + 1,
+            player=participant.name,
+            phase=game.phase.value,
+            rng=secure_random,
+        )
+        schedule_narrator(
+            game,
+            ambient,
+            delay_range=(2.0, 6.0),
+            expires_in=25.0,
+            allowed_phases=AMBIENT_REPLY_PHASES,
+            quiet_gap_range=(1.5, 4.0),
+            names={"player": participant.name},
+        )
+    if not reply and not ambient:
         social_candidates = []
         if max(runtime.get("mention_counts", {}).values(), default=0) >= 3:
             social_candidates.append(62)

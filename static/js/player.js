@@ -164,6 +164,7 @@ let pendingGameStartingRole = null;
 let nightPhaseReady = false;
 let pendingNightPhaseAck = false;
 let isHost = false;
+let myVoteRevealAcked = false;
 let gameCode = null;
 let currentLeaderId = null;
 let proposedTeamIds = [];
@@ -1273,6 +1274,7 @@ function showVoteReveal(data) {
     )[Math.floor(Math.random() * VOTE_RESULT_FLAVOR.approved.length)];
     const continueButton = document.getElementById('btn-player-confirm-vote');
     const waiting = document.getElementById('player-vote-reveal-waiting');
+    myVoteRevealAcked = false;
     continueButton.disabled = true;
     continueButton.classList.add('hidden');
     waiting.classList.remove('hidden');
@@ -1295,12 +1297,17 @@ function showVoteReveal(data) {
         if (!ST.herald.hasPending('narrator')) {
             const cue = rejections === 0 ? 'vote.unanimous_yes' : approvals === 0 ? 'vote.unanimous_no'
                 : approvals === rejections ? 'vote.tie' : approved ? 'vote.approved' : 'vote.rejected';
-            ST.herald.cue(cue, { priority: 76, ttl: 5000 });
+            ST.herald.cue(cue, { priority: 76, ttl: 5000, chance: 0.75, minGap: 8000 });
         }
         ST.herald.release();
     }, Math.max(1100, entries.length * VOTE_REVEAL_STEP_MS + 1100));
     window.setTimeout(() => {
         if (sequence !== voteRevealSequence) return;
+        if (myVoteRevealAcked) {
+            continueButton.classList.add('hidden');
+            waiting.classList.remove('hidden');
+            return;
+        }
         continueButton.disabled = false;
         continueButton.classList.toggle('hidden', isSpectator);
         waiting.classList.toggle('hidden', !isSpectator);
@@ -1398,7 +1405,7 @@ function showMissionOutcome(data, canContinue = false, instant = false) {
         if (!ST.herald.hasPending('narrator')) {
             const closeCall = data.passed && failures >= 1 && data.requires_double_fail;
             ST.herald.cue(closeCall ? 'quest.close_call' : data.passed ? 'quest.success'
-                : failures > 1 ? 'quest.fail_many' : 'quest.fail_one', { priority: 78, ttl: 6000 });
+                : failures > 1 ? 'quest.fail_many' : 'quest.fail_one', { priority: 78, ttl: 6000, chance: 0.8, minGap: 6000 });
         }
         ST.herald.release();
     }
@@ -2013,6 +2020,14 @@ function applyStateSnapshot(snap) {
             break;
         case 'VOTE_REVEAL':
             showVoteReveal({ votes: snap.revealed_votes || {}, team: snap.proposed_team || [] });
+            if ((snap.vote_reveal_ack_ids || []).includes(myPlayerId)) {
+                // Already confirmed before this reconnect: don't ask again.
+                myVoteRevealAcked = true;
+                document.getElementById('btn-player-confirm-vote').classList.add('hidden');
+                const waiting = document.getElementById('player-vote-reveal-waiting');
+                waiting.classList.remove('hidden');
+                waiting.textContent = 'Ready. Waiting for the others…';
+            }
             break;
         case 'MISSION':
             showMissionScreen({
@@ -2035,6 +2050,12 @@ function applyStateSnapshot(snap) {
         case 'MISSION_REVEAL':
             if (snap.pending_mission_outcome) {
                 showMissionOutcome(snap.latest_mission || {}, true, true);
+                if ((snap.mission_reveal_ack_ids || []).includes(myPlayerId)) {
+                    document.getElementById('btn-player-next-round').classList.add('hidden');
+                    const waiting = document.getElementById('player-mission-reveal-waiting');
+                    waiting.classList.remove('hidden');
+                    waiting.textContent = 'Ready. Waiting for the others…';
+                }
             } else {
                 showMissionCardReveal(snap.latest_mission || {}, true);
             }
@@ -2390,6 +2411,7 @@ socket.on('vote_reveal', data => {
 socket.on('vote_reveal_ack_status', data => {
     const acknowledged = (data.acknowledged_ids || []).includes(myPlayerId);
     if (!acknowledged) return;
+    myVoteRevealAcked = true;
     document.getElementById('btn-player-confirm-vote').classList.add('hidden');
     const waiting = document.getElementById('player-vote-reveal-waiting');
     waiting.classList.remove('hidden');
@@ -3114,4 +3136,17 @@ if (FORCE_NEW) {
     const mute = document.getElementById('mute-narrator')?.closest('label');
     if (!ST || !mute || document.querySelector('#settings-overlay .st-settings')) return;
     mute.after(ST.buildSettingsSection({ compact: true }));
+}());
+
+// Who is the table waiting on? (and, for the host, Force continue in Settings)
+(function mountWaiting() {
+    if (!ST) return;
+    ST.attachWaiting(socket, { myId: () => myPlayerId, isHost: () => isHost && !isSpectator });
+    const actions = document.getElementById('settings-game-actions');
+    const back = document.getElementById('btn-back-to-lobby');
+    if (!actions || !back) return;
+    actions.insertBefore(ST.buildFlowCard({
+        onForce: () => socket.emit('force_continue'),
+        visible: () => isHost && !isSpectator,
+    }), back);
 }());

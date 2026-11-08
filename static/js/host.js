@@ -957,7 +957,7 @@ function celebrateVoteResult({ approved, rejected, isApproved }) {
             : approved === 0 ? 'vote.unanimous_no'
                 : approved === rejected ? 'vote.tie'
                     : isApproved ? 'vote.approved' : 'vote.rejected';
-        ST.herald.cue(cue, { priority: 76, ttl: 5000 });
+        ST.herald.cue(cue, { priority: 76, ttl: 5000, chance: 0.75, minGap: 8000 });
     }
     ST.herald.release();
 }
@@ -1062,7 +1062,7 @@ function animateMissionReveal(cards, { instant = false, onComplete = null } = {}
     if (!instant && ST) {
         ST.sfx.play('shuffle', { delay: 80 });
         ST.sfx.play('fan', { delay: 950, gain: 0.7 });
-        ST.herald.cue('quest.reveal', { priority: 74, chance: 0.6, ttl: 2500, interrupt: true });
+        ST.herald.cue('quest.reveal', { priority: 74, chance: 0.45, ttl: 2500, interrupt: true, minGap: 6000 });
         ST.herald.hold(1200 + cards.length * 1100 + QUEST_CARD_FLIP_MS + QUEST_OUTCOME_HOLD_MS);
     }
     const completeAfter = instant ? 0 : 1200 + cards.length * 1100 + 900;
@@ -1138,10 +1138,12 @@ function celebrateQuestOutcome(passed, failures, data) {
     }
     if (!ST.herald.hasPending('narrator')) {
         const closeCall = passed && failures >= 1 && data.requires_double_fail;
+        const firstQuestFell = !passed && Number(data.mission_num) === 1 && Math.random() < 0.6;
         const cue = closeCall ? 'quest.close_call'
             : passed ? 'quest.success'
-                : failures > 1 ? 'quest.fail_many' : 'quest.fail_one';
-        ST.herald.cue(cue, { priority: 78, ttl: 6000 });
+                : failures > 1 ? 'quest.fail_many'
+                    : firstQuestFell ? 'mission1.fail' : 'quest.fail_one';
+        ST.herald.cue(cue, { priority: 78, ttl: 6000, chance: closeCall ? 1 : 0.8, minGap: 6000 });
     }
     ST.herald.release();
 }
@@ -2390,4 +2392,13 @@ document.getElementById('btn-pair-host-display').addEventListener('click', event
     const close = document.getElementById('btn-close-display-settings');
     panel.insertBefore(heading, close);
     panel.insertBefore(section, close);
+    // A table display that created its own room is the host: it gets the
+    // Force continue control. Displays paired into phone rooms only watch.
+    let canHost = false;
+    socket.on('host_registered', data => { canHost = Boolean(data.can_host); });
+    ST.attachWaiting(socket, { myId: () => null, isHost: () => canHost });
+    panel.insertBefore(ST.buildFlowCard({
+        onForce: () => socket.emit('force_continue'),
+        visible: () => canHost,
+    }), heading);
 }());

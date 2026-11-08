@@ -15,7 +15,7 @@
     'use strict';
 
     const PAGE = location.pathname.startsWith('/host') ? 'host' : 'player';
-    const ASSET_VERSION = '20261108-showtime-1';
+    const ASSET_VERSION = '20261108-showtime-2';
     const SETTINGS_KEY = 'avalon-showtime-settings';
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -24,8 +24,8 @@
     // unless someone turns sound on for a TV-less game.
     // -----------------------------------------------------------------------
     const DEFAULTS = PAGE === 'host'
-        ? { voice: true, sfx: true, captions: true, voiceVolume: 90, sfxVolume: 70 }
-        : { voice: false, sfx: false, captions: true, voiceVolume: 90, sfxVolume: 60 };
+        ? { voice: true, sfx: true, captions: true, voiceVolume: 90, sfxVolume: 70, chatter: 'normal' }
+        : { voice: false, sfx: false, captions: true, voiceVolume: 90, sfxVolume: 60, chatter: 'normal' };
     let settings = { ...DEFAULTS };
     try {
         const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -612,6 +612,56 @@
         return entry;
     }
 
+    // ----- Pacing ----------------------------------------------------------
+    // The narrator should feel like a guest who chimes in, not a commentator
+    // reading every event aloud.  "Key" beats always speak; everything else is
+    // flavour that needs a quiet gap, fits a rolling budget and grows rarer
+    // each time the same cue (or cue family) has been heard this game.
+    const KEY_CUES = new Set([
+        'start.opening', 'proposal.forced', 'rejection.4', 'score.decider', 'mission.5',
+        'assassin.start', 'assassin.strike', 'assassin.hit', 'assassin.miss',
+        'end.good', 'end.evil_missions', 'end.evil_assassin', 'end.evil_rejections', 'end.roles',
+        'awards.intro', 'awards.outro', 'vote.tie', 'vote.unanimous_no',
+        'quest.fail_many', 'rematch.lobby', 'lobby.welcome',
+    ]);
+    const PACE = {
+        quiet: { gap: 55000, decay: 0.4, mult: 0.6, budget: 2 },
+        normal: { gap: 26000, decay: 0.55, mult: 1, budget: 3 },
+        chatty: { gap: 11000, decay: 0.8, mult: 1.35, budget: 6 },
+    };
+    const BUDGET_WINDOW_MS = 240000;
+    let paceHeard = new Map();
+    let paceLog = [];
+    function paceProfile() {
+        return PACE[settings.chatter] || PACE.normal;
+    }
+    function isKeyCue(cue, options) {
+        if (options.pace) return options.pace === 'key';
+        return KEY_CUES.has(cue) || cue.startsWith('award.') || (options.priority || 0) >= 90;
+    }
+    function paceAllows(cue, options) {
+        if (isKeyCue(cue, options)) return true;
+        const profile = paceProfile();
+        const now = Date.now();
+        if (now - lastSpokeAt < (options.minGap ?? profile.gap)) return false;
+        paceLog = paceLog.filter(at => now - at < BUDGET_WINDOW_MS);
+        if (paceLog.length >= profile.budget) return false;
+        const family = cue.split('.')[0];
+        const own = paceHeard.get(cue) || 0;
+        const kin = paceHeard.get(`#${family}`) || 0;
+        const chance = Math.min(1, (options.chance ?? 1) * profile.mult)
+            * profile.decay ** own * Math.sqrt(profile.decay) ** Math.max(0, kin - own);
+        return Math.random() < chance;
+    }
+    const familyHeardAt = new Map();
+    function paceNote(cue, key) {
+        familyHeardAt.set(cue.split('.')[0], Date.now());
+        paceHeard.set(cue, (paceHeard.get(cue) || 0) + 1);
+        const family = `#${cue.split('.')[0]}`;
+        paceHeard.set(family, (paceHeard.get(family) || 0) + 1);
+        if (!key) paceLog.push(Date.now());
+    }
+
     const Herald = {
         loadManifest() {
             if (manifest) return Promise.resolve(manifest);
@@ -628,15 +678,30 @@
         },
         /** Speak one take of an event cue. Options: priority, chance, delay, ttl, tag, ifIdle, interrupt. */
         cue(cue, options = {}) {
-            if (options.chance != null && Math.random() > options.chance) return false;
+            if (!settings.voice) return false;
+            const key = isKeyCue(cue, options);
+            if (key && options.chance != null && Math.random() > options.chance) return false;
             if (options.ifIdle && (current || queue.length || Date.now() - lastSpokeAt < (options.quietMs ?? 2500))) return false;
             if (!manifest) {
-                if (settings.voice) Herald.loadManifest()?.then(data => { if (data) Herald.cue(cue, { ...options, chance: null }); });
+                Herald.loadManifest()?.then(data => { if (data) Herald.cue(cue, { ...options, chance: key ? null : options.chance }); });
                 return false;
             }
+            if (!manifest.cues?.[cue]?.length) return false;
+            if (!options.unpaced && !paceAllows(cue, options)) return false;
             const id = pickTake(cue);
             if (!id) return false;
-            return Boolean(enqueue({ ...options, ids: [id], kind: 'cue', cue }));
+            const queued = Boolean(enqueue({ ...options, ids: [id], kind: 'cue', cue }));
+            if (queued) paceNote(cue, key);
+            return queued;
+        },
+        /** When a cue of this family (e.g. 'vote') was last queued. */
+        lastFamilyAt(family) {
+            return familyHeardAt.get(family) || 0;
+        },
+        /** Forget what has been heard (new game). */
+        resetPacing() {
+            paceHeard = new Map();
+            paceLog = [];
         },
         /** Speak explicit clip ids (used for Court Narrator chat lines). */
         clips(ids, options = {}) {
@@ -1073,6 +1138,7 @@
             <label class="st-toggle"><input type="checkbox" data-st-setting="voice"><span><strong>Narrator voice</strong><small>The Court Narrator speaks on this display</small></span></label>
             <label class="st-toggle"><input type="checkbox" data-st-setting="sfx"><span><strong>Sound effects</strong><small>Cards, drums, fanfares</small></span></label>
             <label class="st-toggle"><input type="checkbox" data-st-setting="captions"><span><strong>Captions</strong><small>Show the narrator's words</small></span></label>
+            <label class="st-select"><span><strong>Narrator chattiness</strong><small>How often the narrator chimes in</small></span><select data-st-setting="chatter"><option value="quiet">Quiet</option><option value="normal">Normal</option><option value="chatty">Chatty</option></select></label>
             <label class="st-range"><span>Voice volume</span><input type="range" min="0" max="100" step="1" data-st-setting="voiceVolume"></label>
             <label class="st-range"><span>Effects volume</span><input type="range" min="0" max="100" step="1" data-st-setting="sfxVolume"></label>
             <button type="button" class="btn st-test-voice">Test the narrator</button>
@@ -1081,6 +1147,7 @@
             section.querySelectorAll('[data-st-setting]').forEach(input => {
                 const key = input.dataset.stSetting;
                 if (key === 'sound') input.checked = settings.voice && settings.sfx;
+                else if (input.tagName === 'SELECT') input.value = String(settings[key] || 'normal');
                 else if (input.type === 'checkbox') input.checked = Boolean(settings[key]);
                 else input.value = String(settings[key]);
             });
@@ -1090,6 +1157,7 @@
             if (!input) return;
             const key = input.dataset.stSetting;
             if (key === 'sound') saveSettings({ voice: input.checked, sfx: input.checked });
+            else if (input.tagName === 'SELECT') saveSettings({ [key]: input.value });
             else if (input.type === 'checkbox') saveSettings({ [key]: input.checked });
             else saveSettings({ [key]: Number(input.value) });
             if (input.type === 'checkbox' && input.checked) {
@@ -1099,7 +1167,7 @@
         });
         section.querySelector('.st-test-voice')?.addEventListener('click', () => {
             unlock();
-            Herald.loadManifest().then(() => Herald.cue('lobby.join', { priority: 90, interrupt: true }));
+            Herald.loadManifest().then(() => Herald.cue('lobby.join', { priority: 90, interrupt: true, unpaced: true }));
         });
         listeners.add(sync);
         sync();
@@ -1124,7 +1192,146 @@
         io.on('game_ended', () => { ballots = []; });
     }
 
+    // -----------------------------------------------------------------------
+    // "Who are we waiting on?" — public waiting list + host force-continue
+    // -----------------------------------------------------------------------
+    const STAGE_TEXT = {
+        opening: 'to enter Avalon',
+        night: 'to confirm their role',
+        mission_intro: 'to enter the quest',
+        mission_cards: 'to play a quest card',
+        vote: 'to vote',
+        vote_reveal: 'to continue',
+        mission_reveal: 'to continue',
+    };
+    const FORCE_TEXT = {
+        opening: 'Start the night without them',
+        night: 'End the night without them',
+        mission_intro: 'Open the quest without them',
+        vote_reveal: 'Continue without them',
+        mission_reveal: 'Continue without them',
+    };
+    let waitData = null;
+    let waitReceivedAt = 0;
+    let waitStageSince = 0;
+    let waitStageKey = '';
+    let waitOpts = { myId: () => null, isHost: () => false };
+    let waitPill = null;
+    let waitTimer = null;
+    const flowCards = new Set();
+
+    function nameList(pending) {
+        const shown = pending.slice(0, 4).map(item => `<span class="st-wait-name${item.connected ? '' : ' offline'}" data-i18n-skip>${escapeText(item.name)}${item.connected ? '' : ' <em>offline</em>'}</span>`);
+        if (pending.length > 4) shown.push(`<span class="st-wait-more">+${pending.length - 4} more</span>`);
+        return shown.join('');
+    }
+    function escapeText(value) {
+        return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
+    function forceReadyIn() {
+        if (!waitData || waitData.force_in_seconds == null) return Infinity;
+        return Math.max(0, waitData.force_in_seconds * 1000 - (Date.now() - waitReceivedAt));
+    }
+    function renderWaiting() {
+        clearTimeout(waitTimer);
+        const data = waitData;
+        const pending = (data && data.pending) || [];
+        const myId = waitOpts.myId();
+        const mine = myId && pending.some(item => item.player_id === myId);
+        const age = Date.now() - waitStageSince;
+        const quickStage = data && (data.stage === 'vote' || data.stage === 'mission_cards');
+        // Show once it is genuinely a wait: a few names left, or a while passed.
+        const worth = pending.length && (pending.length <= 3 || age > 10000) && !(quickStage && pending.length > 3);
+        if (!waitPill) {
+            waitPill = document.createElement('div');
+            waitPill.className = `st-waiting st-waiting-${PAGE}`;
+            waitPill.setAttribute('role', 'status');
+            waitPill.setAttribute('aria-live', 'polite');
+            document.body.appendChild(waitPill);
+        }
+        if (!data || !data.stage || !worth || mine) {
+            waitPill.classList.remove('visible');
+        } else {
+            const offline = pending.some(item => !item.connected);
+            const hostHint = offline && waitOpts.isHost() && FORCE_TEXT[data.stage] && age > 20000;
+            waitPill.innerHTML = `<span class="st-wait-label">Waiting on</span>${nameList(pending)}<span class="st-wait-stage">${STAGE_TEXT[data.stage] || ''}</span>${hostHint ? '<span class="st-wait-hint">Host: Settings &rsaquo; Force continue</span>' : ''}`;
+            waitPill.classList.add('visible');
+        }
+        flowCards.forEach(update => update());
+        if (data && data.stage && pending.length) waitTimer = setTimeout(renderWaiting, forceReadyIn() < 30000 ? 1000 : 2500);
+    }
+    function setWaiting(data) {
+        const key = data && data.stage ? `${data.stage}:${data.mission_num}` : '';
+        if (key !== waitStageKey) {
+            waitStageKey = key;
+            waitStageSince = Date.now();
+        }
+        waitData = data && data.stage ? data : null;
+        waitReceivedAt = Date.now();
+        renderWaiting();
+    }
+    function attachWaiting(io, opts = {}) {
+        waitOpts = { ...waitOpts, ...opts };
+        io.on('waiting_status', setWaiting);
+        io.on('state_snapshot', snap => setWaiting(snap && snap.waiting));
+        io.on('host_registered', data => setWaiting(data && data.waiting));
+        io.on('game_over', () => setWaiting(null));
+        io.on('return_to_lobby', () => setWaiting(null));
+        io.on('game_ended', () => setWaiting(null));
+        io.on('flow_forced', data => {
+            const names = (data && data.skipped_names) || [];
+            announce({ icon: '⏩', title: 'The host rides on', detail: names.length ? `Continuing without ${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''}` : '', tone: 'royal' });
+        });
+    }
+    /** Host-only "Game flow" card for a Settings panel. */
+    function buildFlowCard({ onForce, visible = () => true } = {}) {
+        const card = document.createElement('section');
+        card.className = 'st-flow-card';
+        card.innerHTML = `
+            <div class="st-flow-head"><strong>Game flow</strong><small>Stuck waiting on someone? Continue without them.</small></div>
+            <div class="st-flow-status" aria-live="polite"></div>
+            <button type="button" class="btn st-flow-force" disabled>Force continue</button>
+            <small class="st-flow-note">Skips confirmations only. Votes and quest cards always wait for their player.</small>`;
+        const status = card.querySelector('.st-flow-status');
+        const button = card.querySelector('.st-flow-force');
+        const update = () => {
+            card.hidden = !visible();
+            const data = waitData;
+            const pending = (data && data.pending) || [];
+            if (!data || !pending.length) {
+                status.textContent = 'Nobody is holding up the table.';
+                button.disabled = true;
+                button.textContent = 'Force continue';
+                return;
+            }
+            status.innerHTML = `Waiting on ${nameList(pending)} <span class="st-wait-stage">${STAGE_TEXT[data.stage] || ''}</span>`;
+            if (!data.forceable) {
+                button.disabled = true;
+                button.textContent = data.stage === 'vote' ? 'Votes cannot be skipped' : 'Quest cards cannot be skipped';
+                return;
+            }
+            const wait = forceReadyIn();
+            button.disabled = wait > 0;
+            button.textContent = wait > 0 ? `Force continue (${Math.ceil(wait / 1000)}s)` : (FORCE_TEXT[data.stage] || 'Force continue');
+        };
+        button.addEventListener('click', () => {
+            const data = waitData;
+            if (!data || !data.forceable) return;
+            const names = (data.pending || []).map(item => item.name);
+            const message = `Continue without ${names.join(', ')}? They will catch up on the next screen.`;
+            if (!window.confirm(message)) return;
+            button.disabled = true;
+            onForce?.(data);
+        });
+        flowCards.add(update);
+        update();
+        return card;
+    }
+
     window.AvalonShowtime = Object.freeze({
+        attachWaiting,
+        buildFlowCard,
+        waiting: () => waitData,
         attachBallotRecorder,
         ballots: () => ballots.slice(),
         page: PAGE,

@@ -28,7 +28,35 @@
         lastNarratorVoiceAt: 0,
         inLobby: false,
         rejections: 0,
+        // Obscure-event bookkeeping (all public information).
+        gamesThisSession: 0,
+        gameStartedAt: 0,
+        playerCount: 0,
+        lateSaid: false,
+        discussionStartedAt: 0,
+        discussionSeconds: 0,
+        previewChanges: 0,
+        indecisiveSaid: false,
+        leaderName: null,
+        voteStartedAt: 0,
+        firstTryStreak: 0,
+        lobbyIds: new Map(),
+        readyFlips: new Map(),
+        readyFlipSaid: false,
+        lostAt: 0,
+        introMetaDone: false,
     };
+    const FIRST_GAME_KEY = 'avalon-showtime-first-game-done';
+    function firstGameEver() {
+        try { return !localStorage.getItem(FIRST_GAME_KEY); } catch (_) { return false; }
+    }
+    function markFirstGame() {
+        try { localStorage.setItem(FIRST_GAME_KEY, '1'); } catch (_) { /* optional */ }
+    }
+    function lateNight() {
+        const hour = new Date().getHours();
+        return hour >= 23 || hour < 4;
+    }
 
     function timer(key, ms, fn) {
         clearTimeout(state.phaseTimers.get(key));
@@ -70,8 +98,29 @@
         });
     }
 
+    function noticeLobbyQuirks(players) {
+        if (!host) return;
+        let renamed = false;
+        players.forEach(player => {
+            if (!player.player_id || player.is_bot) return;
+            const before = state.lobbyIds.get(player.player_id);
+            if (before && before.name !== player.name) renamed = true;
+            if (before && before.ready !== player.ready && player.connected !== false) {
+                const flips = (state.readyFlips.get(player.player_id) || 0) + 1;
+                state.readyFlips.set(player.player_id, flips);
+                if (flips >= 4 && !state.readyFlipSaid) {
+                    state.readyFlipSaid = true;
+                    H.cue('lobby.ready_flip', { priority: 40, chance: 0.9, minGap: 8000, delay: 600 });
+                }
+            }
+            state.lobbyIds.set(player.player_id, { name: player.name, ready: Boolean(player.ready) });
+        });
+        if (renamed) H.cue('lobby.rename', { priority: 38, chance: 0.7, minGap: 9000, delay: 500 });
+    }
+
     function lobbyPlayers(players, { announceJoins = true } = {}) {
         if (!Array.isArray(players)) return;
+        if (state.inLobby) noticeLobbyQuirks(players);
         const next = new Set(players.map(player => player.name));
         const joined = players.filter(player => !state.names.has(player.name) && !player.is_bot);
         state.names = next;
@@ -106,8 +155,15 @@
     }
 
     socket.on('host_registered', data => {
+        const wasLost = state.lostAt && Date.now() - state.lostAt > 6000;
+        state.lostAt = 0;
         if (data.phase === 'LOBBY') enterLobby(data.code, data.players);
         else state.inLobby = false;
+        if (wasLost && data.phase !== 'LOBBY') H.cue('tv.back', { priority: 45, chance: 0.75, minGap: 8000, delay: 2500 });
+    });
+    socket.on('disconnect', () => { state.lostAt = Date.now(); });
+    socket.on('room_resumed', () => {
+        if (host) H.cue('room.resumed', { priority: 55, chance: 0.85, minGap: 6000, delay: 1800 });
     });
     socket.on('join_success', data => {
         enterLobby(data.room_code, data.players, { welcome: false });
@@ -116,10 +172,18 @@
     socket.on('lobby_update', data => lobbyPlayers(data.players, { announceJoins: false }));
 
     // ----- Opening and night ------------------------------------------------------
-    socket.on('game_starting', () => {
+    socket.on('game_starting', data => {
         state.inLobby = false;
         clearAllTimers();
         H.stop();
+        H.resetPacing?.();
+        state.gamesThisSession += 1;
+        state.gameStartedAt = Date.now();
+        state.playerCount = Number(data?.player_count) || state.names.size;
+        state.firstTryStreak = 0;
+        state.introMetaDone = false;
+        state.readyFlips.clear();
+        state.readyFlipSaid = false;
         S.sfx.play('hit-big');
         S.sfx.synth('gong', { gain: 0.32 }, 120);
         H.cue('start.opening', { priority: 90, delay: 1100 });
@@ -127,11 +191,29 @@
     socket.on('night_phase_start', () => {
         S.sfx.play('j-magic');
         S.sfx.synth('shimmer', { gain: 0.1 }, 200);
-        H.cue('night.intro', { priority: 85, delay: 900 });
+        // The night explanation matters most in a table's first game.
+        H.cue('night.intro', state.gamesThisSession <= 1
+            ? { priority: 85, delay: 900, pace: 'key' }
+            : { priority: 70, delay: 900, chance: 0.6, minGap: 4000 });
     });
     socket.on('night_phase_complete', () => {
-        H.cue('night.complete', { priority: 50, chance: 0.6, ifIdle: true });
+        H.cue('night.complete', { priority: 50, chance: 0.5, ifIdle: true });
     });
+
+    // One piece of "meta" colour for the first discussion: the table, the hour,
+    // the marathon, or a first-ever game on this display.
+    function introMeta() {
+        if (state.introMetaDone || !host) return;
+        state.introMetaDone = true;
+        let cue = null;
+        if (firstGameEver()) cue = 'meta.first_game';
+        else if (state.gamesThisSession >= 3) cue = 'meta.marathon';
+        else if (lateNight() && !state.lateSaid) { cue = 'meta.late'; state.lateSaid = true; }
+        else if (state.playerCount >= 10) cue = Math.random() < 0.6 ? 'game.ten' : null;
+        else if (state.playerCount <= 6) cue = Math.random() < 0.5 ? 'game.six' : null;
+        markFirstGame();
+        if (cue) timer('intro-meta', 9000, () => H.cue(cue, { priority: 46, chance: 0.9, ifIdle: true, quietMs: 3500, minGap: 9000 }));
+    }
 
     // ----- Missions, leaders, discussion -------------------------------------------
     socket.on('round_start', data => {
@@ -140,7 +222,9 @@
         const rejects = Number(data.reject_count) || 0;
         if (mission !== state.missionNum && rejects === 0) {
             state.missionNum = mission;
-            H.cue(`mission.${mission}`, { priority: 80, delay: host ? 1500 : 500, tag: 'mission-intro' });
+            H.cue(`mission.${mission}`, mission === 1 || mission === 5
+                ? { priority: 80, delay: host ? 1500 : 500, tag: 'mission-intro', pace: 'key' }
+                : { priority: 80, delay: host ? 1500 : 500, tag: 'mission-intro', chance: 0.7, minGap: 7000 });
             const results = data.mission_results || [];
             const good = results.filter(item => item === 'pass').length;
             const evil = results.filter(item => item === 'fail').length;
@@ -148,7 +232,7 @@
                 : evil === 2 && good === 0 ? 'score.evil_two'
                     : good === 2 && evil === 2 ? 'score.decider' : null;
             if (score && Date.now() - state.lastNarratorVoiceAt > 20000) {
-                H.cue(score, { priority: 45, chance: 0.75, delay: host ? 1600 : 600 });
+                H.cue(score, { priority: 45, chance: 0.75, delay: host ? 1600 : 600, minGap: 0 });
             }
         }
         state.rejections = rejects;
@@ -158,12 +242,23 @@
     });
 
     socket.on('discussion_start', data => {
-        if (Number(data.duration_seconds) === 0) return;
-        H.cue('discussion.start', { priority: 30, chance: 0.4, ifIdle: true, quietMs: 3000, delay: 1800 });
+        state.discussionStartedAt = Date.now();
+        state.discussionSeconds = Number(data.duration_seconds) || 0;
+        if (Number(data.mission_num) === 1 && (Number(data.reject_count) || 0) === 0) introMeta();
+        if (state.discussionSeconds === 0) return;
+        H.cue('discussion.start', { priority: 30, chance: 0.35, ifIdle: true, quietMs: 3000, delay: 1800 });
+        // Occasionally, during a lull, the narrator muses about the game itself.
+        if (host && Math.random() < 0.3) {
+            timer('ambient-meta', 14000 + Math.random() * 16000, () => {
+                if (Date.now() - state.discussionStartedAt < 60000) {
+                    H.cue('meta.ambient', { priority: 28, ifIdle: true, quietMs: 6000 });
+                }
+            });
+        }
     });
     socket.on('discussion_tick', data => {
         const remaining = Number(data.remaining_seconds);
-        if (remaining === 10) H.cue('discussion.final10', { priority: 72, chance: 0.85 });
+        if (remaining === 10) H.cue('discussion.final10', { priority: 72, chance: 0.7, minGap: 9000 });
         if (host && remaining <= 10 && remaining > 0) {
             S.sfx.synth('tick', { gain: remaining <= 3 ? 0.32 : 0.2, high: remaining <= 3 });
             if (remaining <= 5) S.sfx.synth('heartbeat', { gain: 0.5 + (5 - remaining) * 0.08, beats: 1 }, 380);
@@ -176,7 +271,18 @@
 
     // ----- Proposal and vote -------------------------------------------------------
     socket.on('proposal_start', data => {
-        clearTimer('vote-stragglers');
+        clearTimer('vote-stragglers', 'ambient-meta');
+        state.leaderName = data.leader_name || null;
+        state.previewChanges = 0;
+        state.indecisiveSaid = false;
+        const discussed = Date.now() - state.discussionStartedAt;
+        if (state.discussionSeconds > 0 && state.discussionStartedAt && discussed < 8000 && !data.forced) {
+            state.discussionStartedAt = 0;
+            H.cue('discussion.skipped_fast', { priority: 42, chance: 0.7, delay: 800, minGap: 8000 });
+            timer('proposal-slow', 55000, () => H.cue('proposal.slow', { priority: 45, ifIdle: true }));
+            return;
+        }
+        state.discussionStartedAt = 0;
         if (data.forced) {
             H.cue('proposal.forced', { priority: 88, delay: 500 });
         } else if (state.rejections === 3) {
@@ -191,31 +297,58 @@
     socket.on('proposal_timer_expired', () => {
         H.cue('proposal.slow', { priority: 50, chance: 0.7, ifIdle: true });
     });
+    socket.on('team_preview', () => {
+        state.previewChanges += 1;
+        if (state.previewChanges >= 8 && !state.indecisiveSaid) {
+            state.indecisiveSaid = true;
+            H.cue('proposal.indecisive', { priority: 44, chance: 0.75, ifIdle: true, quietMs: 3000 });
+        }
+    });
     socket.on('team_proposed', () => clearTimer('proposal-slow'));
     socket.on('vote_start', () => {
         clearTimer('proposal-slow');
         state.votePending = Infinity;
-        H.cue('vote.start', { priority: 60, delay: host ? 1200 : 300, ttl: 6000 });
+        state.voteStartedAt = Date.now();
+        H.cue('vote.start', { priority: 60, chance: 0.45, delay: host ? 1200 : 300, ttl: 6000, minGap: 12000 });
         timer('vote-stragglers', 24000, () => {
-            if (state.votePending > 0) H.cue('vote.stragglers', { priority: 50, ifIdle: true });
+            if (state.votePending > 1) H.cue('vote.stragglers', { priority: 50, ifIdle: true });
         });
     });
     socket.on('vote_waiting', data => {
-        state.votePending = (data.remaining || []).length;
+        const remaining = (data.remaining || []).length;
+        const previous = state.votePending;
+        state.votePending = remaining;
         if (host) S.sfx.play('place', { gain: 0.8 });
+        if (remaining === 0 && Date.now() - state.voteStartedAt < 7000) {
+            H.cue('vote.speedrun', { priority: 48, chance: 0.8, minGap: 5000 });
+        }
+        if (remaining === 1 && previous !== 1) {
+            timer('vote-holdout', 20000, () => {
+                if (state.votePending === 1) H.cue('vote.holdout', { priority: 52, ifIdle: true, minGap: 10000 });
+            });
+        }
     });
-    socket.on('vote_reveal', () => {
-        clearTimer('vote-stragglers');
+    socket.on('vote_reveal', data => {
+        clearTimer('vote-stragglers', 'vote-holdout');
         H.clear('cue');
+        const votes = data?.votes || {};
+        if (state.leaderName && votes[state.leaderName] === 'reject') {
+            // Spoken after the tally lands; host.js holds the herald for the flips.
+            timer('leader-reject', 6500, () => H.cue('vote.leader_reject', { priority: 77, chance: 0.85, minGap: 3000 }));
+        }
     });
 
     // ----- Quest -----------------------------------------------------------
     socket.on('mission_start', () => {
+        state.firstTryStreak = state.rejections === 0 ? state.firstTryStreak + 1 : 0;
+        if (state.firstTryStreak === 3) {
+            timer('first-try', 5200, () => H.cue('streak.first_try', { priority: 50, chance: 0.75, ifIdle: true, quietMs: 1500, minGap: 6000 }));
+        }
         state.rejections = 0;
         clearTimer('proposal-slow', 'vote-stragglers');
         S.sfx.play('hit-short');
         S.sfx.synth('whoosh', { gain: 0.3 }, 80);
-        H.cue('quest.begins', { priority: 70, delay: 900, ttl: 8000 });
+        H.cue('quest.begins', { priority: 70, chance: 0.55, delay: 900, ttl: 8000, minGap: 10000 });
     });
     socket.on('mission_waiting', () => {
         if (host) S.sfx.play('place', { gain: 0.9 });
@@ -244,6 +377,11 @@
         state.gameOverAt = Date.now();
         state.instantRematchSaid = false;
         state.inLobby = false;
+        const minutes = state.gameStartedAt ? (Date.now() - state.gameStartedAt) / 60000 : 0;
+        if (host && (minutes > 45 || (minutes > 0 && minutes < 14))) {
+            // After the honours ceremony has had its moment.
+            timer('end-meta', 52000, () => H.cue(minutes > 45 ? 'end.long' : 'end.quick', { priority: 30, chance: 0.8, ifIdle: true, quietMs: 6000 }));
+        }
         // The display runs the full finale (with awards) itself; phones speak a
         // single verdict when their sound is on.
         if (host) return;
@@ -260,6 +398,12 @@
             && Date.now() - state.gameOverAt < 25000) {
             state.instantRematchSaid = true;
             H.cue('rematch.instant', { priority: 40, ifIdle: true });
+        }
+    });
+    socket.on('flow_forced', () => {
+        if (host) {
+            S.sfx.play('stamp', { gain: 0.8 });
+            S.sfx.play('j-tick-up', { gain: 0.6, delay: 180 });
         }
     });
     socket.on('return_to_lobby', data => {
@@ -284,6 +428,11 @@
         const ids = Array.isArray(data.voice) ? data.voice.filter(id => typeof id === 'string').slice(0, 3) : [];
         if (!ids.length) return;
         if (document.getElementById('mute-narrator')?.checked) return;
+        // Don't say the same thing twice: a vote/quest quip right after the
+        // display already reacted to that vote/quest stays text-only.
+        const trigger = Number(data.trigger_id) || 0;
+        const family = trigger >= 21 && trigger <= 37 ? 'vote' : trigger >= 40 && trigger <= 53 ? 'quest' : null;
+        if (family && Date.now() - (H.lastFamilyAt?.(family) || 0) < 15000) return;
         state.lastNarratorVoiceAt = Date.now();
         H.clips(ids, { priority: data.double_act_part === 2 ? 46 : 44, ttl: 18000, gapAfter: 600 });
     });

@@ -52,7 +52,14 @@ def main() -> None:
     parser.add_argument("--models", default="/models")
     parser.add_argument("--voice", default="court", choices=sorted(VOICES))
     parser.add_argument("--only", nargs="*", help="Clip ids to render (default: all)")
+    parser.add_argument(
+        "--from-wav",
+        help="Directory of pre-rendered WAVs (render_chatterbox.py output) to process instead of Kokoro",
+    )
     args = parser.parse_args()
+    if args.from_wav:
+        from_wav(Path(args.from_wav), args.voice)
+        return
 
     from kokoro_onnx import Kokoro
 
@@ -110,7 +117,61 @@ def main() -> None:
     print(f"Rendered {rendered} clip(s); {len(entries)} total, {total / 60:.1f} minutes of audio.")
 
 
-def write_manifest(manifest_path: Path, voice: str, entries: dict[str, dict]) -> None:
+CHATTERBOX_ENGINE = (
+    "Chatterbox TTS (Resemble AI, MIT), cloned from the Kokoro court voice; "
+    "best-of-N takes scored by Whisper + UTMOS; offline pre-render"
+)
+
+
+def encode(source: Path, target: Path) -> float:
+    subprocess.run(
+        [
+            "ffmpeg", "-loglevel", "error", "-y", "-i", str(source), "-af", FILTER,
+            "-ar", "24000", "-ac", "1", "-c:a", "libmp3lame", "-b:a", "56k", str(target),
+        ],
+        check=True,
+    )
+    return float(
+        subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(target)],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+    )
+
+
+def from_wav(source_dir: Path, voice: str) -> None:
+    """Process GPU-rendered takes into the shipped MP3s and manifest."""
+    clips = all_clips()
+    out_dir = ROOT / "static" / "voice" / voice
+    out_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = ROOT / "static" / "voice" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    previous = manifest.get("clips", {}) if manifest.get("engine") == CHATTERBOX_ENGINE else {}
+    missing = [clip_id for clip_id in clips if not (source_dir / f"{clip_id}.wav").exists()]
+    if missing:
+        raise SystemExit(f"{len(missing)} clip(s) have no WAV yet, e.g. {missing[:5]}")
+    entries: dict[str, dict] = {}
+    for count, (clip_id, text) in enumerate(clips.items(), 1):
+        wav = source_dir / f"{clip_id}.wav"
+        digest = hashlib.sha256(
+            f"{PROCESS_VERSION}|{FILTER}|".encode() + wav.read_bytes()
+        ).hexdigest()[:16]
+        target = out_dir / f"{clip_id}.mp3"
+        old = previous.get(clip_id)
+        if old and old.get("h") == digest and old.get("t") == text and target.exists():
+            entries[clip_id] = old
+            continue
+        duration = encode(wav, target)
+        entries[clip_id] = {"t": text, "ms": round(duration * 1000), "h": digest}
+        print(f"[{count}/{len(clips)}] {clip_id} {duration:.1f}s", flush=True)
+    for stale in set(p.stem for p in out_dir.glob("*.mp3")) - set(clips):
+        (out_dir / f"{stale}.mp3").unlink()
+    write_manifest(manifest_path, voice, entries, engine=CHATTERBOX_ENGINE)
+    total = sum(item["ms"] for item in entries.values()) / 1000
+    print(f"{len(entries)} clips, {total / 60:.1f} minutes of audio.")
+
+
+def write_manifest(manifest_path: Path, voice: str, entries: dict[str, dict], *, engine: str | None = None) -> None:
     cues = {cue: [f"e.{cue}.{i}" for i in range(1, len(takes) + 1)] for cue, takes in EVENT_CUES.items()}
     cues.update({
         f"n{trigger}f": [f"n{trigger}f{i}" for i in range(1, len(takes) + 1)]
@@ -119,7 +180,7 @@ def write_manifest(manifest_path: Path, voice: str, entries: dict[str, dict]) ->
     manifest = {
         "voice": voice,
         "base": f"/static/voice/{voice}/",
-        "engine": "Kokoro-82M v1.0 (Apache-2.0), offline pre-render",
+        "engine": engine or "Kokoro-82M v1.0 (Apache-2.0), offline pre-render",
         "clips": dict(sorted(entries.items())),
         "cues": cues,
     }

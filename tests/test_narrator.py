@@ -52,9 +52,54 @@ def public_state(**changes):
 
 
 def test_all_94_situations_have_twenty_distinct_authored_lines():
-    assert set(TRIGGERS) == set(range(1, 95))
+    assert set(range(1, 95)) <= set(TRIGGERS)
     assert set(COPY_BANKS) == set(TRIGGERS)
-    assert all(len(bank) == 20 and len(set(bank)) == 20 for bank in COPY_BANKS.values())
+    assert all(
+        len(COPY_BANKS[key]) == 20 and len(set(COPY_BANKS[key])) == 20
+        for key in range(1, 95)
+    )
+
+
+def test_extra_situations_have_distinct_name_free_lines():
+    from narrator import EXTRA_LINES
+    assert set(EXTRA_LINES) == set(TRIGGERS) - set(range(1, 95))
+    every = [line for bank in EXTRA_LINES.values() for line in bank]
+    assert len(every) == len(set(every))
+    assert all(len(bank) >= 2 for bank in EXTRA_LINES.values())
+    assert not any("{" in line for line in every)
+
+
+@pytest.mark.parametrize("text,trigger", [
+    ("im merlin lol", 98), ("I am Percival", 99), ("i'm the assassin", 100),
+    ("Rich is merlin", 104), ("i know who merlin is", 119),
+    ("trust me", 105), ("who failed??", 113), ("it wasnt me", 114),
+    ("WHY WOULD YOU DO THAT TO ME", 111), ("hello there", None),
+])
+def test_overheard_chat_is_classified(text, trigger):
+    from narrator import classify_ambient
+    assert classify_ambient(text) == trigger
+
+
+def test_merlin_claim_during_assassination_has_its_own_bank():
+    from narrator import classify_ambient
+    assert classify_ambient("I'm Merlin, pick me", phase="ASSASSIN_PHASE") == 120
+
+
+def test_ambient_replies_are_rare_and_cooled_down():
+    from narrator import ambient_reply
+
+    class Always(random.Random):
+        def random(self):
+            return 0.0
+
+    runtime = new_runtime()
+    first = ambient_reply(runtime, "trust me", mission_num=1, player="A", now=100.0, rng=Always())
+    assert first and first["trigger_id"] == 105 and first["voice"][0].startswith("n105v")
+    assert ambient_reply(runtime, "i'm merlin", mission_num=1, player="B", now=120.0, rng=Always()) is None
+    later = ambient_reply(runtime, "i'm merlin", mission_num=1, player="B", now=200.0, rng=Always())
+    assert later and later["trigger_id"] == 98
+    never = ambient_reply(new_runtime(), "lol", mission_num=1, now=100.0, rng=random.Random(0))
+    assert never is None or never["trigger_id"] == 107
 
 
 def test_proactive_limit_allows_only_exceptional_second_message():
