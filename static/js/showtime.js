@@ -15,7 +15,7 @@
     'use strict';
 
     const PAGE = location.pathname.startsWith('/host') ? 'host' : 'player';
-    const ASSET_VERSION = '20261108-showtime-2';
+    const ASSET_VERSION = '20261108-showtime-3';
     const SETTINGS_KEY = 'avalon-showtime-settings';
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -570,14 +570,19 @@
         clearTimeout(pumpTimer);
         if (current || !queue.length) return;
         const now = Date.now();
-        if (now < holdUntil) {
+        if (now < holdUntil && !queue.some(item => item.bypassHold)) {
             pumpTimer = setTimeout(pump, holdUntil - now + 20);
             return;
         }
-        queue = queue.filter(item => item.expiresAt > now);
+        queue = queue.filter(item => item.expiresAt > now && (now >= holdUntil || item.bypassHold || item.expiresAt > holdUntil));
         if (!queue.length) return;
         queue.sort((a, b) => (b.priority - a.priority) || (a.seq - b.seq));
-        const next = queue.shift();
+        const nextIndex = now < holdUntil ? queue.findIndex(item => item.bypassHold) : 0;
+        if (nextIndex < 0) {
+            pumpTimer = setTimeout(pump, holdUntil - now + 20);
+            return;
+        }
+        const [next] = queue.splice(nextIndex, 1);
         if (!voiceAllowed()) {
             queue = [];
             return;
@@ -625,9 +630,9 @@
         'quest.fail_many', 'rematch.lobby', 'lobby.welcome',
     ]);
     const PACE = {
-        quiet: { gap: 55000, decay: 0.4, mult: 0.6, budget: 2 },
-        normal: { gap: 26000, decay: 0.55, mult: 1, budget: 3 },
-        chatty: { gap: 11000, decay: 0.8, mult: 1.35, budget: 6 },
+        quiet: { gap: 40000, decay: 0.4, mult: 0.6, budget: 2 },
+        normal: { gap: 18000, decay: 0.55, mult: 1, budget: 3 },
+        chatty: { gap: 8000, decay: 0.8, mult: 1.35, budget: 6 },
     };
     const BUDGET_WINDOW_MS = 240000;
     let paceHeard = new Map();
@@ -637,7 +642,7 @@
     }
     function isKeyCue(cue, options) {
         if (options.pace) return options.pace === 'key';
-        return KEY_CUES.has(cue) || cue.startsWith('award.') || (options.priority || 0) >= 90;
+        return KEY_CUES.has(cue) || cue.startsWith('award.') || cue.startsWith('mc.') || cue.startsWith('time.') || (options.priority || 0) >= 90;
     }
     function paceAllows(cue, options) {
         if (isKeyCue(cue, options)) return true;
@@ -1138,7 +1143,7 @@
             <label class="st-toggle"><input type="checkbox" data-st-setting="voice"><span><strong>Narrator voice</strong><small>The Court Narrator speaks on this display</small></span></label>
             <label class="st-toggle"><input type="checkbox" data-st-setting="sfx"><span><strong>Sound effects</strong><small>Cards, drums, fanfares</small></span></label>
             <label class="st-toggle"><input type="checkbox" data-st-setting="captions"><span><strong>Captions</strong><small>Show the narrator's words</small></span></label>
-            <label class="st-select"><span><strong>Narrator chattiness</strong><small>How often the narrator chimes in</small></span><select data-st-setting="chatter"><option value="quiet">Quiet</option><option value="normal">Normal</option><option value="chatty">Chatty</option></select></label>
+            <label class="st-select"><span><strong>Narrator chattiness</strong><small>How often he jokes between announcements</small></span><select data-st-setting="chatter"><option value="quiet">Quiet</option><option value="normal">Normal</option><option value="chatty">Chatty</option></select></label>
             <label class="st-range"><span>Voice volume</span><input type="range" min="0" max="100" step="1" data-st-setting="voiceVolume"></label>
             <label class="st-range"><span>Effects volume</span><input type="range" min="0" max="100" step="1" data-st-setting="sfxVolume"></label>
             <button type="button" class="btn st-test-voice">Test the narrator</button>

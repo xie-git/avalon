@@ -163,6 +163,11 @@
    "ms": 6120,
    "h": "d07a3ee3e0e64155"
   },
+  "e.assassin.start.4": {
+   "t": "Three quests won, but it isn't over. Assassin, name Merlin on your phone.",
+   "ms": 5160,
+   "h": "65d10773e991c0c9"
+  },
   "e.assassin.strike.1": {
    "t": "The Assassin has chosen. Let's see if the blade finds its mark.",
    "ms": 3528,
@@ -308,6 +313,126 @@
    "ms": 4152,
    "h": "f2afb90586a09d39"
   },
+  "e.clock.10.1": {
+   "t": "Ten minutes in. Nobody has been honest yet, and we're right on schedule.",
+   "ms": 3936,
+   "h": "f79c3bcdf9b056a4"
+  },
+  "e.clock.10.2": {
+   "t": "We are ten minutes into this game. Trust levels are falling nicely.",
+   "ms": 3792,
+   "h": "6b77a515af8f28af"
+  },
+  "e.clock.20.1": {
+   "t": "Twenty minutes gone. Somebody check on the snacks.",
+   "ms": 2928,
+   "h": "51657f2d4cec1a17"
+  },
+  "e.clock.20.2": {
+   "t": "Twenty minutes in. Grudges are now ripening nicely.",
+   "ms": 3504,
+   "h": "050bf6a6d6379105"
+  },
+  "e.clock.30.1": {
+   "t": "Half an hour! You could have watched a whole sitcom and betrayed nobody.",
+   "ms": 3624,
+   "h": "5d3ccf3cb4a37ad8"
+  },
+  "e.clock.30.2": {
+   "t": "Thirty minutes on the clock. Evil's alibis are starting to need alibis.",
+   "ms": 5112,
+   "h": "518b50abd14e29bf"
+  },
+  "e.clock.45.1": {
+   "t": "Forty-five minutes. In football, this is when you'd get oranges.",
+   "ms": 3864,
+   "h": "4a839573bf01d9cc"
+  },
+  "e.clock.45.2": {
+   "t": "Forty-five minutes in. The castle has begun charging you rent.",
+   "ms": 3720,
+   "h": "83db06c13b8a73bb"
+  },
+  "e.clock.60.1": {
+   "t": "One full hour. I've had shorter sieges.",
+   "ms": 3096,
+   "h": "d4a5e7ad6603de55"
+  },
+  "e.clock.60.2": {
+   "t": "An hour has passed. Children have been born and knighted in less time.",
+   "ms": 4824,
+   "h": "5b799afbbec891ff"
+  },
+  "e.decree.1": {
+   "t": "Royal decree! On the count of three, everyone point at your prime suspect. One. Two. Three!",
+   "ms": 6312,
+   "h": "59084f1a5c1d44e9"
+  },
+  "e.decree.10": {
+   "t": "Royal decree! Everyone, give a slow, knowing nod. Evil, try to do it convincingly.",
+   "ms": 6336,
+   "h": "c111b623f872a88f"
+  },
+  "e.decree.11": {
+   "t": "Royal decree! The loudest person at this table must now whisper until the vote.",
+   "ms": 4944,
+   "h": "9739e39055c96d28"
+  },
+  "e.decree.12": {
+   "t": "Royal decree! Name one person you'd take on this quest, and one you wouldn't. Quickly now.",
+   "ms": 5592,
+   "h": "927042e8f97161c7"
+  },
+  "e.decree.13": {
+   "t": "Royal decree! Everyone must now address the leader as Your Majesty.",
+   "ms": 4320,
+   "h": "a79aa14071079b7e"
+  },
+  "e.decree.14": {
+   "t": "Royal decree! The person who was last on a quest must explain themselves. Thoroughly.",
+   "ms": 6048,
+   "h": "594321a4bacfcaab"
+  },
+  "e.decree.2": {
+   "t": "Royal decree! The leader must now compliment the person they trust least.",
+   "ms": 4296,
+   "h": "57c9448cb4aa72b8"
+  },
+  "e.decree.3": {
+   "t": "Royal decree! Everyone must speak in a terrible English accent until this discussion ends.",
+   "ms": 5712,
+   "h": "570f944141a64ed2"
+  },
+  "e.decree.4": {
+   "t": "Royal decree! The next person to say trust me owes the table a bow.",
+   "ms": 5208,
+   "h": "e6bbd33a2b58bae4"
+  },
+  "e.decree.5": {
+   "t": "Royal decree! Raise your hand if you have never lied in this game. Interesting. Very interesting.",
+   "ms": 6864,
+   "h": "51ee10d92ffed0a0"
+  },
+  "e.decree.6": {
+   "t": "Royal decree! Whoever has spoken least must now give a stirring speech. Ten seconds. Go.",
+   "ms": 6168,
+   "h": "e2466a954a2e36c3"
+  },
+  "e.decree.7": {
+   "t": "Royal decree! Everyone look your neighbour in the eye and say, I am loyal. Now, who blinked?",
+   "ms": 5808,
+   "h": "2e4bf9d921e07512"
+  },
+  "e.decree.8": {
+   "t": "Royal decree! No one may say the word Merlin until the party is chosen.",
+   "ms": 4368,
+   "h": "610e10b398bb4b6b"
+  },
+  "e.decree.9": {
+   "t": "Royal decree! The person on the leader's left must now defend the leader's honour.",
+   "ms": 4656,
+   "h": "b0c0281125dc36f9"
+  },
   "e.discussion.final10.1": {
    "t": "Ten seconds! Wrap up your wild theories.",
    "ms": 2952,
@@ -362,6 +487,11 @@
    "t": "Talk amongst yourselves. Preferably about each other.",
    "ms": 3264,
    "h": "fdc9fe4b7d114c6d"
+  },
+  "e.discussion.start.4": {
+   "t": "The floor is open. Talk it out before the leader chooses a party.",
+   "ms": 3216,
+   "h": "9ed50210e3ced15b"
   },
   "e.end.evil_assassin.1": {
    "t": "Evil wins by assassination! Good did all that work for nothing. Delicious.",
@@ -607,6 +737,181 @@
    "t": "The hall is open! Join on your phones. The betrayal is free, and so are the snacks, presumably.",
    "ms": 4920,
    "h": "f8e9dbd84fcf6716"
+  },
+  "e.mc.continue_quest.1": {
+   "t": "The quest is done. Tap continue, and we march on.",
+   "ms": 3240,
+   "h": "faa801e334d78ec5"
+  },
+  "e.mc.continue_quest.2": {
+   "t": "Have a good stare at those cards. Then tap continue.",
+   "ms": 3168,
+   "h": "78b4fad65d065fb4"
+  },
+  "e.mc.continue_quest.3": {
+   "t": "Mourn or rejoice, but do tap continue while you're at it.",
+   "ms": 3720,
+   "h": "2bfb09be73b25a5e"
+  },
+  "e.mc.continue_quest.4": {
+   "t": "That's the tale of this quest. Everyone tap continue for the next chapter.",
+   "ms": 4056,
+   "h": "7dcea2b79d9bc2a8"
+  },
+  "e.mc.continue_vote_fail.1": {
+   "t": "That party goes nowhere. Tap continue, and the crown moves along.",
+   "ms": 3864,
+   "h": "c885beb6d3d2c3b2"
+  },
+  "e.mc.continue_vote_fail.2": {
+   "t": "Back to the table with you. Tap continue for the next leader.",
+   "ms": 3336,
+   "h": "cce8fbd9079dc65d"
+  },
+  "e.mc.continue_vote_fail.3": {
+   "t": "Denied! Everyone tap continue, and let's find someone else to blame.",
+   "ms": 4200,
+   "h": "5c3068709735b249"
+  },
+  "e.mc.continue_vote_pass.1": {
+   "t": "The party has its mandate. Tap continue, and we ride.",
+   "ms": 3720,
+   "h": "49cc269695a6bc16"
+  },
+  "e.mc.continue_vote_pass.2": {
+   "t": "Well, that's settled. Tap continue when you've finished gloating.",
+   "ms": 3672,
+   "h": "f40b8272bdcd27b4"
+  },
+  "e.mc.continue_vote_pass.3": {
+   "t": "Approved and official. Everyone tap continue, and off to the quest.",
+   "ms": 4488,
+   "h": "0ff4d8609b6a1e0b"
+  },
+  "e.mc.double_fail.1": {
+   "t": "A rule to remember! This quest only falls if two fail cards are played.",
+   "ms": 4704,
+   "h": "7aca435d350d3257"
+  },
+  "e.mc.double_fail.2": {
+   "t": "Take note: on this quest, one fail is not enough. It takes two.",
+   "ms": 4416,
+   "h": "ea99876a3bd30941"
+  },
+  "e.mc.enter.1": {
+   "t": "The party is set. Everyone, tap to enter the quest.",
+   "ms": 3432,
+   "h": "7d94b6d9c4179620"
+  },
+  "e.mc.enter.2": {
+   "t": "Saddle up! All of you, tap your phones and enter the quest.",
+   "ms": 3312,
+   "h": "a2ff517fb44cf964"
+  },
+  "e.mc.enter.3": {
+   "t": "To the quest! Everyone taps in, whether you're going or merely watching.",
+   "ms": 4368,
+   "h": "9e914c14d3813110"
+  },
+  "e.mc.enter.4": {
+   "t": "The gates are open. Tap to enter the quest, one and all.",
+   "ms": 4344,
+   "h": "71061770fddbc15f"
+  },
+  "e.mc.match_evil.1": {
+   "t": "Match point for Evil. One more failure, and Camelot falls.",
+   "ms": 4512,
+   "h": "d1ab15c2c0aadb14"
+  },
+  "e.mc.match_evil.2": {
+   "t": "Evil needs just one more quest. Good, do stop helping them.",
+   "ms": 4368,
+   "h": "277c8831d6b3be40"
+  },
+  "e.mc.match_good.1": {
+   "t": "Match point for Good. One more success, and the Assassin is summoned.",
+   "ms": 4488,
+   "h": "3351727e3026edea"
+  },
+  "e.mc.match_good.2": {
+   "t": "Good needs just one more quest. Evil, this would be the moment to panic.",
+   "ms": 4776,
+   "h": "5e93ec90ee8b06d3"
+  },
+  "e.mc.party.2.1": {
+   "t": "Leader, choose your party. Two souls for this quest.",
+   "ms": 3288,
+   "h": "2dd7cf5a1d525995"
+  },
+  "e.mc.party.2.2": {
+   "t": "Two knights are needed, leader. Pick them, and lock it in.",
+   "ms": 2976,
+   "h": "2b24a7a55423cd10"
+  },
+  "e.mc.party.2.3": {
+   "t": "A party of two, leader. Small, intimate, and easy to blame.",
+   "ms": 4320,
+   "h": "53af749757804b72"
+  },
+  "e.mc.party.3.1": {
+   "t": "Leader, choose your party. Three souls for this quest.",
+   "ms": 3984,
+   "h": "2fda1ec5a72c47ad"
+  },
+  "e.mc.party.3.2": {
+   "t": "Three knights are needed, leader. Pick them, and lock it in.",
+   "ms": 2856,
+   "h": "a81448c0130821d2"
+  },
+  "e.mc.party.3.3": {
+   "t": "A party of three, leader. Someone's always the third wheel.",
+   "ms": 3312,
+   "h": "51e3f671bcaa69e1"
+  },
+  "e.mc.party.4.1": {
+   "t": "Leader, choose your party. Four souls for this quest.",
+   "ms": 3624,
+   "h": "497585b04d81c509"
+  },
+  "e.mc.party.4.2": {
+   "t": "Four knights are needed, leader. Pick them, and lock it in.",
+   "ms": 3120,
+   "h": "031282cf96277efd"
+  },
+  "e.mc.party.4.3": {
+   "t": "A party of four, leader. That's plenty of room for a traitor.",
+   "ms": 3384,
+   "h": "fa36b0304ab099f5"
+  },
+  "e.mc.party.5.1": {
+   "t": "Leader, choose your party. Five souls for this quest.",
+   "ms": 3672,
+   "h": "c8dd2c2573376cf7"
+  },
+  "e.mc.party.5.2": {
+   "t": "Five knights are needed, leader. Pick them, and lock it in.",
+   "ms": 3408,
+   "h": "962fe710be097cdd"
+  },
+  "e.mc.party.5.3": {
+   "t": "A party of five, leader. Practically a parade.",
+   "ms": 2856,
+   "h": "8c0d211a019e0067"
+  },
+  "e.mc.rematch.1": {
+   "t": "That's the game! Tap run it back on your phones if you'd like another.",
+   "ms": 3840,
+   "h": "62c4689da18e09de"
+  },
+  "e.mc.rematch.2": {
+   "t": "The tale is told. Who's for another round? Tap run it back.",
+   "ms": 3648,
+   "h": "37c4af11974675b2"
+  },
+  "e.mc.rematch.3": {
+   "t": "If your friendships survived, tap run it back and we'll fix that.",
+   "ms": 3432,
+   "h": "9d6df6375f176003"
   },
   "e.meta.ambient.1": {
    "t": "A reminder from management: lying is not only allowed, it is encouraged.",
@@ -898,6 +1203,16 @@
    "ms": 6288,
    "h": "cf81a13a6241b8b7"
   },
+  "e.quest.begins.5": {
+   "t": "Quest members, play your card. Success or fail.",
+   "ms": 3456,
+   "h": "c442de0fd63c9c9c"
+  },
+  "e.quest.begins.6": {
+   "t": "The party has arrived. Quest members, success or fail? Choose now.",
+   "ms": 5280,
+   "h": "d003d8492307a210"
+  },
   "e.quest.close_call.1": {
    "t": "One fail, but quest four needs two. The quest survives. Barely.",
    "ms": 5352,
@@ -987,6 +1302,26 @@
    "t": "Clean as a whistle! The quest is a success.",
    "ms": 3120,
    "h": "62208c715626b89e"
+  },
+  "e.rejection.1.1": {
+   "t": "One party rejected. Four more tries before Evil collects.",
+   "ms": 4320,
+   "h": "f2347008c5f45264"
+  },
+  "e.rejection.1.2": {
+   "t": "First rejection on the board. The crown moves on.",
+   "ms": 2664,
+   "h": "3a6dbf48a82bba40"
+  },
+  "e.rejection.2.1": {
+   "t": "Two parties rejected. The track is filling up, my lords.",
+   "ms": 3648,
+   "h": "be4a3add9487bc6a"
+  },
+  "e.rejection.2.2": {
+   "t": "That's two rejections. Do try to agree on something tonight.",
+   "ms": 3336,
+   "h": "85f83464be6ef21d"
   },
   "e.rejection.3.1": {
    "t": "Three rejections. Two more failed votes would be... a problem. Just saying.",
@@ -1102,6 +1437,231 @@
    "t": "First-try approvals, again. Such harmony. I don't trust it one bit.",
    "ms": 5112,
    "h": "adc96d435e59736f"
+  },
+  "e.time.assassin_30.1": {
+   "t": "Thirty seconds of deliberation, and the Assassin still holds the blade.",
+   "ms": 3912,
+   "h": "fbabdc65740648f5"
+  },
+  "e.time.assassin_30.2": {
+   "t": "Minions, confer. Whisper. Point. Merlin is sitting right there.",
+   "ms": 4560,
+   "h": "d0d112e8c69961b0"
+  },
+  "e.time.assassin_90.1": {
+   "t": "Assassin, the blade is getting heavy. Choose.",
+   "ms": 2640,
+   "h": "a7418aa3ef5fc4c1"
+  },
+  "e.time.assassin_90.2": {
+   "t": "Any time now, Assassin. Merlin has aged a decade.",
+   "ms": 3384,
+   "h": "7175028cc2297867"
+  },
+  "e.time.cards_20.1": {
+   "t": "Quest members, your cards are awaited.",
+   "ms": 2304,
+   "h": "0059dd89a53938fa"
+  },
+  "e.time.cards_20.2": {
+   "t": "The quest party has cards to play. Take your time, but not too much.",
+   "ms": 3744,
+   "h": "f48b5d984274b4a1"
+  },
+  "e.time.cards_20.3": {
+   "t": "Still waiting on quest cards. Everyone else, try to look relaxed.",
+   "ms": 4008,
+   "h": "84bb392e76cd2742"
+  },
+  "e.time.cards_45.1": {
+   "t": "Quest members, it's two buttons. We believe in you.",
+   "ms": 2784,
+   "h": "ef0e982b78c4c33f"
+  },
+  "e.time.cards_45.2": {
+   "t": "The rest of the court is growing old. Play your cards, please.",
+   "ms": 3720,
+   "h": "a327410de7f63000"
+  },
+  "e.time.cards_45.3": {
+   "t": "Still waiting on those cards. The dragon has gone home.",
+   "ms": 3528,
+   "h": "f11189034399df13"
+  },
+  "e.time.continue.1": {
+   "t": "Everyone still needs to tap continue. The list on the screen knows who you are.",
+   "ms": 4848,
+   "h": "80bb460bd30acbc6"
+  },
+  "e.time.continue.2": {
+   "t": "We can't move on until you tap continue. Yes, you.",
+   "ms": 3360,
+   "h": "e1566723d4fcf8bd"
+  },
+  "e.time.continue.3": {
+   "t": "Tap continue, please. The story is waiting.",
+   "ms": 2976,
+   "h": "5c1432348aa87ef1"
+  },
+  "e.time.continue_long.1": {
+   "t": "Still waiting. Host, if someone has wandered off, Force Continue is in Settings.",
+   "ms": 4656,
+   "h": "208ce711e5469627"
+  },
+  "e.time.continue_long.2": {
+   "t": "We are stuck on the continue button, my lords. A truly medieval problem.",
+   "ms": 4512,
+   "h": "1a69ab4478f9c887"
+  },
+  "e.time.discussion_30.1": {
+   "t": "Thirty seconds left. If you have an accusation, now's the time.",
+   "ms": 3768,
+   "h": "ccd22c6c4093375c"
+  },
+  "e.time.discussion_30.2": {
+   "t": "Half a minute to go. Get your theories in order.",
+   "ms": 2592,
+   "h": "9e17e1a8496d53b8"
+  },
+  "e.time.discussion_30.3": {
+   "t": "Thirty seconds, my lords. Leader, start thinking about your party.",
+   "ms": 4032,
+   "h": "cba7fc7aaa79b501"
+  },
+  "e.time.discussion_60.1": {
+   "t": "One minute of discussion left. Choose your lies carefully.",
+   "ms": 3048,
+   "h": "0ac83a9bfa5e875e"
+  },
+  "e.time.discussion_60.2": {
+   "t": "Sixty seconds remain. Plenty of time to ruin a friendship.",
+   "ms": 3864,
+   "h": "72eecd0397a794c5"
+  },
+  "e.time.enter.1": {
+   "t": "A few of you haven't entered the quest yet. Tap in, please.",
+   "ms": 3096,
+   "h": "510fc368af71be4d"
+  },
+  "e.time.enter.2": {
+   "t": "The party can't leave until everyone taps in. Yes, even you.",
+   "ms": 4368,
+   "h": "19288edc59ac4952"
+  },
+  "e.time.night.1": {
+   "t": "Some of you are still reading your roles. It's one word, not a novel.",
+   "ms": 4320,
+   "h": "40fc77446a28bde0"
+  },
+  "e.time.night.2": {
+   "t": "Dawn is waiting on a few of you. Confirm your role, please.",
+   "ms": 2856,
+   "h": "4232f5a7940b4b83"
+  },
+  "e.time.night.3": {
+   "t": "Finish memorising your secrets and tap confirm. The sun has a schedule.",
+   "ms": 5664,
+   "h": "1bddc6f5df33d465"
+  },
+  "e.time.opening.1": {
+   "t": "We are waiting on a few of you to enter Avalon. It's the button on your phone.",
+   "ms": 4920,
+   "h": "a7973ffee138fb30"
+  },
+  "e.time.opening.2": {
+   "t": "Tap in, please. The game can't betray you until you do.",
+   "ms": 3408,
+   "h": "1e36b11ec87b509c"
+  },
+  "e.time.proposal_10.1": {
+   "t": "Ten seconds, leader! Lock it in!",
+   "ms": 1992,
+   "h": "65672f76937452c9"
+  },
+  "e.time.proposal_10.2": {
+   "t": "Ten seconds left! Choose somebody! Anybody!",
+   "ms": 3528,
+   "h": "0435dd0b00a6bcca"
+  },
+  "e.time.proposal_10.3": {
+   "t": "Leader, ten seconds. This is what we call pressure.",
+   "ms": 3720,
+   "h": "7c6755fc412acb8a"
+  },
+  "e.time.proposal_30.1": {
+   "t": "Thirty seconds, leader. Pick your party.",
+   "ms": 2280,
+   "h": "746794c48a42f059"
+  },
+  "e.time.proposal_30.2": {
+   "t": "Leader, the sand is running. Thirty seconds remain.",
+   "ms": 3480,
+   "h": "27befd670f995caa"
+  },
+  "e.time.proposal_long.1": {
+   "t": "Still nothing, leader? Empires have fallen faster than this.",
+   "ms": 4128,
+   "h": "37a79b03ad306870"
+  },
+  "e.time.proposal_long.2": {
+   "t": "Leader, the quest has grown old and retired. Please lock in a party.",
+   "ms": 4152,
+   "h": "46695ff4540dd29e"
+  },
+  "e.time.proposal_over.1": {
+   "t": "Time's up, leader! The whole court is staring. Lock in a party.",
+   "ms": 4104,
+   "h": "feedc4af090141de"
+  },
+  "e.time.proposal_over.2": {
+   "t": "The hourglass is empty. Leader, we need that party now.",
+   "ms": 3984,
+   "h": "cc3cbc3eb414719e"
+  },
+  "e.time.proposal_over.3": {
+   "t": "That's time! Leader, stop rearranging and lock it in.",
+   "ms": 3384,
+   "h": "427e4d221d42047c"
+  },
+  "e.time.start.1": {
+   "t": "Everyone is ready, host. The start button is feeling lonely.",
+   "ms": 3576,
+   "h": "66e951ee7a49a9c4"
+  },
+  "e.time.start.2": {
+   "t": "All are ready and nothing is happening. Host, press start.",
+   "ms": 4104,
+   "h": "53c8099965881f2e"
+  },
+  "e.time.vote_15.1": {
+   "t": "Votes, please. Approve or reject. There is no third button.",
+   "ms": 3960,
+   "h": "b37c316a03768b94"
+  },
+  "e.time.vote_15.2": {
+   "t": "Fifteen seconds in, and still some phones are silent. Cast your vote.",
+   "ms": 4224,
+   "h": "2491e2b250e85387"
+  },
+  "e.time.vote_15.3": {
+   "t": "The ballot box is waiting. Approve or reject, my lords.",
+   "ms": 3504,
+   "h": "e64303f9a6832beb"
+  },
+  "e.time.vote_long.1": {
+   "t": "We are still waiting on votes. Look at the screen. You know who you are.",
+   "ms": 5040,
+   "h": "fab8137278151c67"
+  },
+  "e.time.vote_long.2": {
+   "t": "This vote has now lasted longer than most medieval marriages.",
+   "ms": 3384,
+   "h": "b4032130c5a33fab"
+  },
+  "e.time.vote_long.3": {
+   "t": "Vote, please. The realm can't take much more of this.",
+   "ms": 3192,
+   "h": "450a276a67582254"
   },
   "e.tv.back.1": {
    "t": "Ah, the great screen returns. Did I miss any lies? Of course I did.",
@@ -1227,6 +1787,16 @@
    "t": "Vote now. History is watching, and history is a terrible gossip.",
    "ms": 4872,
    "h": "e68539d1c96b2955"
+  },
+  "e.vote.start.5": {
+   "t": "Time to vote. Approve this party, or reject it.",
+   "ms": 3456,
+   "h": "351a520d05562668"
+  },
+  "e.vote.start.6": {
+   "t": "Voting is open! Approve or reject, on your phones, now.",
+   "ms": 4512,
+   "h": "c55ef416c6e63b77"
   },
   "e.vote.stragglers.1": {
    "t": "Some of you are still voting. It's a yes or a no, not a sonnet.",
@@ -2353,7 +2923,8 @@
   "discussion.start": [
    "e.discussion.start.1",
    "e.discussion.start.2",
-   "e.discussion.start.3"
+   "e.discussion.start.3",
+   "e.discussion.start.4"
   ],
   "discussion.final10": [
    "e.discussion.final10.1",
@@ -2389,7 +2960,9 @@
    "e.vote.start.1",
    "e.vote.start.2",
    "e.vote.start.3",
-   "e.vote.start.4"
+   "e.vote.start.4",
+   "e.vote.start.5",
+   "e.vote.start.6"
   ],
   "vote.stragglers": [
    "e.vote.stragglers.1",
@@ -2438,7 +3011,9 @@
    "e.quest.begins.1",
    "e.quest.begins.2",
    "e.quest.begins.3",
-   "e.quest.begins.4"
+   "e.quest.begins.4",
+   "e.quest.begins.5",
+   "e.quest.begins.6"
   ],
   "quest.sealed": [
    "e.quest.sealed.1",
@@ -2485,7 +3060,8 @@
   "assassin.start": [
    "e.assassin.start.1",
    "e.assassin.start.2",
-   "e.assassin.start.3"
+   "e.assassin.start.3",
+   "e.assassin.start.4"
   ],
   "assassin.slow": [
    "e.assassin.slow.1",
@@ -2585,6 +3161,190 @@
   "rematch.instant": [
    "e.rematch.instant.1",
    "e.rematch.instant.2"
+  ],
+  "mc.enter": [
+   "e.mc.enter.1",
+   "e.mc.enter.2",
+   "e.mc.enter.3",
+   "e.mc.enter.4"
+  ],
+  "mc.continue_vote_pass": [
+   "e.mc.continue_vote_pass.1",
+   "e.mc.continue_vote_pass.2",
+   "e.mc.continue_vote_pass.3"
+  ],
+  "mc.continue_vote_fail": [
+   "e.mc.continue_vote_fail.1",
+   "e.mc.continue_vote_fail.2",
+   "e.mc.continue_vote_fail.3"
+  ],
+  "mc.continue_quest": [
+   "e.mc.continue_quest.1",
+   "e.mc.continue_quest.2",
+   "e.mc.continue_quest.3",
+   "e.mc.continue_quest.4"
+  ],
+  "mc.party.2": [
+   "e.mc.party.2.1",
+   "e.mc.party.2.2",
+   "e.mc.party.2.3"
+  ],
+  "mc.party.3": [
+   "e.mc.party.3.1",
+   "e.mc.party.3.2",
+   "e.mc.party.3.3"
+  ],
+  "mc.party.4": [
+   "e.mc.party.4.1",
+   "e.mc.party.4.2",
+   "e.mc.party.4.3"
+  ],
+  "mc.party.5": [
+   "e.mc.party.5.1",
+   "e.mc.party.5.2",
+   "e.mc.party.5.3"
+  ],
+  "mc.double_fail": [
+   "e.mc.double_fail.1",
+   "e.mc.double_fail.2"
+  ],
+  "mc.match_good": [
+   "e.mc.match_good.1",
+   "e.mc.match_good.2"
+  ],
+  "mc.match_evil": [
+   "e.mc.match_evil.1",
+   "e.mc.match_evil.2"
+  ],
+  "mc.rematch": [
+   "e.mc.rematch.1",
+   "e.mc.rematch.2",
+   "e.mc.rematch.3"
+  ],
+  "rejection.1": [
+   "e.rejection.1.1",
+   "e.rejection.1.2"
+  ],
+  "rejection.2": [
+   "e.rejection.2.1",
+   "e.rejection.2.2"
+  ],
+  "time.opening": [
+   "e.time.opening.1",
+   "e.time.opening.2"
+  ],
+  "time.night": [
+   "e.time.night.1",
+   "e.time.night.2",
+   "e.time.night.3"
+  ],
+  "time.enter": [
+   "e.time.enter.1",
+   "e.time.enter.2"
+  ],
+  "time.start": [
+   "e.time.start.1",
+   "e.time.start.2"
+  ],
+  "time.discussion_60": [
+   "e.time.discussion_60.1",
+   "e.time.discussion_60.2"
+  ],
+  "time.discussion_30": [
+   "e.time.discussion_30.1",
+   "e.time.discussion_30.2",
+   "e.time.discussion_30.3"
+  ],
+  "time.proposal_30": [
+   "e.time.proposal_30.1",
+   "e.time.proposal_30.2"
+  ],
+  "time.proposal_10": [
+   "e.time.proposal_10.1",
+   "e.time.proposal_10.2",
+   "e.time.proposal_10.3"
+  ],
+  "time.proposal_over": [
+   "e.time.proposal_over.1",
+   "e.time.proposal_over.2",
+   "e.time.proposal_over.3"
+  ],
+  "time.proposal_long": [
+   "e.time.proposal_long.1",
+   "e.time.proposal_long.2"
+  ],
+  "time.vote_15": [
+   "e.time.vote_15.1",
+   "e.time.vote_15.2",
+   "e.time.vote_15.3"
+  ],
+  "time.vote_long": [
+   "e.time.vote_long.1",
+   "e.time.vote_long.2",
+   "e.time.vote_long.3"
+  ],
+  "time.cards_20": [
+   "e.time.cards_20.1",
+   "e.time.cards_20.2",
+   "e.time.cards_20.3"
+  ],
+  "time.cards_45": [
+   "e.time.cards_45.1",
+   "e.time.cards_45.2",
+   "e.time.cards_45.3"
+  ],
+  "time.continue": [
+   "e.time.continue.1",
+   "e.time.continue.2",
+   "e.time.continue.3"
+  ],
+  "time.continue_long": [
+   "e.time.continue_long.1",
+   "e.time.continue_long.2"
+  ],
+  "time.assassin_30": [
+   "e.time.assassin_30.1",
+   "e.time.assassin_30.2"
+  ],
+  "time.assassin_90": [
+   "e.time.assassin_90.1",
+   "e.time.assassin_90.2"
+  ],
+  "clock.10": [
+   "e.clock.10.1",
+   "e.clock.10.2"
+  ],
+  "clock.20": [
+   "e.clock.20.1",
+   "e.clock.20.2"
+  ],
+  "clock.30": [
+   "e.clock.30.1",
+   "e.clock.30.2"
+  ],
+  "clock.45": [
+   "e.clock.45.1",
+   "e.clock.45.2"
+  ],
+  "clock.60": [
+   "e.clock.60.1",
+   "e.clock.60.2"
+  ],
+  "decree": [
+   "e.decree.1",
+   "e.decree.2",
+   "e.decree.3",
+   "e.decree.4",
+   "e.decree.5",
+   "e.decree.6",
+   "e.decree.7",
+   "e.decree.8",
+   "e.decree.9",
+   "e.decree.10",
+   "e.decree.11",
+   "e.decree.12",
+   "e.decree.13",
+   "e.decree.14"
   ],
   "vote.speedrun": [
    "e.vote.speedrun.1",

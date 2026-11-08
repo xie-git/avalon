@@ -944,7 +944,7 @@ Object.assign(window.AVALON_ZH_CN, {
   "The host rides on": "房主决定继续",
   "Ready. Waiting for the others…": "已准备，等待其他人…",
   "Narrator chattiness": "旁白频率",
-  "How often the narrator chimes in": "旁白插话的频率",
+  "How often he jokes between announcements": "播报之外开玩笑的频率",
   "Quiet": "安静",
   "Normal": "正常",
   "Chatty": "话多"

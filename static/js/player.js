@@ -1297,7 +1297,7 @@ function showVoteReveal(data) {
         if (!ST.herald.hasPending('narrator')) {
             const cue = rejections === 0 ? 'vote.unanimous_yes' : approvals === 0 ? 'vote.unanimous_no'
                 : approvals === rejections ? 'vote.tie' : approved ? 'vote.approved' : 'vote.rejected';
-            ST.herald.cue(cue, { priority: 76, ttl: 5000, chance: 0.75, minGap: 8000 });
+            ST.herald.cue(cue, { priority: 80, ttl: 7000, pace: 'key' });
         }
         ST.herald.release();
     }, Math.max(1100, entries.length * VOTE_REVEAL_STEP_MS + 1100));
@@ -1405,7 +1405,7 @@ function showMissionOutcome(data, canContinue = false, instant = false) {
         if (!ST.herald.hasPending('narrator')) {
             const closeCall = data.passed && failures >= 1 && data.requires_double_fail;
             ST.herald.cue(closeCall ? 'quest.close_call' : data.passed ? 'quest.success'
-                : failures > 1 ? 'quest.fail_many' : 'quest.fail_one', { priority: 78, ttl: 6000, chance: 0.8, minGap: 6000 });
+                : failures > 1 ? 'quest.fail_many' : 'quest.fail_one', { priority: 82, ttl: 8000, pace: 'key' });
         }
         ST.herald.release();
     }

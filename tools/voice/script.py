@@ -114,6 +114,7 @@ EVENT_CUES: dict[str, tuple[str, ...]] = {
         "Discuss! Accuse! Defend! Point dramatically!",
         "The floor is open. Make your case, and make it loud.",
         "Talk amongst yourselves. Preferably about each other.",
+        "The floor is open. Talk it out before the leader chooses a party.",
     ),
     "discussion.final10": (
         "Ten seconds! Wrap up your wild theories.",
@@ -152,6 +153,8 @@ EVENT_CUES: dict[str, tuple[str, ...]] = {
         "Cast your votes! Every one of them will be shown to everyone. No pressure.",
         "To the ballot! Remember, your vote is secret for about ten seconds.",
         "Vote now. History is watching, and history is a terrible gossip.",
+        "Time to vote. Approve this party, or reject it.",
+        "Voting is open! Approve or reject, on your phones, now.",
     ),
     "vote.stragglers": (
         "Some of you are still voting. It's a yes or a no, not a sonnet.",
@@ -202,6 +205,8 @@ EVENT_CUES: dict[str, tuple[str, ...]] = {
         "Into the wilderness they go. Quest members, play your cards on your phones.",
         "The fellowship departs. Good may only succeed. Evil may do as it pleases. Choose.",
         "Off on the quest! Everyone else, look anywhere except at their faces. Actually no, look right at them.",
+        "Quest members, play your card. Success or fail.",
+        "The party has arrived. Quest members, success or fail? Choose now.",
     ),
     "quest.sealed": (
         "All the cards are in. Let's shuffle these, shall we?",
@@ -250,6 +255,7 @@ EVENT_CUES: dict[str, tuple[str, ...]] = {
         "Three quests succeed! But wait. The Assassin may yet strike. Find Merlin, and evil steals the game.",
         "Good has won the quests. Now the Assassin chooses one target. Guess Merlin, and it's all for nothing.",
         "Not so fast, heroes! The Assassin emerges from the shadows. Merlin, try to look ordinary.",
+        "Three quests won, but it isn't over. Assassin, name Merlin on your phone.",
     ),
     "assassin.slow": (
         "The Assassin is taking their time. Somewhere, Merlin is sweating.",
@@ -351,6 +357,194 @@ EVENT_CUES: dict[str, tuple[str, ...]] = {
     "rematch.instant": (
         "Everyone wants a rematch already! Healing is overrated.",
         "A unanimous rematch! Nobody learned a thing. Wonderful.",
+    ),
+    # The MC: spoken announcements for every step of the game -----------------
+    "mc.enter": (
+        "The party is set. Everyone, tap to enter the quest.",
+        "Saddle up! All of you, tap your phones and enter the quest.",
+        "To the quest! Everyone taps in, whether you're going or merely watching.",
+        "The gates are open. Tap to enter the quest, one and all.",
+    ),
+    "mc.continue_vote_pass": (
+        "The party has its mandate. Tap continue, and we ride.",
+        "Well, that's settled. Tap continue when you've finished gloating.",
+        "Approved and official. Everyone tap continue, and off to the quest.",
+    ),
+    "mc.continue_vote_fail": (
+        "That party goes nowhere. Tap continue, and the crown moves along.",
+        "Back to the table with you. Tap continue for the next leader.",
+        "Denied! Everyone tap continue, and let's find someone else to blame.",
+    ),
+    "mc.continue_quest": (
+        "The quest is done. Tap continue, and we march on.",
+        "Have a good stare at those cards. Then tap continue.",
+        "Mourn or rejoice, but do tap continue while you're at it.",
+        "That's the tale of this quest. Everyone tap continue for the next chapter.",
+    ),
+    "mc.party.2": (
+        "Leader, choose your party. Two souls for this quest.",
+        "Two knights are needed, leader. Pick them, and lock it in.",
+        "A party of two, leader. Small, intimate, and easy to blame.",
+    ),
+    "mc.party.3": (
+        "Leader, choose your party. Three souls for this quest.",
+        "Three knights are needed, leader. Pick them, and lock it in.",
+        "A party of three, leader. Someone's always the third wheel.",
+    ),
+    "mc.party.4": (
+        "Leader, choose your party. Four souls for this quest.",
+        "Four knights are needed, leader. Pick them, and lock it in.",
+        "A party of four, leader. That's plenty of room for a traitor.",
+    ),
+    "mc.party.5": (
+        "Leader, choose your party. Five souls for this quest.",
+        "Five knights are needed, leader. Pick them, and lock it in.",
+        "A party of five, leader. Practically a parade.",
+    ),
+    "mc.double_fail": (
+        "A rule to remember! This quest only falls if two fail cards are played.",
+        "Take note: on this quest, one fail is not enough. It takes two.",
+    ),
+    "mc.match_good": (
+        "Match point for Good. One more success, and the Assassin is summoned.",
+        "Good needs just one more quest. Evil, this would be the moment to panic.",
+    ),
+    "mc.match_evil": (
+        "Match point for Evil. One more failure, and Camelot falls.",
+        "Evil needs just one more quest. Good, do stop helping them.",
+    ),
+    "mc.rematch": (
+        "That's the game! Tap run it back on your phones if you'd like another.",
+        "The tale is told. Who's for another round? Tap run it back.",
+        "If your friendships survived, tap run it back and we'll fix that.",
+    ),
+    "rejection.1": (
+        "One party rejected. Four more tries before Evil collects.",
+        "First rejection on the board. The crown moves on.",
+    ),
+    "rejection.2": (
+        "Two parties rejected. The track is filling up, my lords.",
+        "That's two rejections. Do try to agree on something tonight.",
+    ),
+    # Timed calls: countdowns and nudges --------------------------------------
+    "time.opening": (
+        "We are waiting on a few of you to enter Avalon. It's the button on your phone.",
+        "Tap in, please. The game can't betray you until you do.",
+    ),
+    "time.night": (
+        "Some of you are still reading your roles. It's one word, not a novel.",
+        "Dawn is waiting on a few of you. Confirm your role, please.",
+        "Finish memorising your secrets and tap confirm. The sun has a schedule.",
+    ),
+    "time.enter": (
+        "A few of you haven't entered the quest yet. Tap in, please.",
+        "The party can't leave until everyone taps in. Yes, even you.",
+    ),
+    "time.start": (
+        "Everyone is ready, host. The start button is feeling lonely.",
+        "All are ready and nothing is happening. Host, press start.",
+    ),
+    "time.discussion_60": (
+        "One minute of discussion left. Choose your lies carefully.",
+        "Sixty seconds remain. Plenty of time to ruin a friendship.",
+    ),
+    "time.discussion_30": (
+        "Thirty seconds left. If you have an accusation, now's the time.",
+        "Half a minute to go. Get your theories in order.",
+        "Thirty seconds, my lords. Leader, start thinking about your party.",
+    ),
+    "time.proposal_30": (
+        "Thirty seconds, leader. Pick your party.",
+        "Leader, the sand is running. Thirty seconds remain.",
+    ),
+    "time.proposal_10": (
+        "Ten seconds, leader! Lock it in!",
+        "Ten seconds left! Choose somebody! Anybody!",
+        "Leader, ten seconds. This is what we call pressure.",
+    ),
+    "time.proposal_over": (
+        "Time's up, leader! The whole court is staring. Lock in a party.",
+        "The hourglass is empty. Leader, we need that party now.",
+        "That's time! Leader, stop rearranging and lock it in.",
+    ),
+    "time.proposal_long": (
+        "Still nothing, leader? Empires have fallen faster than this.",
+        "Leader, the quest has grown old and retired. Please lock in a party.",
+    ),
+    "time.vote_15": (
+        "Votes, please. Approve or reject. There is no third button.",
+        "Fifteen seconds in, and still some phones are silent. Cast your vote.",
+        "The ballot box is waiting. Approve or reject, my lords.",
+    ),
+    "time.vote_long": (
+        "We are still waiting on votes. Look at the screen. You know who you are.",
+        "This vote has now lasted longer than most medieval marriages.",
+        "Vote, please. The realm can't take much more of this.",
+    ),
+    "time.cards_20": (
+        "Quest members, your cards are awaited.",
+        "The quest party has cards to play. Take your time, but not too much.",
+        "Still waiting on quest cards. Everyone else, try to look relaxed.",
+    ),
+    "time.cards_45": (
+        "Quest members, it's two buttons. We believe in you.",
+        "The rest of the court is growing old. Play your cards, please.",
+        "Still waiting on those cards. The dragon has gone home.",
+    ),
+    "time.continue": (
+        "Everyone still needs to tap continue. The list on the screen knows who you are.",
+        "We can't move on until you tap continue. Yes, you.",
+        "Tap continue, please. The story is waiting.",
+    ),
+    "time.continue_long": (
+        "Still waiting. Host, if someone has wandered off, Force Continue is in Settings.",
+        "We are stuck on the continue button, my lords. A truly medieval problem.",
+    ),
+    "time.assassin_30": (
+        "Thirty seconds of deliberation, and the Assassin still holds the blade.",
+        "Minions, confer. Whisper. Point. Merlin is sitting right there.",
+    ),
+    "time.assassin_90": (
+        "Assassin, the blade is getting heavy. Choose.",
+        "Any time now, Assassin. Merlin has aged a decade.",
+    ),
+    # The game clock ---------------------------------------------------------
+    "clock.10": (
+        "Ten minutes in. Nobody has been honest yet, and we're right on schedule.",
+        "We are ten minutes into this game. Trust levels are falling nicely.",
+    ),
+    "clock.20": (
+        "Twenty minutes gone. Somebody check on the snacks.",
+        "Twenty minutes in. Grudges are now ripening nicely.",
+    ),
+    "clock.30": (
+        "Half an hour! You could have watched a whole sitcom and betrayed nobody.",
+        "Thirty minutes on the clock. Evil's alibis are starting to need alibis.",
+    ),
+    "clock.45": (
+        "Forty-five minutes. In football, this is when you'd get oranges.",
+        "Forty-five minutes in. The castle has begun charging you rent.",
+    ),
+    "clock.60": (
+        "One full hour. I've had shorter sieges.",
+        "An hour has passed. Children have been born and knighted in less time.",
+    ),
+    # Royal Decrees: silly timed table events during discussion ---------------
+    "decree": (
+        "Royal decree! On the count of three, everyone point at your prime suspect. One. Two. Three!",
+        "Royal decree! The leader must now compliment the person they trust least.",
+        "Royal decree! Everyone must speak in a terrible English accent until this discussion ends.",
+        "Royal decree! The next person to say trust me owes the table a bow.",
+        "Royal decree! Raise your hand if you have never lied in this game. Interesting. Very interesting.",
+        "Royal decree! Whoever has spoken least must now give a stirring speech. Ten seconds. Go.",
+        "Royal decree! Everyone look your neighbour in the eye and say, I am loyal. Now, who blinked?",
+        "Royal decree! No one may say the word Merlin until the party is chosen.",
+        "Royal decree! The person on the leader's left must now defend the leader's honour.",
+        "Royal decree! Everyone, give a slow, knowing nod. Evil, try to do it convincingly.",
+        "Royal decree! The loudest person at this table must now whisper until the vote.",
+        "Royal decree! Name one person you'd take on this quest, and one you wouldn't. Quickly now.",
+        "Royal decree! Everyone must now address the leader as Your Majesty.",
+        "Royal decree! The person who was last on a quest must explain themselves. Thoroughly.",
     ),
     # Obscure moments the display notices (public information only) --------
     "vote.speedrun": (
