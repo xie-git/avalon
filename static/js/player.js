@@ -3,6 +3,8 @@
    ============================================================ */
 
 const socket = io();
+// Presentation-only layer (narrator voice, sound, spectacle); see showtime.js.
+const ST = window.AvalonShowtime || null;
 const connectionStatus = document.getElementById('connection-status');
 let isSpectator = false;
 let entryAsSpectator = false;
@@ -487,6 +489,7 @@ function renderCinematicParty(container, names = []) {
 
 function transition(id, delay = 0) {
     const overlay = document.getElementById('page-transition');
+    if (document.querySelector('.screen.active')?.id !== id) ST?.sfx.play('cloth', { gain: 0.5, delay });
     overlay.classList.add('active');
     setTimeout(() => {
         showScreen(id);
@@ -1060,6 +1063,10 @@ function compressSelfie(file) {
 // ---------------------------------------------------------------------------
 function showRoleCard(role, team) {
     const roleChanged = myRole !== role;
+    if (roleChanged) {
+        ST?.sfx.play('j-magic');
+        ST?.sfx.synth('shimmer', { gain: 0.08 }, 150);
+    }
     myRole = role;
     myTeam = team;
     if (roleChanged || !myRoleArt) myRoleArt = chooseRoleArt(role);
@@ -1248,7 +1255,9 @@ function showVoteReveal(data) {
         card.append(portrait, label, stamp);
         cards.appendChild(card);
         window.setTimeout(() => {
-            if (sequence === voteRevealSequence) card.className = `cinematic-vote-card ${vote} revealed`;
+            if (sequence !== voteRevealSequence) return;
+            card.className = `cinematic-vote-card ${vote} revealed`;
+            ST?.sfx.play(vote === 'approve' ? 'slide' : 'thud', { gain: 0.8 });
         }, 650 + index * VOTE_REVEAL_STEP_MS);
     });
     const approvals = entries.filter(([, vote]) => vote === 'approve').length;
@@ -1270,8 +1279,25 @@ function showVoteReveal(data) {
     waiting.textContent = 'The court’s judgment is being revealed…';
     showScreen('screen-vote-reveal-player');
     const revealDuration = entries.length * VOTE_REVEAL_STEP_MS + 2450;
+    ST?.herald.hold(Math.max(1100, entries.length * VOTE_REVEAL_STEP_MS + 1100) + 300);
     window.setTimeout(() => {
-        if (sequence === voteRevealSequence) resultCopy.classList.remove('hidden');
+        if (sequence !== voteRevealSequence) return;
+        resultCopy.classList.remove('hidden');
+        if (!ST) return;
+        const rejections = entries.length - approvals;
+        if (approved) {
+            ST.sfx.play('j-approve');
+            ST.fx.burst('confetti', { count: 90, palette: 'gold' });
+        } else {
+            ST.sfx.play('j-reject');
+            ST.fx.shake('light');
+        }
+        if (!ST.herald.hasPending('narrator')) {
+            const cue = rejections === 0 ? 'vote.unanimous_yes' : approvals === 0 ? 'vote.unanimous_no'
+                : approvals === rejections ? 'vote.tie' : approved ? 'vote.approved' : 'vote.rejected';
+            ST.herald.cue(cue, { priority: 76, ttl: 5000 });
+        }
+        ST.herald.release();
     }, Math.max(1100, entries.length * VOTE_REVEAL_STEP_MS + 1100));
     window.setTimeout(() => {
         if (sequence !== voteRevealSequence) return;
@@ -1304,7 +1330,9 @@ function showMissionCardReveal(data, instant = false) {
         : Date.now() + finalCardDelay + QUEST_CARD_FLIP_MS + QUEST_OUTCOME_HOLD_MS;
     cards.forEach((card, index) => {
         const element = document.createElement('div');
-        element.className = 'cinematic-quest-card sealed';
+        element.className = `cinematic-quest-card sealed${instant ? '' : ' st-shuffling'}`;
+        element.style.setProperty('--st-dir', index % 2 ? '-1' : '1');
+        element.style.setProperty('--st-index', String(index));
         cardGrid.appendChild(element);
         const revealCard = () => {
             if (sequence !== missionRevealSequence) return;
@@ -1312,10 +1340,27 @@ function showMissionCardReveal(data, instant = false) {
             element.innerHTML = card === 'success'
                 ? '<span>☀</span><strong>SUCCESS</strong>'
                 : '<span>☠</span><strong>FAIL</strong>';
+            if (instant || !ST) return;
+            if (card === 'success') {
+                ST.sfx.play('j-ping-up', { gain: 0.7 });
+                ST.fx.sparkleAt(element, 'gold', 20);
+            } else {
+                ST.sfx.play('shatter', { gain: 0.7 });
+                ST.fx.shake('medium');
+                ST.fx.sparkleAt(element, 'evil', 24);
+                haptic('commit');
+            }
         };
         if (instant) revealCard();
-        else window.setTimeout(revealCard, 1200 + index * 1100);
+        else {
+            window.setTimeout(() => element.classList.remove('st-shuffling'), 1100);
+            window.setTimeout(revealCard, 1200 + index * 1100);
+        }
     });
+    if (!instant && ST) {
+        ST.sfx.play('shuffle', { delay: 80 });
+        ST.herald.hold(1200 + cards.length * 1100 + QUEST_CARD_FLIP_MS + QUEST_OUTCOME_HOLD_MS);
+    }
 }
 
 function showMissionOutcome(data, canContinue = false, instant = false) {
@@ -1341,6 +1386,22 @@ function showMissionOutcome(data, canContinue = false, instant = false) {
     void reveal.offsetWidth;
     requestAnimationFrame(() => reveal.classList.add('is-revealed'));
     window.setTimeout(() => reveal.classList.add('is-action-ready'), instant ? 0 : 3200);
+    if (!instant && ST) {
+        if (data.passed) {
+            ST.sfx.play('hit-big');
+            window.setTimeout(() => ST.fx.cannons('gold'), 200);
+        } else {
+            ST.sfx.play('j-doom');
+            ST.fx.burst('ash', { count: 120 });
+            ST.fx.shake('heavy');
+        }
+        if (!ST.herald.hasPending('narrator')) {
+            const closeCall = data.passed && failures >= 1 && data.requires_double_fail;
+            ST.herald.cue(closeCall ? 'quest.close_call' : data.passed ? 'quest.success'
+                : failures > 1 ? 'quest.fail_many' : 'quest.fail_one', { priority: 78, ttl: 6000 });
+        }
+        ST.herald.release();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1663,6 +1724,37 @@ function resetGameOutcomeAnnouncement() {
     if (content) content.inert = false;
 }
 
+let gameOverCelebratedFor = null;
+function renderPhoneHonours(summary) {
+    const chronicle = document.getElementById('chronicle-player');
+    if (!ST || !chronicle) return;
+    let section = document.getElementById('player-honours');
+    if (!section) {
+        section = document.createElement('section');
+        section.id = 'player-honours';
+        section.className = 'st-honours-section';
+        section.innerHTML = '<h3>Royal Honours</h3><div class="st-honours-list"></div>';
+        (chronicle.closest('.game-chronicle') || chronicle).before(section);
+    }
+    let awards = [];
+    try { awards = ST.computeAwards(summary, ST.ballots()); } catch (_) { awards = []; }
+    section.querySelector('.st-honours-list').replaceChildren(...awards.map(award => {
+        const chip = document.createElement('div');
+        chip.className = 'st-honour-chip';
+        const icon = document.createElement('span');
+        icon.textContent = award.icon;
+        const title = document.createElement('strong');
+        title.textContent = award.title;
+        const detail = document.createElement('small');
+        const name = document.createElement('b');
+        name.textContent = award.name;
+        name.dataset.i18nSkip = '';
+        detail.append(name, document.createTextNode(` · ${award.stat}`));
+        chip.append(icon, title, detail);
+        return chip;
+    }));
+}
+
 function showGameOver(summary) {
     if (summary.win_reason === 'rejections') pbConsecutiveRejections = 5;
     updatePlayerProposalTrack();
@@ -1718,6 +1810,14 @@ function showGameOver(summary) {
         rolesList.appendChild(row);
     });
     renderChronicle(document.getElementById('chronicle-player'), summary);
+    renderPhoneHonours(summary);
+    if (ST && gameOverCelebratedFor !== summary) {
+        gameOverCelebratedFor = summary;
+        window.setTimeout(() => {
+            if (summary.winner === 'good') ST.fx.cannons('good');
+            else ST.fx.burst('ash', { count: 140 });
+        }, 900);
+    }
     clearAttention();
 
     showScreen('screen-game-over');
@@ -2268,6 +2368,7 @@ socket.on('vote_start', data => {
 });
 
 socket.on('vote_cast_ack', () => {
+    ST?.stamp('Vote sealed');
     document.getElementById('vote-buttons').classList.add('hidden');
     document.getElementById('vote-cast-waiting').classList.remove('hidden');
     presenceTable.show(document.getElementById('screen-vote'), 'Awaiting the Court');
@@ -2342,6 +2443,7 @@ socket.on('mission_choices_open', () => {
 });
 
 socket.on('mission_card_ack', () => {
+    ST?.stamp('Card sealed');
     const overlay = document.getElementById('mission-on-team');
     overlay.classList.add('is-submitted');
     window.setTimeout(() => {
@@ -3006,3 +3108,10 @@ if (suggestedName) document.getElementById('input-name').value = suggestedName.s
 if (FORCE_NEW) {
     showEntryFlow('host');
 }
+
+// "Narrator & sound on this phone" (off by default; for games without a TV).
+(function mountShowtimeSettings() {
+    const mute = document.getElementById('mute-narrator')?.closest('label');
+    if (!ST || !mute || document.querySelector('#settings-overlay .st-settings')) return;
+    mute.after(ST.buildSettingsSection({ compact: true }));
+}());

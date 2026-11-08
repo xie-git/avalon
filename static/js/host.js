@@ -3,6 +3,8 @@
    ============================================================ */
 
 const socket = io();
+// Presentation-only layer (narrator voice, sound, spectacle); see showtime.js.
+const ST = window.AvalonShowtime || null;
 const connectionStatus = document.getElementById('connection-status');
 const presenceTable = new AvalonPresenceTable({
     mode: 'host',
@@ -180,6 +182,14 @@ let lastGameOutcomeAnnouncementKey = null;
 let gameStartingTimer = null;
 let gameStartingUntil = 0;
 let pendingPostOpeningScreen = null;
+// Showtime bookkeeping (presentation only).
+let lastResolvedShieldCount = -1;
+let lastReadyCount = -1;
+let lastNightConfirmed = 0;
+let previewNames = new Set();
+let lastVotedNames = new Set();
+let finaleKey = null;
+let honoursCeremony = null;
 
 const QUEST_CARD_FLIP_MS = 820;
 const QUEST_OUTCOME_HOLD_MS = 3500;
@@ -307,6 +317,43 @@ function renderTvChat() {
     });
 }
 
+// One candle per player; each lights when that player confirms their role.
+function renderNightCandles(confirmed, total) {
+    const screen = document.getElementById('screen-night');
+    if (!screen) return;
+    if (!screen.querySelector('.st-moon')) {
+        const moon = document.createElement('div');
+        moon.className = 'st-moon';
+        moon.setAttribute('aria-hidden', 'true');
+        screen.prepend(moon);
+    }
+    let row = screen.querySelector('.st-candles');
+    if (!row) {
+        row = document.createElement('div');
+        row.className = 'st-candles';
+        row.setAttribute('aria-hidden', 'true');
+        screen.querySelector('.night-progress')?.before(row);
+    }
+    const count = Math.max(0, Math.min(10, Number(total) || 0));
+    if (row.children.length !== count) {
+        row.replaceChildren(...Array.from({ length: count }, () => {
+            const candle = document.createElement('i');
+            candle.className = 'st-candle';
+            return candle;
+        }));
+    }
+    const lit = Math.max(0, Math.min(count, Number(confirmed) || 0));
+    [...row.children].forEach((candle, index) => {
+        const wasLit = candle.classList.contains('lit');
+        candle.classList.toggle('lit', index < lit);
+        if (!wasLit && index < lit && lit > lastNightConfirmed) {
+            ST?.sfx.play('j-tick-up', { gain: 0.5, delay: 60 });
+            window.setTimeout(() => ST?.fx.sparkleAt(candle, 'ember', 14), 200);
+        }
+    });
+    lastNightConfirmed = lit;
+}
+
 function renderNightPending(names = []) {
     const pending = document.getElementById('night-pending');
     const cleanNames = Array.isArray(names) ? names.filter(Boolean) : [];
@@ -354,6 +401,7 @@ function showScreen(id) {
         'hidden',
         !gameCode || id === 'screen-title' || id === 'screen-lobby' || id === 'screen-game-starting',
     );
+    if (previousScreenId !== id) applyScreenAmbience(id);
     const presenceLabel = presenceScreenLabels[id];
     if (id === 'screen-lobby' && players.length) renderRoundTable(players);
     else if (presenceLabel && players.length) presenceTable.show(target, presenceLabel);
@@ -369,6 +417,11 @@ function showScreen(id) {
 
 function transition(id, delay = 0) {
     const overlay = document.getElementById('page-transition');
+    const changing = document.querySelector('.screen.active')?.id !== id;
+    if (changing) {
+        ST?.sfx.synth('whoosh', { gain: 0.22, length: 0.45 }, delay);
+        ST?.sfx.play('cloth', { gain: 0.6, delay: delay + 40 });
+    }
     overlay.classList.add('active');
     setTimeout(() => {
         showScreen(id);
@@ -376,8 +429,39 @@ function transition(id, delay = 0) {
     }, delay + 300);
 }
 
+// Ambient particles and set dressing for each screen of the display.
+function applyScreenAmbience(id) {
+    if (!ST) return;
+    const ambience = {
+        'screen-lobby': ['mote', { rate: 5 }],
+        'screen-game-starting': ['ember', { rate: 9 }],
+        'screen-night': ['firefly', { rate: 3 }],
+        'screen-round': ['mote', { rate: 3 }],
+        'screen-proposal': ['mote', { rate: 3 }],
+        'screen-assassin': ['ember', { rate: 7, palette: 'evil' }],
+    }[id];
+    if (ambience) ST.fx.ambient(...ambience);
+    else if (id !== 'screen-game-over') ST.fx.ambient(null);
+    if (id === 'screen-assassin') {
+        const screen = document.getElementById('screen-assassin');
+        if (!screen.querySelector('.st-spotlight')) {
+            const light = document.createElement('div');
+            light.className = 'st-spotlight';
+            light.setAttribute('aria-hidden', 'true');
+            screen.prepend(light);
+        }
+    }
+    if (id === 'screen-lobby') document.getElementById('room-code-display')?.classList.add('st-shimmer');
+}
+
 function resetHostPresentationForRoomChange() {
     setHostMusic('off');
+    closeHonoursCeremony();
+    finaleKey = null;
+    lastResolvedShieldCount = -1;
+    lastReadyCount = -1;
+    ST?.herald.stop();
+    ST?.fx.clear();
     clearTimeout(gameStartingTimer);
     gameStartingTimer = null;
     gameStartingUntil = 0;
@@ -510,6 +594,17 @@ function updateMissionTracker() {
                 <span class="shield-size" aria-label="${size} players">${size}</span>
             </div>`;
     }
+    const resolved = missionResults.filter(Boolean).length;
+    if (resolved > lastResolvedShieldCount && lastResolvedShieldCount >= 0) {
+        const shield = tracker.querySelector(`[data-mission-index="${resolved - 1}"]`);
+        if (shield) {
+            shield.classList.add('st-shield-new');
+            const passed = missionResults[resolved - 1] === 'pass';
+            ST?.sfx.play(passed ? 'bell' : 'clang', { gain: 0.7, delay: 250 });
+            window.setTimeout(() => ST?.fx.sparkleAt(shield, passed ? 'gold' : 'evil', 30), 420);
+        }
+    }
+    lastResolvedShieldCount = resolved;
     tracker.querySelectorAll('.mission-history-clickable').forEach(shield => {
         const show = event => {
             event.stopPropagation();
@@ -584,9 +679,14 @@ function createLeaderIdentity(name) {
     return identity;
 }
 
-function renderLeaderName(elementId, name) {
+function renderLeaderName(elementId, name, { crown = false } = {}) {
     const element = document.getElementById(elementId);
-    element.replaceChildren(createLeaderIdentity(name));
+    const identity = createLeaderIdentity(name);
+    if (crown) {
+        identity.classList.add('st-crown-drop');
+        ST?.sfx.play('coins', { gain: 0.5, delay: 500 });
+    }
+    element.replaceChildren(identity);
 }
 
 function playChatChime() {
@@ -659,6 +759,11 @@ function renderLobbyPlayers(playerList) {
     dot.className = 'count-dot ' + (valid ? 'valid' : (n > 0 ? 'invalid' : ''));
     txt.textContent = `${n} / 10 Players`;
     const ready = playerList.filter(player => player.ready).length;
+    if (lastReadyCount >= 0 && ready > lastReadyCount && currentPhase === 'lobby') {
+        ST?.sfx.play('j-ready', { gain: 0.6 });
+        ST?.fx.pulse(document.getElementById('host-ready-summary'));
+    }
+    lastReadyCount = ready;
     const readySummary = document.getElementById('host-ready-summary');
     readySummary.querySelector('strong').textContent = `${ready} ready`;
     readySummary.querySelector('span').textContent = `${n - ready} not ready`;
@@ -767,9 +872,39 @@ function animateVoteReveal(votes) {
         card.append(portrait, label, stamp);
         container.appendChild(card);
         setTimeout(() => {
-            if (sequence === hostVoteRevealSequence) card.className = `cinematic-vote-card ${vote} revealed`;
+            if (sequence !== hostVoteRevealSequence) return;
+            card.className = `cinematic-vote-card ${vote} revealed`;
+            tallyVote(vote);
+            if (vote === 'approve') {
+                ST?.sfx.play('slide', { gain: 0.9 });
+                ST?.sfx.synth('shimmer', { gain: 0.07, notes: [1046.5, 1318.5, 1568] });
+            } else {
+                ST?.sfx.play('thud', { gain: 0.9 });
+                ST?.sfx.synth('boom', { gain: 0.35, from: 90, to: 50, length: 0.35 });
+            }
         }, 650 + i * 700);
     });
+    // Live tally above the cards.
+    const tally = ensureVoteTally();
+    let approveSoFar = 0;
+    let rejectSoFar = 0;
+    const renderTally = () => {
+        tally.querySelector('.approve b').firstChild.textContent = String(approveSoFar);
+        tally.querySelector('.reject b').firstChild.textContent = String(rejectSoFar);
+        const total = Math.max(1, entries.length);
+        tally.querySelector('.st-vote-tally-bar .approve').style.width = `${(approveSoFar / total) * 100}%`;
+        tally.querySelector('.st-vote-tally-bar .reject').style.width = `${(rejectSoFar / total) * 100}%`;
+    };
+    function tallyVote(vote) {
+        if (vote === 'approve') approveSoFar += 1;
+        else rejectSoFar += 1;
+        renderTally();
+        ST?.fx.pulse(tally.querySelector(vote === 'approve' ? '.approve b' : '.reject b'));
+    }
+    renderTally();
+    const revealMs = 650 + entries.length * 700 + 900;
+    ST?.herald.hold(revealMs + 400);
+    ST?.sfx.synth('drumroll', { length: Math.max(1, (revealMs - 900) / 1000), gain: 0.22 }, 150);
     const resultCopy = document.getElementById('vote-result-copy-host');
     resultCopy.classList.add('hidden');
     setTimeout(() => {
@@ -778,14 +913,53 @@ function animateVoteReveal(votes) {
         const rejected = entries.length - approved;
         const isApproved = approved > rejected;
         const banner = document.getElementById('vote-result-banner');
-        banner.className = `vote-result-banner ${isApproved ? 'approved' : 'rejected'}`;
+        banner.className = `vote-result-banner ${isApproved ? 'approved' : 'rejected'} st-slam`;
         banner.textContent = isApproved ? 'The Quest Party Rides Forth!' : 'The Court Dissents!';
+        celebrateVoteResult({ approved, rejected, isApproved });
         document.getElementById('vote-result-flavor-host').textContent = (
             isApproved ? VOTE_RESULT_FLAVOR.approved : VOTE_RESULT_FLAVOR.rejected
         )[Math.floor(Math.random() * VOTE_RESULT_FLAVOR.approved.length)];
         document.getElementById('vote-result-ready-host').textContent = 'Continue on your phones when ready';
         resultCopy.classList.remove('hidden');
     }, 650 + entries.length * 700 + 900);
+}
+
+function ensureVoteTally() {
+    let tally = document.getElementById('st-vote-tally');
+    if (!tally) {
+        tally = document.createElement('div');
+        tally.id = 'st-vote-tally';
+        tally.className = 'st-vote-tally';
+        tally.setAttribute('aria-hidden', 'true');
+        tally.innerHTML = `
+            <span class="approve"><b>0<small>APPROVE</small></b></span>
+            <div class="st-vote-tally-bar"><i class="approve"></i><i class="reject"></i></div>
+            <span class="reject"><b>0<small>REJECT</small></b></span>`;
+        document.getElementById('vote-cards-container')?.before(tally);
+    }
+    return tally;
+}
+
+function celebrateVoteResult({ approved, rejected, isApproved }) {
+    if (!ST) return;
+    if (isApproved) {
+        ST.sfx.play('j-approve');
+        ST.sfx.synth('fanfare', { gain: 0.08 }, 120);
+        ST.fx.burst('confetti', { count: rejected === 0 ? 160 : 80, palette: 'gold' });
+    } else {
+        ST.sfx.play('j-reject');
+        ST.sfx.play('stamp', { gain: 0.8 });
+        ST.fx.shake(approved === 0 ? 'heavy' : 'medium');
+    }
+    // A Court Narrator line about this vote (if one is waiting) beats the generic cue.
+    if (!ST.herald.hasPending('narrator')) {
+        const cue = rejected === 0 ? 'vote.unanimous_yes'
+            : approved === 0 ? 'vote.unanimous_no'
+                : approved === rejected ? 'vote.tie'
+                    : isApproved ? 'vote.approved' : 'vote.rejected';
+        ST.herald.cue(cue, { priority: 76, ttl: 5000 });
+    }
+    ST.herald.release();
 }
 
 function setHostMusic(trackId) {
@@ -852,14 +1026,45 @@ function animateMissionReveal(cards, { instant = false, onComplete = null } = {}
         element.innerHTML = card === 'success'
             ? '<span class="card-icon">☀</span><span>SUCCESS</span>'
             : '<span class="card-icon">☠</span><span>FAIL</span>';
+        if (instant || !ST) return;
+        if (card === 'success') {
+            ST.sfx.play('j-ping-up', { gain: 0.8 });
+            ST.sfx.play('slide', { gain: 0.7 });
+            window.setTimeout(() => ST.fx.sparkleAt(element, 'gold', 34), 60);
+        } else {
+            ST.sfx.play('shatter', { gain: 0.8 });
+            ST.sfx.synth('boom', { gain: 0.8, from: 120, to: 36, length: 0.9 });
+            flash('red', 260);
+            ST.fx.shake('medium');
+            window.setTimeout(() => ST.fx.sparkleAt(element, 'evil', 40), 60);
+        }
     };
     cards.forEach((card, i) => {
         const el = document.createElement('div');
-        el.className = 'mission-result-card sealed';
+        el.className = `mission-result-card sealed${instant ? '' : ' st-shuffling'}`;
+        el.style.setProperty('--st-dir', i % 2 ? '-1' : '1');
+        el.style.setProperty('--st-index', String(i));
         container.appendChild(el);
         if (instant) revealCard(el, card);
-        else window.setTimeout(() => revealCard(el, card), 1200 + i * 1100);
+        else {
+            window.setTimeout(() => el.classList.remove('st-shuffling'), 1100);
+            if (i === cards.length - 1 && cards.length > 1) {
+                // The last card gets a heartbeat and a glow before it turns.
+                window.setTimeout(() => {
+                    if (sequence !== hostMissionRevealSequence) return;
+                    el.classList.add('st-last-card');
+                    ST?.sfx.synth('heartbeat', { gain: 0.75, beats: 1 });
+                }, 1200 + (i - 1) * 1100 + 350);
+            }
+            window.setTimeout(() => revealCard(el, card), 1200 + i * 1100);
+        }
     });
+    if (!instant && ST) {
+        ST.sfx.play('shuffle', { delay: 80 });
+        ST.sfx.play('fan', { delay: 950, gain: 0.7 });
+        ST.herald.cue('quest.reveal', { priority: 74, chance: 0.6, ttl: 2500, interrupt: true });
+        ST.herald.hold(1200 + cards.length * 1100 + QUEST_CARD_FLIP_MS + QUEST_OUTCOME_HOLD_MS);
+    }
     const completeAfter = instant ? 0 : 1200 + cards.length * 1100 + 900;
     window.setTimeout(() => {
         if (sequence === hostMissionRevealSequence && onComplete) onComplete();
@@ -914,6 +1119,31 @@ function showHostMissionOutcome(data, { instant = false } = {}) {
     void reveal.offsetWidth;
     requestAnimationFrame(() => reveal.classList.add('is-revealed'));
     window.setTimeout(() => continuePrompt.classList.add('is-ready'), instant ? 0 : 3200);
+    if (!instant) celebrateQuestOutcome(passed, failures, data);
+}
+
+function celebrateQuestOutcome(passed, failures, data) {
+    if (!ST) return;
+    if (passed) {
+        ST.sfx.play('hit-big');
+        ST.sfx.synth('fanfare', { gain: 0.1 }, 200);
+        ST.sfx.synth('choir', { length: 2.6, gain: 0.05 }, 150);
+        window.setTimeout(() => ST.fx.cannons('gold'), 250);
+    } else {
+        ST.sfx.play('j-doom');
+        ST.sfx.synth('gong', { gain: 0.35, base: 73 }, 100);
+        ST.sfx.synth('choir', { length: 2.8, gain: 0.05, minor: true, chord: [146.83, 185, 220, 293.66] }, 250);
+        ST.fx.shake('heavy');
+        ST.fx.burst('ash', { count: 160, palette: 'ash' });
+    }
+    if (!ST.herald.hasPending('narrator')) {
+        const closeCall = passed && failures >= 1 && data.requires_double_fail;
+        const cue = closeCall ? 'quest.close_call'
+            : passed ? 'quest.success'
+                : failures > 1 ? 'quest.fail_many' : 'quest.fail_one';
+        ST.herald.cue(cue, { priority: 78, ttl: 6000 });
+    }
+    ST.herald.release();
 }
 
 function renderChronicle(container, summary) {
@@ -1076,7 +1306,190 @@ function renderGameOver(summary, { announce = true } = {}) {
         ready_names: [],
     });
     renderChronicle(document.getElementById('chronicle-host'), summary);
+    renderHonoursList(summary);
     if (announce) showGameOutcomeAnnouncement(summary);
+}
+
+// ---------------------------------------------------------------------------
+// Showtime finale: verdict, fireworks, final word, then the Royal Honours.
+// ---------------------------------------------------------------------------
+function honoursAwards(summary) {
+    try { return ST?.computeAwards(summary, ST.ballots()) || []; } catch (_) { return []; }
+}
+
+function renderHonoursList(summary) {
+    let section = document.getElementById('host-honours');
+    if (!section) {
+        section = document.createElement('section');
+        section.id = 'host-honours';
+        section.className = 'game-chronicle st-honours-section';
+        section.innerHTML = '<h3>Royal Honours</h3><div class="st-honours-list"></div>';
+        document.querySelector('#screen-game-over .host-chronicle')?.before(section);
+    }
+    const list = section.querySelector('.st-honours-list');
+    list.replaceChildren(...honoursAwards(summary).map(award => {
+        const chip = document.createElement('div');
+        chip.className = 'st-honour-chip';
+        const icon = document.createElement('span');
+        icon.textContent = award.icon;
+        const title = document.createElement('strong');
+        title.textContent = award.title;
+        const detail = document.createElement('small');
+        const name = document.createElement('b');
+        name.textContent = award.name;
+        name.dataset.i18nSkip = '';
+        detail.append(name, document.createTextNode(` · ${award.stat}`));
+        chip.append(icon, title, detail);
+        return chip;
+    }));
+}
+
+function runShowtimeFinale(summary) {
+    if (!ST) return;
+    const key = `${gameCode}:${gameStartedAt}:${summary.winner}:${summary.win_reason}`;
+    if (finaleKey === key) return;
+    finaleKey = key;
+    const good = summary.winner === 'good';
+    const assassination = summary.win_reason === 'assassination' && window.AVALON_ASSASSINATION_REVEAL_ENABLED;
+    const verdictAt = assassination ? 3600 : 700;
+    ST.herald.stop();
+    window.setTimeout(() => {
+        if (finaleKey !== key) return;
+        if (good) {
+            ST.sfx.play('hit-long');
+            ST.sfx.synth('fanfare', { gain: 0.12 }, 150);
+            ST.sfx.synth('choir', { length: 3.4, gain: 0.06 }, 100);
+            ST.fx.cannons('good');
+            window.setTimeout(() => ST.fx.cannons('gold'), 1400);
+            ST.fx.ambient('mote', { rate: 8, palette: 'good' });
+        } else {
+            ST.sfx.play('j-doom');
+            ST.sfx.synth('gong', { gain: 0.45, base: 65 }, 60);
+            ST.sfx.synth('choir', { length: 3.6, gain: 0.06, minor: true, chord: [130.81, 164.81, 196, 261.63] }, 200);
+            ST.fx.shake('heavy');
+            ST.fx.burst('ash', { count: 200 });
+            ST.fx.ambient('ember', { rate: 10, palette: 'evil' });
+        }
+    }, verdictAt);
+    const reason = summary.win_reason;
+    const verdict = reason === 'assassination' ? 'assassin.hit'
+        : reason === 'assassination_failed' ? 'assassin.miss'
+            : reason === 'rejections' ? 'end.evil_rejections'
+                : good ? 'end.good' : 'end.evil_missions';
+    ST.herald.cue(verdict, { priority: 96, delay: verdictAt + 500, ttl: 9000 });
+    const finalVoice = summary.final_word?.voice;
+    if (Array.isArray(finalVoice) && finalVoice.length) {
+        ST.herald.clips(finalVoice, { priority: 90, delay: verdictAt + 900, ttl: 20000, caption: summary.final_word.message });
+    }
+    const awards = honoursAwards(summary);
+    if (awards.length) {
+        window.setTimeout(() => {
+            if (finaleKey === key) startHonoursCeremony(awards, key);
+        }, verdictAt + 9500);
+    }
+}
+
+function closeHonoursCeremony() {
+    if (!honoursCeremony) return;
+    honoursCeremony.timers.forEach(clearTimeout);
+    honoursCeremony.element.classList.remove('visible');
+    const element = honoursCeremony.element;
+    window.setTimeout(() => element.remove(), 600);
+    honoursCeremony = null;
+}
+
+function buildAwardCard(award) {
+    const card = document.createElement('article');
+    card.className = `st-award${award.tone ? ` tone-${award.tone}` : ''}`;
+    const ribbon = document.createElement('span');
+    ribbon.className = 'st-award-ribbon';
+    ribbon.textContent = 'Royal Honour';
+    const icon = document.createElement('div');
+    icon.className = 'st-award-icon';
+    icon.textContent = award.icon;
+    const title = document.createElement('div');
+    title.className = 'st-award-title';
+    title.textContent = award.title;
+    const portrait = document.createElement('div');
+    portrait.className = 'st-award-portrait';
+    const player = award.player || {};
+    if (player.avatar_image) {
+        const image = document.createElement('img');
+        image.src = player.avatar_image;
+        image.alt = '';
+        portrait.appendChild(image);
+    } else {
+        portrait.appendChild(presenceTable.createPortraitElement(player.avatar_index, player.color_index));
+    }
+    const name = document.createElement('div');
+    name.className = 'st-award-name';
+    name.dataset.i18nSkip = '';
+    name.textContent = award.name;
+    const stat = document.createElement('div');
+    stat.className = 'st-award-stat';
+    stat.textContent = award.stat;
+    card.append(ribbon, icon, title, portrait, name, stat);
+    return card;
+}
+
+function startHonoursCeremony(awards, key, waited = 0) {
+    // Let the verdict and Final Word finish before the ceremony begins.
+    if (ST.herald.hasPending() && waited < 12000) {
+        window.setTimeout(() => {
+            if (finaleKey === key) startHonoursCeremony(awards, key, waited + 500);
+        }, 500);
+        return;
+    }
+    closeHonoursCeremony();
+    const element = document.createElement('div');
+    element.className = 'st-honours';
+    element.setAttribute('role', 'dialog');
+    element.setAttribute('aria-label', 'Royal Honours');
+    element.innerHTML = '<div class="st-honours-heading">The Royal Honours</div><div class="st-honours-skip">Click anywhere to skip</div>';
+    document.body.appendChild(element);
+    const ceremony = { element, timers: [], key };
+    honoursCeremony = ceremony;
+    element.addEventListener('click', closeHonoursCeremony);
+    ST.sfx.play('book-open');
+    ST.sfx.play('hit-sting', { delay: 300 });
+    requestAnimationFrame(() => element.classList.add('visible'));
+    const voiceOn = () => ST.settings().voice && ST.ready();
+    const later = (fn, ms) => ceremony.timers.push(window.setTimeout(() => {
+        if (honoursCeremony === ceremony) fn();
+    }, ms));
+    // Each beat advances when its line finishes, or after a fallback delay.
+    const beat = (cue, next, { fallbackVoice = 9000, fallbackSilent = 4200, pause = 900 } = {}) => {
+        let advanced = false;
+        const advance = () => {
+            if (advanced || honoursCeremony !== ceremony) return;
+            advanced = true;
+            later(next, pause);
+        };
+        const queued = ST.herald.cue(cue, { priority: 85, ttl: 8000, delay: 350, onEnd: advance });
+        later(advance, queued && voiceOn() ? fallbackVoice : fallbackSilent);
+    };
+    const showAward = index => {
+        if (index >= awards.length) {
+            ST.fx.cannons('gold');
+            ST.sfx.play('hit-big');
+            beat('awards.outro', closeHonoursCeremony, { fallbackSilent: 2600, pause: 1400 });
+            return;
+        }
+        const award = awards[index];
+        const card = buildAwardCard(award);
+        element.querySelectorAll('.st-award.active').forEach(old => {
+            old.classList.remove('active');
+            old.classList.add('leaving');
+            window.setTimeout(() => old.remove(), 520);
+        });
+        element.appendChild(card);
+        requestAnimationFrame(() => card.classList.add('active'));
+        ST.sfx.play('page');
+        ST.sfx.play(award.tone === 'evil' ? 'j-sinister' : 'j-ready', { delay: 380 });
+        window.setTimeout(() => ST.fx.sparkleAt(card.querySelector('.st-award-portrait'), award.tone === 'evil' ? 'evil' : 'gold', 50), 650);
+        beat(award.cue, () => showAward(index + 1), { pause: 1300 });
+    };
+    beat('awards.intro', () => showAward(0), { fallbackSilent: 1800, pause: 400 });
 }
 
 function renderVictoryCard(card, summary) {
@@ -1270,6 +1683,8 @@ socket.on('host_registered', data => {
             spawnStars();
             document.getElementById('night-confirmed').textContent = data.night_confirmed || 0;
             document.getElementById('night-total').textContent = data.night_total || players.length;
+            lastNightConfirmed = Number(data.night_confirmed) || 0;
+            renderNightCandles(data.night_confirmed || 0, data.night_total || players.length);
             renderNightPending(data.night_pending_names || []);
             hideGameHeader();
         } else if (data.phase === 'TEAM_PROPOSAL') {
@@ -1397,6 +1812,10 @@ socket.on('lobby_update', data => {
 
 socket.on('game_starting', data => {
     players = players; // keep
+    lastResolvedShieldCount = 0;
+    lastNightConfirmed = 0;
+    finaleKey = null;
+    closeHonoursCeremony();
     presenceTable.setGameStatus({ mode: 'game' });
     startGameClock(data.game_started_at);
     flash('white', 500);
@@ -1428,6 +1847,8 @@ socket.on('night_phase_start', data => {
     spawnStars();
     document.getElementById('night-total').textContent = data.total_players;
     document.getElementById('night-confirmed').textContent = data.confirmed || 0;
+    lastNightConfirmed = Number(data.confirmed) || 0;
+    renderNightCandles(data.confirmed || 0, data.total_players);
     renderNightPending(data.pending_names || players.map(player => player.name));
     hideGameHeader();
     transition('screen-night');
@@ -1436,6 +1857,7 @@ socket.on('night_phase_start', data => {
 socket.on('night_phase_progress', data => {
     document.getElementById('night-confirmed').textContent = data.confirmed;
     document.getElementById('night-total').textContent = data.total;
+    renderNightCandles(data.confirmed, data.total);
     renderNightPending(data.pending_names || []);
 });
 
@@ -1456,7 +1878,18 @@ socket.on('round_start', data => {
     syncPresencePlayers(players);
 
     document.getElementById('round-title').textContent = `Mission ${data.mission_num}`;
-    renderLeaderName('round-leader-name', data.leader_name);
+    renderLeaderName('round-leader-name', data.leader_name, { crown: true });
+    if (!data.reject_count && ST) {
+        const good = missionResults.filter(result => result === 'pass').length;
+        const evil = missionResults.filter(result => result === 'fail').length;
+        const finalQuest = data.mission_num === 5 || (good === 2 && evil === 2);
+        window.setTimeout(() => ST.titleCard({
+            eyebrow: finalQuest ? 'The final quest' : `Quest ${data.mission_num} of 5`,
+            title: `Mission ${data.mission_num}`,
+            subtitle: data.mission_num === 1 ? 'The fellowship gathers' : `Good ${good} · Evil ${evil}`,
+            tone: finalQuest ? 'blood' : evil > good ? 'night' : 'gold',
+        }), 380);
+    }
     updateMissionTracker();
     updateGameStats();
     updateLeaderDisplay(data.leader_name);
@@ -1472,20 +1905,38 @@ socket.on('discussion_start', data => {
 
 socket.on('discussion_tick', data => {
     updateTimerRing('timer-ring', data.remaining_seconds, timerMax);
+    document.getElementById('screen-round').classList.toggle(
+        'st-final-seconds',
+        data.remaining_seconds <= 10 && data.remaining_seconds > 0,
+    );
     if (data.remaining_seconds <= 3 && data.remaining_seconds > 0) {
         document.getElementById('screen-round').classList.add('screen-edge-warning');
         setTimeout(() => document.getElementById('screen-round').classList.remove('screen-edge-warning'), 1500);
     }
 });
 
-socket.on('discussion_end', () => {});
+socket.on('discussion_end', () => {
+    document.getElementById('screen-round').classList.remove('st-final-seconds');
+});
 
 socket.on('proposal_start', data => {
     currentLeaderName = data.leader_name;
     presenceTable.setGameStatus({ mode: 'game', leaderId: data.leader_id, leaderName: data.leader_name });
     updateLeaderDisplay(data.leader_name);
     proposedTeam = [];
-    renderLeaderName('proposal-leader-name', data.leader_name);
+    previewNames = new Set();
+    document.getElementById('proposed-players-display').classList.remove('st-locked');
+    document.querySelector('#screen-proposal .st-seal')?.remove();
+    renderLeaderName('proposal-leader-name', data.leader_name, { crown: true });
+    if (data.forced && ST) {
+        window.setTimeout(() => ST.titleCard({
+            eyebrow: 'Four parties rejected',
+            title: 'Binding Proposal',
+            subtitle: 'No vote. This party rides.',
+            tone: 'blood',
+            sound: 'hit-long',
+        }), 380);
+    }
     document.getElementById('proposal-mission-size').textContent =
         `Select ${data.mission_size} members for the quest`;
     document.getElementById('host-forced-proposal-note').classList.toggle('hidden', !data.forced);
@@ -1510,18 +1961,38 @@ socket.on('proposal_timer_expired', () => {
 socket.on('team_preview', data => {
     const container = document.getElementById('proposed-players-display');
     container.innerHTML = '';
-    (data.team_names || []).forEach(name => {
+    const names = data.team_names || [];
+    let added = 0;
+    names.forEach(name => {
         const chip = document.createElement('div');
         chip.className = 'proposed-player-chip selected';
+        if (!previewNames.has(name)) {
+            chip.classList.add('st-new');
+            added += 1;
+        }
         chip.textContent = name;
         chip.dataset.i18nSkip = "";
         container.appendChild(chip);
     });
+    if (added) ST?.sfx.play('token', { gain: 0.9 });
+    else if (names.length < previewNames.size) ST?.sfx.play('slide', { gain: 0.5 });
+    previewNames = new Set(names);
 });
 
 socket.on('team_proposed', data => {
     proposedTeam = data.team || [];
+    const screen = document.getElementById('screen-proposal');
+    if (!screen.querySelector('.st-seal')) {
+        const seal = document.createElement('div');
+        seal.className = 'st-seal';
+        seal.setAttribute('aria-hidden', 'true');
+        seal.textContent = 'Party Sealed';
+        screen.appendChild(seal);
+        ST?.sfx.play('stamp', { delay: 200 });
+        ST?.fx.shake('light');
+    }
     const container = document.getElementById('proposed-players-display');
+    container.classList.add('st-locked');
     container.innerHTML = '';
     proposedTeam.forEach(name => {
         const chip = document.createElement('div');
@@ -1540,8 +2011,18 @@ socket.on('vote_start', data => {
     document.getElementById('vote-team-names').dataset.i18nSkip = '';
             document.getElementById('vote-team-names').textContent = proposedTeam.join(', ');
     document.getElementById('vote-leader-label').textContent = `${currentLeaderName} proposes:`;
+    lastVotedNames = new Set();
     renderVoteStatus([], pendingVoters);
     transition('screen-vote');
+    if (ST) {
+        window.setTimeout(() => ST.titleCard({
+            eyebrow: `Proposal ${Math.min(5, consecutiveRejections + 1)} of 5`,
+            title: 'The Vote',
+            subtitle: 'Approve or reject on your phones',
+            tone: consecutiveRejections >= 3 ? 'blood' : 'royal',
+            duration: 1900,
+        }), 360);
+    }
 });
 
 socket.on('vote_waiting', data => {
@@ -1557,8 +2038,10 @@ function renderVoteStatus(voted, remaining) {
     const grid = document.getElementById('vote-status-grid');
     grid.innerHTML = '';
     voted.forEach(name => {
-        grid.innerHTML += `<div class="vote-status-chip voted"><span class="vote-status-icon">✓</span>${escapeHtml(name)}</div>`;
+        const fresh = !lastVotedNames.has(name) ? ' st-just-voted' : '';
+        grid.innerHTML += `<div class="vote-status-chip voted${fresh}"><span class="vote-status-icon">✓</span>${escapeHtml(name)}</div>`;
     });
+    lastVotedNames = new Set(voted);
     remaining.forEach(name => {
         grid.innerHTML += `<div class="vote-status-chip"><span class="vote-status-icon">⋯</span>${escapeHtml(name)}</div>`;
     });
@@ -1583,6 +2066,8 @@ socket.on('evil_wins_by_rejection', () => {
     consecutiveRejections = 5;
     updateHostProposalTrack();
     flash('red', 1000);
+    ST?.fx.shake('heavy');
+    ST?.sfx.play('j-doom');
     const banner = document.getElementById('vote-result-banner');
     banner.className = 'vote-result-banner rejected';
     banner.textContent = 'CHAOS REIGNS — EVIL TRIUMPHS!';
@@ -1647,7 +2132,9 @@ socket.on('mission_waiting', data => {
 });
 
 function renderMissionStatus(data) {
-    document.getElementById('mission-played').textContent = data.played;
+    const playedElement = document.getElementById('mission-played');
+    if (Number(data.played) > Number(playedElement.textContent || 0)) ST?.fx.pulse(playedElement.closest('.mission-progress') || playedElement);
+    playedElement.textContent = data.played;
     document.getElementById('mission-total').textContent = data.total;
     const playedIds = new Set(data.played_player_ids || []);
     const playedNames = new Set(data.played_players || []);
@@ -1699,6 +2186,16 @@ socket.on('assassin_phase_start', data => {
         `${data.assassin_name} deliberates...`;
     hideGameHeader();
     transition('screen-assassin');
+    if (ST) {
+        window.setTimeout(() => ST.titleCard({
+            eyebrow: 'Good has won three quests',
+            title: 'The Assassin',
+            subtitle: 'One strike. Find Merlin, and Evil steals the realm.',
+            tone: 'blood',
+            sound: 'hit-long',
+            duration: 2600,
+        }), 380);
+    }
 });
 
 socket.on('assassination_result', data => {
@@ -1714,6 +2211,7 @@ socket.on('game_over', data => {
     renderGameOver(data, { announce: false });
     transition('screen-game-over');
     window.setTimeout(() => showGameOutcomeAnnouncement(data), 320);
+    runShowtimeFinale(data);
     track('victory_screen_viewed', { context: data.win_reason || 'unknown' });
     track('rematch_prompt_viewed', { context: 'host_display' });
 });
@@ -1738,6 +2236,10 @@ socket.on('narrator_message', data => {
 
 socket.on('return_to_lobby', data => {
     cancelPendingHostMissionOutcome();
+    closeHonoursCeremony();
+    finaleKey = null;
+    lastResolvedShieldCount = -1;
+    ST?.fx.clear();
     setHostMusic('off');
     clearInterval(gameClockInterval); gameClockInterval = null; gameStartedAt = null;
     resetGameOutcomeAnnouncement();
@@ -1761,6 +2263,9 @@ socket.on('return_to_lobby', data => {
 });
 
 socket.on('game_ended', () => {
+    closeHonoursCeremony();
+    finaleKey = null;
+    lastReadyCount = -1;
     // A room closed while paused must not leave its "game saved" notices behind.
     hideSuspendedDisplayRecovery();
     hideConnectionStatus();
@@ -1873,3 +2378,16 @@ document.getElementById('btn-pair-host-display').addEventListener('click', event
         analytics_id: ANALYTICS_ID,
     });
 });
+
+// Narrator and sound settings live in the display's Settings panel.
+(function mountShowtimeSettings() {
+    const panel = document.getElementById('display-settings');
+    if (!ST || !panel || panel.querySelector('.st-settings')) return;
+    const heading = document.createElement('h3');
+    heading.className = 'st-settings-heading';
+    heading.textContent = 'Narrator & sound';
+    const section = ST.buildSettingsSection();
+    const close = document.getElementById('btn-close-display-settings');
+    panel.insertBefore(heading, close);
+    panel.insertBefore(section, close);
+}());

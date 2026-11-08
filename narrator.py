@@ -323,14 +323,17 @@ def _line(trigger_id: int, runtime: dict[str, Any], rng: random.Random) -> dict[
             if f"{trigger_id}.{index}" not in used
         ] or list((f"{trigger_id}.{index}", text) for index, text in enumerate(COPY_BANKS[trigger_id], 1))
     line_id, copy = rng.choice(candidates)
+    # Pre-rendered voice clips (static/voice): name-free premise + delivery.
+    voice = [f"n{trigger_id}", f"d{int(line_id.split('.')[1])}"]
     # Sometimes stop after the authored premise.  Varying sentence length is
     # less mechanical than attaching a courtly button to every observation.
     if rng.random() < SHORT_DELIVERY_CHANCE:
         copy = _PREMISES[trigger_id - 1]
+        voice = voice[:1]
     runtime.setdefault("used_line_ids", []).append(line_id)
     return {
         "actor_type": "narrator", "name": NARRATOR_NAME, "message": copy,
-        "trigger_id": trigger_id, "template_id": line_id,
+        "trigger_id": trigger_id, "template_id": line_id, "voice": voice,
     }
 
 
@@ -373,6 +376,7 @@ def choose_proactive(
             "template_id": f"{trigger_id}.double.{followup_index + 1}",
             "mission_num": mission_num,
             "double_act_part": 2,
+            "voice": [f"n{trigger_id}f{followup_index + 1}"],
         }
         message["double_act_part"] = 1
         message["follow_up"] = followup

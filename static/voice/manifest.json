@@ -1,0 +1,2029 @@
+{
+ "voice": "court",
+ "base": "/static/voice/court/",
+ "engine": "Kokoro-82M v1.0 (Apache-2.0), offline pre-render",
+ "clips": {
+  "d1": {
+   "t": "The court records this without judgement. Mostly.",
+   "ms": 3528,
+   "h": "e5ebabdfb6469bbd"
+  },
+  "d10": {
+   "t": "The tavern odds just moved.",
+   "ms": 2472,
+   "h": "f434fe4e6bbdc752"
+  },
+  "d11": {
+   "t": "Your dignity remains optional.",
+   "ms": 2520,
+   "h": "339c694a3f66b2cf"
+  },
+  "d12": {
+   "t": "Please, continue incriminating yourselves.",
+   "ms": 2928,
+   "h": "ddf48af29d599c32"
+  },
+  "d13": {
+   "t": "Camelot deserves better gossip.",
+   "ms": 2616,
+   "h": "72139bcf0550596a"
+  },
+  "d14": {
+   "t": "An adult has not been located.",
+   "ms": 2616,
+   "h": "e9f4a40623fe3075"
+  },
+  "d15": {
+   "t": "This will age beautifully.",
+   "ms": 2136,
+   "h": "d4b32c862e31fc95"
+  },
+  "d16": {
+   "t": "The crown accepts no liability.",
+   "ms": 2640,
+   "h": "50047d18164e646c"
+  },
+  "d17": {
+   "t": "Someone pour the evidence another drink.",
+   "ms": 2880,
+   "h": "ebeaa2163d4b9a6e"
+  },
+  "d18": {
+   "t": "I adore a preventable crisis.",
+   "ms": 2664,
+   "h": "50600cd00b001da3"
+  },
+  "d19": {
+   "t": "The confidence is exquisite.",
+   "ms": 2472,
+   "h": "2ce5a6ae432c9703"
+  },
+  "d2": {
+   "t": "Do sit with that.",
+   "ms": 1680,
+   "h": "a39ae77c524854ec"
+  },
+  "d20": {
+   "t": "And, scene.",
+   "ms": 1392,
+   "h": "e38690c6ec2ecb83"
+  },
+  "d3": {
+   "t": "No refunds on certainty.",
+   "ms": 2448,
+   "h": "32f1afad028ef6d2"
+  },
+  "d4": {
+   "t": "The minutes will be unkind.",
+   "ms": 2112,
+   "h": "c6722e6acc13f077"
+  },
+  "d5": {
+   "t": "A perfectly normal kingdom.",
+   "ms": 2112,
+   "h": "e0eb61b1950fd0c3"
+  },
+  "d6": {
+   "t": "Proceed with undeserved confidence.",
+   "ms": 2640,
+   "h": "b1de522a90d25b88"
+  },
+  "d7": {
+   "t": "I have sharpened the footnote.",
+   "ms": 2112,
+   "h": "35fcb022b8eb6e47"
+  },
+  "d8": {
+   "t": "History is already smirking.",
+   "ms": 2376,
+   "h": "3eab39586f53a3d2"
+  },
+  "d9": {
+   "t": "Nothing ominous there.",
+   "ms": 1920,
+   "h": "cb48cb766bf4476a"
+  },
+  "e.assassin.hit.1": {
+   "t": "It was Merlin! The Assassin strikes true! Evil steals the victory!",
+   "ms": 4416,
+   "h": "f93064c49e82f0ae"
+  },
+  "e.assassin.hit.2": {
+   "t": "Merlin falls! All those clever hints, and look where it got them.",
+   "ms": 3984,
+   "h": "1d02b91d2ab08799"
+  },
+  "e.assassin.hit.3": {
+   "t": "Bullseye! Merlin is found, and evil wins it all!",
+   "ms": 3336,
+   "h": "ed1c3a9ada722bcc"
+  },
+  "e.assassin.miss.1": {
+   "t": "Not Merlin! The Assassin missed! Good triumphs!",
+   "ms": 3432,
+   "h": "1302ec8529abc890"
+  },
+  "e.assassin.miss.2": {
+   "t": "Wrong target! Merlin lives, and Camelot is saved!",
+   "ms": 3696,
+   "h": "91f4f2b04cf6553c"
+  },
+  "e.assassin.miss.3": {
+   "t": "The blade misses! Merlin survives! What a performance.",
+   "ms": 3552,
+   "h": "3e4e3adff2f2d8fe"
+  },
+  "e.assassin.slow.1": {
+   "t": "The Assassin is taking their time. Somewhere, Merlin is sweating.",
+   "ms": 4296,
+   "h": "18e9603f33365921"
+  },
+  "e.assassin.slow.2": {
+   "t": "Still choosing. Every good player is aging visibly.",
+   "ms": 3552,
+   "h": "bea2742ac83bafa0"
+  },
+  "e.assassin.slow.3": {
+   "t": "Take your time, Assassin. We'll all just hold our breath.",
+   "ms": 3672,
+   "h": "bb937e6a78033be5"
+  },
+  "e.assassin.start.1": {
+   "t": "Three quests succeed! But wait. The Assassin may yet strike. Find Merlin, and evil steals the game.",
+   "ms": 6816,
+   "h": "43ed5cb55b426f8b"
+  },
+  "e.assassin.start.2": {
+   "t": "Good has won the quests. Now the Assassin chooses one target. Guess Merlin, and it's all for nothing.",
+   "ms": 6360,
+   "h": "3374db6d182eacc2"
+  },
+  "e.assassin.start.3": {
+   "t": "Not so fast, heroes! The Assassin emerges from the shadows. Merlin, try to look ordinary.",
+   "ms": 6144,
+   "h": "9e8a9e8b077bdf7e"
+  },
+  "e.assassin.strike.1": {
+   "t": "The Assassin has chosen. Let's see if the blade finds its mark.",
+   "ms": 4248,
+   "h": "1432b0619a074fc2"
+  },
+  "e.assassin.strike.2": {
+   "t": "The dagger falls. Was it Merlin?",
+   "ms": 2568,
+   "h": "d2d9596f02aef480"
+  },
+  "e.assassin.strike.3": {
+   "t": "A target is chosen. The moment of truth.",
+   "ms": 3120,
+   "h": "530c81dfca140c71"
+  },
+  "e.award.assassin.1": {
+   "t": "And finally, the Assassin, who found Merlin. Terrifyingly good at their job.",
+   "ms": 5064,
+   "h": "a9589546ab9b39e3"
+  },
+  "e.award.assassin.2": {
+   "t": "A special dishonour for the Assassin, whose aim was perfect. Remind me never to annoy you.",
+   "ms": 5784,
+   "h": "228a0fdbe74f00ec"
+  },
+  "e.award.homebody.1": {
+   "t": "The Homebody Award, for going on the fewest quests. Sat by the fire. Very cosy.",
+   "ms": 5520,
+   "h": "7b8a73ecdc748514"
+  },
+  "e.award.homebody.2": {
+   "t": "Least Invited Knight. They'll tell you it was strategy.",
+   "ms": 3432,
+   "h": "291314fbe19937f7"
+  },
+  "e.award.kingmaker.1": {
+   "t": "The Kingmaker Award, for leading quests to success. Arthur would be proud.",
+   "ms": 4968,
+   "h": "6c96024c93215d5e"
+  },
+  "e.award.kingmaker.2": {
+   "t": "Best Leader. Picked a winning team, which is more than most can say.",
+   "ms": 4008,
+   "h": "e213c7226e9e647f"
+  },
+  "e.award.merlin.1": {
+   "t": "And finally, Merlin. Who survived. Hiding in plain sight, like a wizard should.",
+   "ms": 5184,
+   "h": "0247689b6fe8b306"
+  },
+  "e.award.merlin.2": {
+   "t": "A special honour for Merlin, who survived the assassin. Clever, clever wizard.",
+   "ms": 5064,
+   "h": "680e5ea415659a10"
+  },
+  "e.award.poker_face.1": {
+   "t": "Best Poker Face, for being evil and going on successful quests anyway. Chillingly patient.",
+   "ms": 6120,
+   "h": "62242173d497ddee"
+  },
+  "e.award.poker_face.2": {
+   "t": "The Wolf in Sheep's Clothing Award. Evil, trusted, and smiling the entire time.",
+   "ms": 5496,
+   "h": "676dd91a26007408"
+  },
+  "e.award.saboteur.1": {
+   "t": "Master Saboteur, for sneaking onto failed quests. Absolutely shameless. We salute you.",
+   "ms": 5880,
+   "h": "ac078fd2408e36c9"
+  },
+  "e.award.saboteur.2": {
+   "t": "The Butterfingers Award, for being on the quests that mysteriously failed.",
+   "ms": 4560,
+   "h": "61d5ad4c8c15c628"
+  },
+  "e.award.skeptic.1": {
+   "t": "The Drawbridge Award, for rejecting almost everything. Nobody gets in. Nobody.",
+   "ms": 5400,
+   "h": "37728e7e39faba64"
+  },
+  "e.award.skeptic.2": {
+   "t": "Chief Skeptic of Camelot. Trusted no one, and was right at least once.",
+   "ms": 4728,
+   "h": "d8c2b33a50e2a781"
+  },
+  "e.award.traveller.1": {
+   "t": "Most Well-Travelled, for going on the most quests. Frequent rider miles: enormous.",
+   "ms": 5448,
+   "h": "16ea3cba059d2bf1"
+  },
+  "e.award.traveller.2": {
+   "t": "The Wandering Knight Award. Never met a quest they didn't join.",
+   "ms": 3792,
+   "h": "cfb01a16fa34f416"
+  },
+  "e.award.trusting.1": {
+   "t": "The Golden Retriever Award, for approving nearly everything. Bless your trusting heart.",
+   "ms": 5520,
+   "h": "0f4ffba8feba2bb8"
+  },
+  "e.award.trusting.2": {
+   "t": "Most Trusting Knight. Never met a team they didn't like.",
+   "ms": 3504,
+   "h": "921cbc77de8e3d6d"
+  },
+  "e.award.unlucky_leader.1": {
+   "t": "The Rejected Royalty Award, for having their proposals turned down the most. Heavy is the head.",
+   "ms": 6048,
+   "h": "ab78562b5c475d70"
+  },
+  "e.award.unlucky_leader.2": {
+   "t": "Least Popular Leader. The crown kept slipping off.",
+   "ms": 3192,
+   "h": "08c1c15e88740440"
+  },
+  "e.awards.intro.1": {
+   "t": "And now, the Royal Honours! Awards nobody asked for, presented with great ceremony.",
+   "ms": 5448,
+   "h": "f53654ceb56c737b"
+  },
+  "e.awards.intro.2": {
+   "t": "Before we go, the Court presents its honours. Some are compliments. Most are not.",
+   "ms": 5016,
+   "h": "0dd2547dc0786470"
+  },
+  "e.awards.intro.3": {
+   "t": "It's time for the awards! Please hold your applause, and your grudges, until the end.",
+   "ms": 5232,
+   "h": "ddb00af285b9bcac"
+  },
+  "e.awards.outro.1": {
+   "t": "Congratulations to all, and especially to the liars. Rematch?",
+   "ms": 4320,
+   "h": "af788d05138ea2dd"
+  },
+  "e.awards.outro.2": {
+   "t": "That concludes the ceremony. Your grudges may now be carried into the rematch.",
+   "ms": 4680,
+   "h": "9da240a7494d1972"
+  },
+  "e.awards.outro.3": {
+   "t": "Thank you, thank you. Same time next game? Same betrayals?",
+   "ms": 4104,
+   "h": "9afeb6676b98c9a9"
+  },
+  "e.discussion.final10.1": {
+   "t": "Ten seconds! Wrap up your wild theories.",
+   "ms": 3000,
+   "h": "00300c3e00d68b65"
+  },
+  "e.discussion.final10.2": {
+   "t": "Ten seconds left. Last chance to accuse someone without evidence.",
+   "ms": 4368,
+   "h": "901e0014af349caa"
+  },
+  "e.discussion.final10.3": {
+   "t": "Ten seconds! Speak now, or forever hold your suspicion.",
+   "ms": 4008,
+   "h": "6338ae45207580af"
+  },
+  "e.discussion.over.1": {
+   "t": "Time! Put the pitchforks down. Gently.",
+   "ms": 2808,
+   "h": "e12b7ac9ec8bb6b1"
+  },
+  "e.discussion.over.2": {
+   "t": "That's enough talk. To the decision!",
+   "ms": 2520,
+   "h": "373db6cce1aa2f00"
+  },
+  "e.discussion.over.3": {
+   "t": "And the debate is over. Nobody was convinced. Excellent.",
+   "ms": 3840,
+   "h": "15d27ad286e6af11"
+  },
+  "e.discussion.start.1": {
+   "t": "Discuss! Accuse! Defend! Point dramatically!",
+   "ms": 3408,
+   "h": "0d1d905e40e4ea5a"
+  },
+  "e.discussion.start.2": {
+   "t": "The floor is open. Make your case, and make it loud.",
+   "ms": 3504,
+   "h": "692334f7a00d20d7"
+  },
+  "e.discussion.start.3": {
+   "t": "Talk amongst yourselves. Preferably about each other.",
+   "ms": 3264,
+   "h": "6bc596480b9c5166"
+  },
+  "e.end.evil_assassin.1": {
+   "t": "Evil wins by assassination! Good did all that work for nothing. Delicious.",
+   "ms": 5064,
+   "h": "744a5d8fc5f91c5c"
+  },
+  "e.end.evil_assassin.2": {
+   "t": "Merlin is gone, and evil takes the crown. What a twist!",
+   "ms": 3720,
+   "h": "410d38bfa5c99737"
+  },
+  "e.end.evil_missions.1": {
+   "t": "Three quests failed. Evil wins! Mordred sends his regards.",
+   "ms": 4392,
+   "h": "d5d51a8dc45ebb08"
+  },
+  "e.end.evil_missions.2": {
+   "t": "Evil triumphs! Camelot falls, one sabotaged quest at a time.",
+   "ms": 4656,
+   "h": "db5c59d49ec26da0"
+  },
+  "e.end.evil_rejections.1": {
+   "t": "Five rejected parties! The kingdom collapses in bureaucracy. Evil wins!",
+   "ms": 5328,
+   "h": "e64fead613314dde"
+  },
+  "e.end.evil_rejections.2": {
+   "t": "Nobody could agree on anything, so evil wins. Classic committee.",
+   "ms": 4560,
+   "h": "b41b3a807790d2b5"
+  },
+  "e.end.good.1": {
+   "t": "Good wins! Camelot is saved! Please, try to be humble about it.",
+   "ms": 4224,
+   "h": "f3c3ed4c420ac74e"
+  },
+  "e.end.good.2": {
+   "t": "Victory for the loyal servants of Arthur! The realm endures!",
+   "ms": 3960,
+   "h": "7805fade74284111"
+  },
+  "e.end.roles.1": {
+   "t": "Now, let's unmask everyone. Prepare to feel betrayed.",
+   "ms": 3792,
+   "h": "e69d4a3b79340cf2"
+  },
+  "e.end.roles.2": {
+   "t": "Time for the big reveal. Who was who? Brace yourselves.",
+   "ms": 3600,
+   "h": "6b773eb9cedf380f"
+  },
+  "e.leader.new.1": {
+   "t": "The crown passes on. Try to do better than the last one.",
+   "ms": 3504,
+   "h": "8d9397f7cafa20e7"
+  },
+  "e.leader.new.2": {
+   "t": "A new leader takes the throne. It's warm. Don't ask why.",
+   "ms": 3888,
+   "h": "2fb0e577cd40b6a2"
+  },
+  "e.leader.new.3": {
+   "t": "Fresh leadership! Same old suspicion.",
+   "ms": 2880,
+   "h": "33b4b50eae0a268b"
+  },
+  "e.leader.new.4": {
+   "t": "The crown moves along, like a hot potato with a coat of arms.",
+   "ms": 4248,
+   "h": "828092e9e05ce739"
+  },
+  "e.lobby.all_ready.1": {
+   "t": "Everyone is ready. Host, the kingdom awaits your finger.",
+   "ms": 3984,
+   "h": "3304c0495423a30e"
+  },
+  "e.lobby.all_ready.2": {
+   "t": "All hands raised! Well, all phones. Start the game, my liege.",
+   "ms": 4344,
+   "h": "85f9e43729d5a51e"
+  },
+  "e.lobby.all_ready.3": {
+   "t": "The whole table is ready. Rarely have so many been so wrong about being ready.",
+   "ms": 4800,
+   "h": "e2a7affd74cdba10"
+  },
+  "e.lobby.enough.1": {
+   "t": "Six players! We have enough for a proper conspiracy.",
+   "ms": 3192,
+   "h": "088aef959c30660a"
+  },
+  "e.lobby.enough.2": {
+   "t": "That's a full fellowship. The treachery may now commence whenever the host is ready.",
+   "ms": 5088,
+   "h": "9acd03ef7a5d40ee"
+  },
+  "e.lobby.enough.3": {
+   "t": "Enough knights at last. Somebody press start before anyone gets cold feet.",
+   "ms": 4968,
+   "h": "97510fc01e24e772"
+  },
+  "e.lobby.idle.1": {
+   "t": "Still waiting. The candles are getting shorter, and so is my patience.",
+   "ms": 4416,
+   "h": "e4ad8983e8455b3a"
+  },
+  "e.lobby.idle.2": {
+   "t": "Take your time. Camelot has only been under threat for several centuries.",
+   "ms": 4584,
+   "h": "efa23d69ae601242"
+  },
+  "e.lobby.idle.3": {
+   "t": "Is anyone going to start this, or shall we simply gaze at one another all night?",
+   "ms": 4776,
+   "h": "2572ed9a36b1f0b4"
+  },
+  "e.lobby.join.1": {
+   "t": "Another soul enters the hall.",
+   "ms": 2472,
+   "h": "9435582029537d9e"
+  },
+  "e.lobby.join.10": {
+   "t": "And in walks trouble. Lovely to have you.",
+   "ms": 2736,
+   "h": "60eb6a5aa551d43a"
+  },
+  "e.lobby.join.2": {
+   "t": "Ooh, a new arrival. They look innocent. That's always a bad sign.",
+   "ms": 4344,
+   "h": "82a973de68edda0b"
+  },
+  "e.lobby.join.3": {
+   "t": "Welcome, brave fool!",
+   "ms": 1968,
+   "h": "c5f40d6c9d7c3d91"
+  },
+  "e.lobby.join.4": {
+   "t": "A fresh face! Let's see how long it stays fresh.",
+   "ms": 3240,
+   "h": "31b3bed437c48fc2"
+  },
+  "e.lobby.join.5": {
+   "t": "Someone new has joined. Hide the silverware.",
+   "ms": 3072,
+   "h": "a7808a137bde27b6"
+  },
+  "e.lobby.join.6": {
+   "t": "Another knight arrives, armed with a phone and questionable judgement.",
+   "ms": 4224,
+   "h": "0646a14526b4d4b0"
+  },
+  "e.lobby.join.7": {
+   "t": "Hark! A newcomer! Everyone pretend you're nice.",
+   "ms": 3096,
+   "h": "470c7b4ff0589e21"
+  },
+  "e.lobby.join.8": {
+   "t": "Welcome to Camelot. Please mind the daggers.",
+   "ms": 3096,
+   "h": "4bb4ef94918622e6"
+  },
+  "e.lobby.join.9": {
+   "t": "Behold, yet another future suspect.",
+   "ms": 2832,
+   "h": "fc659265c42eadbb"
+  },
+  "e.lobby.welcome.1": {
+   "t": "Welcome, welcome, to the Round Table! Scan the code, pick a name, and try to look trustworthy.",
+   "ms": 5760,
+   "h": "260ec85cda9b19a8"
+  },
+  "e.lobby.welcome.2": {
+   "t": "Ah, guests! Do come in. Phones out, room code in, and leave your honesty at the door.",
+   "ms": 5376,
+   "h": "cae8576998c314f5"
+  },
+  "e.lobby.welcome.3": {
+   "t": "Gather round, lords and ladies. Tonight, someone at this table will lie to your face. Splendid!",
+   "ms": 6336,
+   "h": "c129e967bd4406f4"
+  },
+  "e.lobby.welcome.4": {
+   "t": "The hall is open! Join on your phones. The betrayal is free, and so are the snacks, presumably.",
+   "ms": 6144,
+   "h": "2bc80ec8809cb224"
+  },
+  "e.mission.1.1": {
+   "t": "Mission one! A gentle start. Nobody has any evidence, which has never stopped anyone.",
+   "ms": 5568,
+   "h": "2c48d079a6cfb67c"
+  },
+  "e.mission.1.2": {
+   "t": "The first quest. A blank slate. Let's see who scribbles on it first.",
+   "ms": 4440,
+   "h": "e76eea38d550568a"
+  },
+  "e.mission.2.1": {
+   "t": "Mission two. The plot thickens like week-old porridge.",
+   "ms": 3576,
+   "h": "ba7dbdb72fce22c1"
+  },
+  "e.mission.2.2": {
+   "t": "On to the second quest. Grudges are now fully loaded.",
+   "ms": 3768,
+   "h": "10ff3334c896751b"
+  },
+  "e.mission.3.1": {
+   "t": "Mission three. The middle of the story, where everyone starts lying more confidently.",
+   "ms": 5064,
+   "h": "b493295fc255dc7e"
+  },
+  "e.mission.3.2": {
+   "t": "The third quest. Half the realm hangs in the balance. No pressure.",
+   "ms": 4224,
+   "h": "c9f450a3e25ad454"
+  },
+  "e.mission.4.1": {
+   "t": "Mission four. With a big table, evil needs two fails here. Do the maths, then distrust the mathematicians.",
+   "ms": 6960,
+   "h": "cdc0b33c130fd7ed"
+  },
+  "e.mission.4.2": {
+   "t": "The fourth quest. Things are getting dramatic. I've ordered extra candles.",
+   "ms": 4728,
+   "h": "b21d7b955fd9586f"
+  },
+  "e.mission.5.1": {
+   "t": "Mission five. The final quest. Everything comes down to this. Please, nobody faint.",
+   "ms": 5952,
+   "h": "2ed0afd976b75b58"
+  },
+  "e.mission.5.2": {
+   "t": "The last quest! All of Camelot is watching. Mostly through its fingers.",
+   "ms": 4488,
+   "h": "3bcd6b8f34b53ecc"
+  },
+  "e.night.complete.1": {
+   "t": "Dawn breaks. Everyone knows exactly what they know. Act accordingly.",
+   "ms": 4464,
+   "h": "14292ec144a74f06"
+  },
+  "e.night.complete.2": {
+   "t": "The sun rises, and so does suspicion. Let us begin.",
+   "ms": 4056,
+   "h": "70e9b6c335e1a4d3"
+  },
+  "e.night.complete.3": {
+   "t": "Morning, everyone. Evil had a lovely night, I'm told.",
+   "ms": 3912,
+   "h": "9111a76f86d3ab30"
+  },
+  "e.night.intro.1": {
+   "t": "Night falls over Camelot. Read your secrets in silence. No gasping. No winking. I'm looking at you.",
+   "ms": 6696,
+   "h": "950f8fbe6459fec2"
+  },
+  "e.night.intro.2": {
+   "t": "The night reveals its secrets. Study your phone, memorise what you see, and act natural. Naturally.",
+   "ms": 6816,
+   "h": "1cc5451a3c8cefae"
+  },
+  "e.night.intro.3": {
+   "t": "Darkness settles over the castle. The wicked know each other now. The good know... very little. As usual.",
+   "ms": 6312,
+   "h": "69da92a18297b602"
+  },
+  "e.proposal.forced.1": {
+   "t": "Fifth proposal! No vote this time. Whatever the leader picks, rides. Democracy has left the building.",
+   "ms": 6576,
+   "h": "fdeff0aa243e82a1"
+  },
+  "e.proposal.forced.2": {
+   "t": "Four rejections. This leader's party goes, no questions asked. Choose very, very carefully.",
+   "ms": 6264,
+   "h": "b8507ffb8aacd455"
+  },
+  "e.proposal.locked.1": {
+   "t": "The party is chosen! Now we vote.",
+   "ms": 2688,
+   "h": "736fa1abc6bbd0dc"
+  },
+  "e.proposal.locked.2": {
+   "t": "The leader has spoken. Let the court decide.",
+   "ms": 2976,
+   "h": "64f29c8094844658"
+  },
+  "e.proposal.locked.3": {
+   "t": "A fellowship is proposed. Prepare your opinions.",
+   "ms": 3384,
+   "h": "7a22c44a73e9ad98"
+  },
+  "e.proposal.slow.1": {
+   "t": "Any time now, leader. The quest isn't getting any younger.",
+   "ms": 3648,
+   "h": "1497c7a7ef5037a9"
+  },
+  "e.proposal.slow.2": {
+   "t": "Still choosing? Even Merlin is getting bored.",
+   "ms": 3048,
+   "h": "70c6affadce32146"
+  },
+  "e.proposal.slow.3": {
+   "t": "The leader deliberates. The rest of us age gracefully.",
+   "ms": 3528,
+   "h": "316401fa8a28001b"
+  },
+  "e.proposal.start.1": {
+   "t": "The leader must now choose a party. Choose wisely, or at least choose quickly.",
+   "ms": 4824,
+   "h": "0175b4d67d5c68c0"
+  },
+  "e.proposal.start.2": {
+   "t": "Time to pick a team. Leader, everyone is judging your every tap.",
+   "ms": 4488,
+   "h": "2330c0abe420d54a"
+  },
+  "e.proposal.start.3": {
+   "t": "Assemble your fellowship, my liege. The table is watching your thumbs.",
+   "ms": 4536,
+   "h": "e10835b160632b14"
+  },
+  "e.proposal.start.4": {
+   "t": "Pick your companions. Remember, friendship is temporary. Voting records are forever.",
+   "ms": 5568,
+   "h": "921b336d573d3e89"
+  },
+  "e.quest.begins.1": {
+   "t": "The quest begins! Party members, choose your card. Success, or... something else.",
+   "ms": 5304,
+   "h": "94b7de60e3779587"
+  },
+  "e.quest.begins.2": {
+   "t": "Into the wilderness they go. Quest members, play your cards on your phones.",
+   "ms": 4680,
+   "h": "eab75954eb50d5ee"
+  },
+  "e.quest.begins.3": {
+   "t": "The fellowship departs. Good may only succeed. Evil may do as it pleases. Choose.",
+   "ms": 5568,
+   "h": "5678d8c3f334e43c"
+  },
+  "e.quest.begins.4": {
+   "t": "Off on the quest! Everyone else, look anywhere except at their faces. Actually no, look right at them.",
+   "ms": 6480,
+   "h": "e876b2347b5d4d81"
+  },
+  "e.quest.close_call.1": {
+   "t": "One fail, but quest four needs two. The quest survives. Barely.",
+   "ms": 4344,
+   "h": "07047d14ca3a34fa"
+  },
+  "e.quest.close_call.2": {
+   "t": "A traitor struck, but not hard enough. The quest succeeds on a technicality.",
+   "ms": 4968,
+   "h": "cb8284cf2fa53cdd"
+  },
+  "e.quest.fail_many.1": {
+   "t": "Multiple fails! The traitors aren't even trying to hide now.",
+   "ms": 3888,
+   "h": "39a8b9a70ef05847"
+  },
+  "e.quest.fail_many.2": {
+   "t": "More than one fail! Evil brought friends to this quest.",
+   "ms": 3576,
+   "h": "886fd4bf6ec255b8"
+  },
+  "e.quest.fail_many.3": {
+   "t": "Several betrayals! That wasn't sabotage, that was a team-building exercise.",
+   "ms": 4944,
+   "h": "850366b05d9ae705"
+  },
+  "e.quest.fail_one.1": {
+   "t": "One fail. Just one. A single, solitary traitor. How intimate.",
+   "ms": 4632,
+   "h": "119a0e2647562f6d"
+  },
+  "e.quest.fail_one.2": {
+   "t": "Failed! Someone on that quest is not who they say they are.",
+   "ms": 3576,
+   "h": "fd7ecde696137517"
+  },
+  "e.quest.fail_one.3": {
+   "t": "One betrayal, and the quest falls. Look around. One of them did it.",
+   "ms": 4320,
+   "h": "56c6c50efe3f6554"
+  },
+  "e.quest.reveal.1": {
+   "t": "Drumroll, please. Let's reveal the cards. One. By. One.",
+   "ms": 3960,
+   "h": "bc6bd4505bf2976a"
+  },
+  "e.quest.reveal.2": {
+   "t": "The moment of truth. Let's open the cards.",
+   "ms": 3072,
+   "h": "2b0f0e0ea0cce4e5"
+  },
+  "e.quest.reveal.3": {
+   "t": "Now, let's see what our brave adventurers really did.",
+   "ms": 3408,
+   "h": "7c58cf92281849e0"
+  },
+  "e.quest.sealed.1": {
+   "t": "All the cards are in. Let's shuffle these, shall we?",
+   "ms": 3144,
+   "h": "3cf6c08dbde3f525"
+  },
+  "e.quest.sealed.2": {
+   "t": "Every card is sealed. The truth is in the deck.",
+   "ms": 3264,
+   "h": "8fc206b61b05441f"
+  },
+  "e.quest.sealed.3": {
+   "t": "The cards are played. No take-backsies.",
+   "ms": 2784,
+   "h": "1e13b488dded8931"
+  },
+  "e.quest.success.1": {
+   "t": "Success! The quest triumphs! Everyone act surprised.",
+   "ms": 3744,
+   "h": "9e6ba3914d64bdb5"
+  },
+  "e.quest.success.2": {
+   "t": "Victory! The quest succeeds! Evil is either sleeping, or scheming.",
+   "ms": 4368,
+   "h": "4d9284f53a7999d3"
+  },
+  "e.quest.success.3": {
+   "t": "A successful quest! Good gains ground. For now.",
+   "ms": 3432,
+   "h": "051044a996ae3605"
+  },
+  "e.quest.success.4": {
+   "t": "Clean as a whistle! The quest is a success.",
+   "ms": 3144,
+   "h": "fa8aab3b0aa2cc0e"
+  },
+  "e.rejection.3.1": {
+   "t": "Three rejections. Two more failed votes would be... a problem. Just saying.",
+   "ms": 4968,
+   "h": "798fbbf633057c75"
+  },
+  "e.rejection.3.2": {
+   "t": "That's three rejected parties. The kingdom grows restless.",
+   "ms": 3840,
+   "h": "fe420f7aad1fcd37"
+  },
+  "e.rejection.4.1": {
+   "t": "Four rejections! The next leader's party goes without a vote. Everyone, panic quietly.",
+   "ms": 5784,
+   "h": "a0ebb8cbd0fc2ef0"
+  },
+  "e.rejection.4.2": {
+   "t": "Four in a row. The next proposal is binding. Choose like your crown depends on it.",
+   "ms": 5256,
+   "h": "5aaeb1119ee1c0f7"
+  },
+  "e.rematch.instant.1": {
+   "t": "Everyone wants a rematch already! Healing is overrated.",
+   "ms": 3912,
+   "h": "06582ac5d1767a2a"
+  },
+  "e.rematch.instant.2": {
+   "t": "A unanimous rematch! Nobody learned a thing. Wonderful.",
+   "ms": 3744,
+   "h": "ec287762ea7a39f7"
+  },
+  "e.rematch.lobby.1": {
+   "t": "Back to the hall! Shall we betray each other again?",
+   "ms": 2976,
+   "h": "0250ee133c5f28af"
+  },
+  "e.rematch.lobby.2": {
+   "t": "Round two! New roles, same old friends, fresh new lies.",
+   "ms": 3912,
+   "h": "e10be9e4b81169c8"
+  },
+  "e.rematch.lobby.3": {
+   "t": "Welcome back to the lobby. Your reputations, sadly, came with you.",
+   "ms": 4488,
+   "h": "fc934a727be4f0d4"
+  },
+  "e.score.decider.1": {
+   "t": "Two all! It comes down to the final quest!",
+   "ms": 2952,
+   "h": "59b5a7984392c6aa"
+  },
+  "e.score.decider.2": {
+   "t": "Level at two apiece. The next quest decides the fate of Camelot!",
+   "ms": 4488,
+   "h": "3e6de4d1ec45fe8a"
+  },
+  "e.score.evil_two.1": {
+   "t": "Two failures! One more and evil takes the realm.",
+   "ms": 3288,
+   "h": "b1aff4698c3273f3"
+  },
+  "e.score.evil_two.2": {
+   "t": "Evil leads two to nothing. Good, this is what we call a crisis.",
+   "ms": 4248,
+   "h": "cfcab4f63ad7b2c6"
+  },
+  "e.score.good_two.1": {
+   "t": "Two quests to good. One more and Camelot is saved. Probably.",
+   "ms": 4320,
+   "h": "67381234a22a97d1"
+  },
+  "e.score.good_two.2": {
+   "t": "Good leads two to nothing. Evil, it's time to get creative.",
+   "ms": 4056,
+   "h": "db859fb3eeb3f97e"
+  },
+  "e.start.opening.1": {
+   "t": "Hear ye, hear ye! The game begins. Check your phones, guard your faces, and trust... absolutely no one.",
+   "ms": 6792,
+   "h": "b1c9f980c1aba593"
+  },
+  "e.start.opening.2": {
+   "t": "Let the treachery commence! Your roles await. Do try not to gasp out loud.",
+   "ms": 4896,
+   "h": "3875270f249e1ded"
+  },
+  "e.start.opening.3": {
+   "t": "And so it begins. Loyal servants of Arthur, minions of Mordred. Look at your phones, and keep your poker face.",
+   "ms": 7248,
+   "h": "49b27346e5872c14"
+  },
+  "e.start.opening.4": {
+   "t": "The gates of Camelot close behind you. Somewhere among you, evil grins politely. Look at your roles.",
+   "ms": 6336,
+   "h": "5203da572a300cb9"
+  },
+  "e.vote.approved.1": {
+   "t": "Approved! The quest party rides forth!",
+   "ms": 2736,
+   "h": "e5648d9d96af369d"
+  },
+  "e.vote.approved.2": {
+   "t": "The court agrees! Remarkable. Let's see if it regrets it.",
+   "ms": 3864,
+   "h": "3528aebb47b64cd6"
+  },
+  "e.vote.approved.3": {
+   "t": "The fellowship is approved. Pack light. Trust lighter.",
+   "ms": 3744,
+   "h": "eaa99ee465e9da6c"
+  },
+  "e.vote.approved.4": {
+   "t": "Approved. Off they go, into danger, and possibly into betrayal.",
+   "ms": 4368,
+   "h": "f62191f43e47380d"
+  },
+  "e.vote.rejected.1": {
+   "t": "Rejected! Back to the drawing board.",
+   "ms": 2568,
+   "h": "118a3875bc54bd3d"
+  },
+  "e.vote.rejected.2": {
+   "t": "The court says no. The crown moves on.",
+   "ms": 2688,
+   "h": "caecec08cdcf419a"
+  },
+  "e.vote.rejected.3": {
+   "t": "Denied! That party will not be riding anywhere.",
+   "ms": 2976,
+   "h": "8e1657b685c03ed4"
+  },
+  "e.vote.rejected.4": {
+   "t": "Rejected. Somewhere, a leader quietly sulks.",
+   "ms": 3432,
+   "h": "21d16e66e5fd90b1"
+  },
+  "e.vote.reveal.1": {
+   "t": "The votes are in. Let's see who trusts whom.",
+   "ms": 2928,
+   "h": "614c65e54a9bddf3"
+  },
+  "e.vote.reveal.2": {
+   "t": "And now, the moment of truth. Or at least, the moment of votes.",
+   "ms": 4104,
+   "h": "cdce61c70ec94215"
+  },
+  "e.vote.reveal.3": {
+   "t": "Reveal the ballots! Let the judging begin.",
+   "ms": 2976,
+   "h": "127eb71d4c0fa373"
+  },
+  "e.vote.start.1": {
+   "t": "Approve or reject? Vote on your phones. Secretly. Then reveal everything publicly. Fun!",
+   "ms": 6384,
+   "h": "7792cc7f36fdd189"
+  },
+  "e.vote.start.2": {
+   "t": "Cast your votes! Every one of them will be shown to everyone. No pressure.",
+   "ms": 4344,
+   "h": "fad140b20287a171"
+  },
+  "e.vote.start.3": {
+   "t": "To the ballot! Remember, your vote is secret for about ten seconds.",
+   "ms": 4440,
+   "h": "fe74f5399a08a3a0"
+  },
+  "e.vote.start.4": {
+   "t": "Vote now. History is watching, and history is a terrible gossip.",
+   "ms": 4296,
+   "h": "7cef857fb4b324f2"
+  },
+  "e.vote.stragglers.1": {
+   "t": "Some of you are still voting. It's a yes or a no, not a sonnet.",
+   "ms": 4080,
+   "h": "ab34225f4baaf184"
+  },
+  "e.vote.stragglers.2": {
+   "t": "We're waiting on a few stragglers. Take your time. We'll just stare at you.",
+   "ms": 4464,
+   "h": "089840a8174e45aa"
+  },
+  "e.vote.stragglers.3": {
+   "t": "Still deciding? Fascinating. Truly. Do go on.",
+   "ms": 3600,
+   "h": "243b30a609132b5d"
+  },
+  "e.vote.stragglers.4": {
+   "t": "A few votes remain. The suspense is unbearable. Mostly for me.",
+   "ms": 4392,
+   "h": "a6182720a1510f72"
+  },
+  "e.vote.tie.1": {
+   "t": "A tie! And a tie means rejection. Arithmetic is cruel.",
+   "ms": 4152,
+   "h": "3145bab596750d20"
+  },
+  "e.vote.tie.2": {
+   "t": "Dead even, which means the party is rejected. Blame mathematics.",
+   "ms": 4800,
+   "h": "02633aae98b565c0"
+  },
+  "e.vote.unanimous_no.1": {
+   "t": "Unanimous rejection! Nobody liked that. Not even the leader, apparently.",
+   "ms": 4728,
+   "h": "25aebeb3c1840be0"
+  },
+  "e.vote.unanimous_no.2": {
+   "t": "Every vote says no. Ouch. That's going in the history books.",
+   "ms": 4104,
+   "h": "528ff9d34d91d7bb"
+  },
+  "e.vote.unanimous_yes.1": {
+   "t": "Unanimous approval! Either everyone trusts this team, or someone is a very good liar.",
+   "ms": 5568,
+   "h": "7addc2e20d2299f1"
+  },
+  "e.vote.unanimous_yes.2": {
+   "t": "Every single vote says yes. That's either beautiful or deeply suspicious.",
+   "ms": 4824,
+   "h": "83ab87c132fed7e8"
+  },
+  "n1": {
+   "t": "Fresh game, fresh loyalties, same suspicious eye contact.",
+   "ms": 4104,
+   "h": "0c014adf501b0a12"
+  },
+  "n10": {
+   "t": "Submitted at the bell. Confidence, with the paperwork of panic.",
+   "ms": 4008,
+   "h": "79c6e37cc888cd61"
+  },
+  "n11": {
+   "t": "The leader selected themselves. A touching vote of self-interest.",
+   "ms": 4272,
+   "h": "fc83ea71046f0d39"
+  },
+  "n12": {
+   "t": "The leader stayed home. Either humility, or an alibi with excellent tailoring.",
+   "ms": 4920,
+   "h": "bf8e3644e00aec2b"
+  },
+  "n13": {
+   "t": "The identical party returns, now with absolutely no new information.",
+   "ms": 4824,
+   "h": "572d4e02b725fc60"
+  },
+  "n14": {
+   "t": "You rejected this party before. Nostalgia truly is incurable.",
+   "ms": 4560,
+   "h": "e5e16684c0ce31d9"
+  },
+  "n15": {
+   "t": "That failed fellowship has been reheated, and plated as strategy.",
+   "ms": 4128,
+   "h": "ed8a97942349a1cd"
+  },
+  "n16": {
+   "t": "The successful band is back together. The ego tour begins now.",
+   "ms": 4272,
+   "h": "545ed532a0d3a78c"
+  },
+  "n17": {
+   "t": "Someone has a third consecutive quest. Frequent-flyer treason points unlocked.",
+   "ms": 5448,
+   "h": "5b2735ac0705c5db"
+  },
+  "n18": {
+   "t": "Mission three, and someone still has cleaner boots than everyone else.",
+   "ms": 4008,
+   "h": "4505c1b8b47990a0"
+  },
+  "n19": {
+   "t": "One member changed. Behold, radical reform.",
+   "ms": 3504,
+   "h": "fffefaaf5d8d9594"
+  },
+  "n2": {
+   "t": "A rematch. Because apparently, the previous betrayal lacked closure.",
+   "ms": 4296,
+   "h": "740d733eb68532e2"
+  },
+  "n20": {
+   "t": "The rejected leader returns, carrying no resentment whatsoever.",
+   "ms": 4176,
+   "h": "3d7d17e9c93058c4"
+  },
+  "n21": {
+   "t": "Unanimous approval. The rare sound of everyone being wrong together.",
+   "ms": 4320,
+   "h": "7e9379a518786c1a"
+  },
+  "n22": {
+   "t": "Unanimous rejection. The table has discovered teamwork, through spite.",
+   "ms": 4680,
+   "h": "dda0eadf91bc48ab"
+  },
+  "n23": {
+   "t": "A tie rejects the party. Even arithmetic has trust issues here.",
+   "ms": 4560,
+   "h": "ec6aac921f50ea80"
+  },
+  "n23f1": {
+   "t": "No, staring at the dissenters will not change the count.",
+   "ms": 3552,
+   "h": "c763ef3eb2b4cfbd"
+  },
+  "n23f2": {
+   "t": "The motion fails. The grudges, however, pass unanimously.",
+   "ms": 3888,
+   "h": "e96fc5b01ba17bd2"
+  },
+  "n23f3": {
+   "t": "Please direct complaints to mathematics, who will ignore them.",
+   "ms": 3984,
+   "h": "99273bbba5f365c0"
+  },
+  "n23f4": {
+   "t": "A dead heat is still dead. Lovely symmetry, though.",
+   "ms": 3432,
+   "h": "c0eafa1ab581c82c"
+  },
+  "n24": {
+   "t": "Approved by one vote. A mandate written in disappearing ink.",
+   "ms": 4272,
+   "h": "91ca42d8c3786082"
+  },
+  "n25": {
+   "t": "Rejected by one vote. Someone just became tonight's group-chat topic.",
+   "ms": 4704,
+   "h": "473763ed509accfd"
+  },
+  "n26": {
+   "t": "One lone reject, bravely ruining the family photo.",
+   "ms": 3720,
+   "h": "48aa59e93e2cc359"
+  },
+  "n27": {
+   "t": "One lone approve. Hope is adorable when isolated.",
+   "ms": 3912,
+   "h": "5f1b9bc069d56a42"
+  },
+  "n28": {
+   "t": "Someone rejected a party containing themselves. Self-awareness, or insurance fraud?",
+   "ms": 5760,
+   "h": "be50130c72464a76"
+  },
+  "n29": {
+   "t": "Every proposed member approved. The product endorsed itself.",
+   "ms": 4032,
+   "h": "cf02f7014fbbcfa8"
+  },
+  "n3": {
+   "t": "A new leader holds the crown. Try not to make it look like evidence.",
+   "ms": 4152,
+   "h": "de63084da6c013e3"
+  },
+  "n30": {
+   "t": "Several party members rejected their own trip. Read the reviews.",
+   "ms": 4584,
+   "h": "b42f11864cb071f1"
+  },
+  "n31": {
+   "t": "Same party, different vote. Character development, or weather vane?",
+   "ms": 4368,
+   "h": "51df0a65cd36eb21"
+  },
+  "n32": {
+   "t": "Someone keeps approving. A golden retriever has entered parliament.",
+   "ms": 4368,
+   "h": "2b14382069b2b6ce"
+  },
+  "n33": {
+   "t": "Someone keeps rejecting. The drawbridge has a drawbridge.",
+   "ms": 3720,
+   "h": "9a938548b9de0f96"
+  },
+  "n34": {
+   "t": "Two rejected parties. Mild dysfunction has become a theme.",
+   "ms": 4416,
+   "h": "0d19a24df6b507b5"
+  },
+  "n35": {
+   "t": "Three rejections. The round table is now mostly sharp corners.",
+   "ms": 4368,
+   "h": "ee82db7d03e4cad8"
+  },
+  "n36": {
+   "t": "Four rejections. The next leader gets consent removed from the menu.",
+   "ms": 4344,
+   "h": "0b19ad1eabe2a95b"
+  },
+  "n36f1": {
+   "t": "One more rejection, and democracy is taken behind the castle.",
+   "ms": 4056,
+   "h": "e816d473fa769ae5"
+  },
+  "n36f2": {
+   "t": "The fifth leader is warming up their benevolent dictatorship.",
+   "ms": 3744,
+   "h": "7654dc1171bc069a"
+  },
+  "n36f3": {
+   "t": "Do reject again. I enjoy watching consequences put on boots.",
+   "ms": 4392,
+   "h": "3834ec111de6e7ae"
+  },
+  "n36f4": {
+   "t": "Next proposal comes with no ballot, and several raised eyebrows.",
+   "ms": 4368,
+   "h": "82f71a6e4f7e8150"
+  },
+  "n37": {
+   "t": "Fifth proposal. Binding, vote-free, and sponsored by consequences.",
+   "ms": 4848,
+   "h": "041d053f76cceef6"
+  },
+  "n37f1": {
+   "t": "You had four chances to cooperate. The rulebook has stopped asking.",
+   "ms": 4176,
+   "h": "6140c8cb401de609"
+  },
+  "n37f2": {
+   "t": "The table wanted certainty. It has received compulsory tourism.",
+   "ms": 4440,
+   "h": "ba062f18979c7f52"
+  },
+  "n37f3": {
+   "t": "No vote this time. Your previous votes were quite sufficient.",
+   "ms": 3984,
+   "h": "3d4c95d8119bc959"
+  },
+  "n37f4": {
+   "t": "Consent has left a note, and gone to the tavern.",
+   "ms": 3408,
+   "h": "f2c74201370f262d"
+  },
+  "n38": {
+   "t": "First proposal approved. Suspiciously efficient. Check everyone for wires.",
+   "ms": 5040,
+   "h": "844798996eca1831"
+  },
+  "n39": {
+   "t": "After all those rejections, a quest finally escaped committee.",
+   "ms": 4272,
+   "h": "2a93b0681af8a251"
+  },
+  "n4": {
+   "t": "This discussion is so quiet, I can hear the alibis fermenting.",
+   "ms": 4248,
+   "h": "2d0104444940adb7"
+  },
+  "n40": {
+   "t": "Zero fails. Either heroes, cowards, or excellent accountants.",
+   "ms": 4416,
+   "h": "86c8252bad669d65"
+  },
+  "n41": {
+   "t": "Exactly one fail. A solo artist has entered the charts.",
+   "ms": 3936,
+   "h": "ac61fb05fb2485ce"
+  },
+  "n42": {
+   "t": "Multiple fails. Treason has formed a project team.",
+   "ms": 3552,
+   "h": "10b3e7b166bb4be1"
+  },
+  "n42f1": {
+   "t": "At least the traitors found colleagues, in this economy.",
+   "ms": 3408,
+   "h": "f7222bfe80fea3d8"
+  },
+  "n42f2": {
+   "t": "That was less sabotage than a departmental initiative.",
+   "ms": 3672,
+   "h": "3221c441b64d2a1a"
+  },
+  "n42f3": {
+   "t": "One fail whispers. Several fails submit a quarterly report.",
+   "ms": 4224,
+   "h": "85f8cc2ecceaee8d"
+  },
+  "n42f4": {
+   "t": "The conspiracy has apparently secured group health insurance.",
+   "ms": 4080,
+   "h": "e9507c785b308935"
+  },
+  "n43": {
+   "t": "Quest four survived one fail, because the large-table rules enjoy chaos.",
+   "ms": 5112,
+   "h": "8ea511fea734afd0"
+  },
+  "n43f1": {
+   "t": "One saboteur did the work, and still failed the assignment.",
+   "ms": 3744,
+   "h": "8d73a91faab80f49"
+  },
+  "n43f2": {
+   "t": "Somewhere, evil is rereading the two-fail footnote, very slowly.",
+   "ms": 4128,
+   "h": "a047361951a5568a"
+  },
+  "n43f3": {
+   "t": "A technical success. The most irritating species of success.",
+   "ms": 4224,
+   "h": "523b7436705ff142"
+  },
+  "n43f4": {
+   "t": "The second fail was invited. It declined to attend.",
+   "ms": 3576,
+   "h": "bebd3c3bba70338a"
+  },
+  "n44": {
+   "t": "Narrowly approved, successfully completed. Democracy accidentally shipped a feature.",
+   "ms": 5568,
+   "h": "39c962567542e39c"
+  },
+  "n45": {
+   "t": "Unanimously approved, then failed. Put that confidence in a museum.",
+   "ms": 4656,
+   "h": "0a353db8b9cb7a4b"
+  },
+  "n45f1": {
+   "t": "Everyone trusted the party. The party treasured that mistake.",
+   "ms": 3888,
+   "h": "cf17f1d4569d159e"
+  },
+  "n45f2": {
+   "t": "A perfect mandate, followed by an imperfect little catastrophe.",
+   "ms": 4344,
+   "h": "5a713dbee2f3b7da"
+  },
+  "n45f3": {
+   "t": "Please keep your unanimous confidence away from heavy machinery.",
+   "ms": 4320,
+   "h": "48f521c4487f5726"
+  },
+  "n45f4": {
+   "t": "Consensus has requested that this result be sealed.",
+   "ms": 3936,
+   "h": "eea4c52d29e1f23a"
+  },
+  "n46": {
+   "t": "A divisive vote produced success. Consensus remains overrated.",
+   "ms": 4968,
+   "h": "293fe5caff5a215c"
+  },
+  "n47": {
+   "t": "Someone appears on consecutive failures. An unfortunate loyalty programme.",
+   "ms": 5328,
+   "h": "5655f1ad22de3012"
+  },
+  "n48": {
+   "t": "The same core keeps succeeding. Competence is becoming deeply suspicious.",
+   "ms": 5088,
+   "h": "4083ff221f380861"
+  },
+  "n49": {
+   "t": "Good leads two-nil. Evil may now begin pretending this was the plan.",
+   "ms": 4584,
+   "h": "8ee8ecf726c9beb0"
+  },
+  "n5": {
+   "t": "Everyone is talking. Truth has wisely left the building.",
+   "ms": 3672,
+   "h": "265e52da26e2202f"
+  },
+  "n50": {
+   "t": "Evil leads two-nil. The optimism budget has been cut.",
+   "ms": 3840,
+   "h": "1204daaacd925365"
+  },
+  "n51": {
+   "t": "Good ties it, two-all. The finale has acquired expensive lighting.",
+   "ms": 4392,
+   "h": "02bfea6768205cad"
+  },
+  "n52": {
+   "t": "Evil ties it, two-all. Nobody's pulse needed that.",
+   "ms": 3696,
+   "h": "eae25fd032965139"
+  },
+  "n53": {
+   "t": "Mission five decides everything. Please place all terrible instincts on the table.",
+   "ms": 5496,
+   "h": "34091fd9ee78ee8c"
+  },
+  "n54": {
+   "t": "Three successes summon the Assassin. Victory comes with an invoice.",
+   "ms": 4488,
+   "h": "c06ac049848cf2b9"
+  },
+  "n55": {
+   "t": "Someone disconnected. Even their internet rejected the proposal.",
+   "ms": 4416,
+   "h": "83a88c45e53c1863"
+  },
+  "n55f1": {
+   "t": "We shall preserve their seat, and misremember their arguments.",
+   "ms": 3720,
+   "h": "633a9609dcf54df4"
+  },
+  "n55f2": {
+   "t": "Until they return, their silence is their strongest defence.",
+   "ms": 3984,
+   "h": "90386ed0e76f12e5"
+  },
+  "n55f3": {
+   "t": "The empty chair has already improved its voting record.",
+   "ms": 3864,
+   "h": "0b76cfc2d3e5839f"
+  },
+  "n55f4": {
+   "t": "Someone tell the router that desertion is not a legal vote.",
+   "ms": 4152,
+   "h": "2e6cef45671cebe3"
+  },
+  "n56": {
+   "t": "Our wanderer returns from the void, allegedly with the same opinions.",
+   "ms": 4512,
+   "h": "727ae2bc09a77e46"
+  },
+  "n57": {
+   "t": "Someone reconnects, again. Their wi-fi is playing its own social deduction game.",
+   "ms": 5280,
+   "h": "bff159ceb22a076e"
+  },
+  "n57f1": {
+   "t": "At this point, the router deserves its own loyalty card.",
+   "ms": 3816,
+   "h": "98c90e952ab3f831"
+  },
+  "n57f2": {
+   "t": "Welcome back. Again. The void says hello.",
+   "ms": 3144,
+   "h": "1232088f596a7458"
+  },
+  "n57f3": {
+   "t": "Their connection has now had more reversals than the table.",
+   "ms": 3576,
+   "h": "23d87343a3d1d97c"
+  },
+  "n57f4": {
+   "t": "The wi-fi remains the evening's most convincing traitor.",
+   "ms": 3744,
+   "h": "4bd34d4f0473fdf4"
+  },
+  "n58": {
+   "t": "Connection trouble is spreading. Mordred has apparently hired the router.",
+   "ms": 4704,
+   "h": "f72459c767e83770"
+  },
+  "n58f1": {
+   "t": "If the candles start buffering, abandon the castle.",
+   "ms": 3264,
+   "h": "e8604d79d30044b3"
+  },
+  "n58f2": {
+   "t": "The network has rejected the entire fellowship.",
+   "ms": 3456,
+   "h": "d0c2588c7ee7b73c"
+  },
+  "n58f3": {
+   "t": "Mordred denies responsibility, which is honestly suspicious.",
+   "ms": 4392,
+   "h": "78a3f0c9f3aeb19e"
+  },
+  "n58f4": {
+   "t": "Please accuse one another locally while service is restored.",
+   "ms": 3936,
+   "h": "e416f564985765db"
+  },
+  "n59": {
+   "t": "A spectator arrives at the dramatic bit. Impeccable rubbernecking.",
+   "ms": 4632,
+   "h": "cb4e43a227467bcd"
+  },
+  "n6": {
+   "t": "Fifteen seconds. Time to promote a hunch into a legal argument.",
+   "ms": 4488,
+   "h": "1cd354550e75b9e2"
+  },
+  "n60": {
+   "t": "Chat has been silent for minutes. The screenshots must be thriving.",
+   "ms": 4224,
+   "h": "19f4cbb826d8b401"
+  },
+  "n61": {
+   "t": "Chat just caught fire. Facts are not expected to survive.",
+   "ms": 3864,
+   "h": "bf953b27032a17e2"
+  },
+  "n62": {
+   "t": "Someone keeps entering the conversation, like an unpaid subscription.",
+   "ms": 4488,
+   "h": "a4524c7a0711e06b"
+  },
+  "n63": {
+   "t": "The table keeps accusing the same person. Repetition: evidence's cheaper cousin.",
+   "ms": 5544,
+   "h": "02c68046e325c277"
+  },
+  "n64": {
+   "t": "Trust. Sus. Obvious. Definitely. The four horsemen of the bad argument.",
+   "ms": 4920,
+   "h": "3609fd2c065a551b"
+  },
+  "n65": {
+   "t": "You rang? I was busy documenting the confidence-to-evidence ratio.",
+   "ms": 4176,
+   "h": "27867ab2de9baf45"
+  },
+  "n66": {
+   "t": "Who is evil? Statistically, someone currently acting extremely helpful.",
+   "ms": 4896,
+   "h": "6e5822fa9f03d706"
+  },
+  "n67": {
+   "t": "Trust the person whose certainty has the shortest warranty.",
+   "ms": 3624,
+   "h": "1c8bf0dd4d3ca1d3"
+  },
+  "n68": {
+   "t": "Vote with your conscience. Then blame the seating chart.",
+   "ms": 3624,
+   "h": "af6e1553aee54e81"
+  },
+  "n69": {
+   "t": "Are you suspicious? Asking has moved the needle in an unhelpful direction.",
+   "ms": 4800,
+   "h": "034cefa22f80b4ed"
+  },
+  "n7": {
+   "t": "Unlimited discussion has become a hostage situation, with snacks.",
+   "ms": 4680,
+   "h": "0a26448ee41ae442"
+  },
+  "n70": {
+   "t": "Insulting the narrator is legal. But your voting record remains discoverable.",
+   "ms": 5400,
+   "h": "d2d3676da2e6b9b9"
+  },
+  "n71": {
+   "t": "Flattery accepted. It will purchase exactly zero secret information.",
+   "ms": 4992,
+   "h": "093163a53d9a363a"
+  },
+  "n72": {
+   "t": "Spoilers cost one soul, and I still refuse to provide them.",
+   "ms": 4152,
+   "h": "1f6ef1548d7dc63b"
+  },
+  "n73": {
+   "t": "I am single by court order, and emotionally committed to bad decisions.",
+   "ms": 4680,
+   "h": "453383395d1c0bfe"
+  },
+  "n74": {
+   "t": "A roast, you say? Your alibi has the structural integrity of wet pastry.",
+   "ms": 5136,
+   "h": "2b1d2c07fc0a41ef"
+  },
+  "n75": {
+   "t": "Blame me if you like. I have minutes. You have a voting record.",
+   "ms": 4008,
+   "h": "a0bde0a2fd8f9934"
+  },
+  "n76": {
+   "t": "I cannot classify that question, which may be its strongest quality.",
+   "ms": 4320,
+   "h": "be24e485797a36e7"
+  },
+  "n77": {
+   "t": "The Assassin steps forward. Good's celebration has entered a probationary period.",
+   "ms": 5304,
+   "h": "e0f69fc1c9e71fff"
+  },
+  "n78": {
+   "t": "The Assassin is taking their time, aging every good player visibly.",
+   "ms": 4536,
+   "h": "3c5439cde6f9bb30"
+  },
+  "n79": {
+   "t": "Merlin identified. Evil read the room, and then set fire to the library.",
+   "ms": 5016,
+   "h": "2acd1166ff387465"
+  },
+  "n8": {
+   "t": "I heard my name. I assume standards have collapsed.",
+   "ms": 3408,
+   "h": "37b92852715601db"
+  },
+  "n80": {
+   "t": "The Assassin missed. All that menace, straight into the scenery.",
+   "ms": 3912,
+   "h": "a17b0426fe751cb4"
+  },
+  "n81": {
+   "t": "Three failed quests. Evil wins by making disaster look procedural.",
+   "ms": 5112,
+   "h": "f5b0c944d537046b"
+  },
+  "n82": {
+   "t": "Merlin falls. Evil steals the ending, after good wrote three acts.",
+   "ms": 4752,
+   "h": "66eb03965254c08d"
+  },
+  "n83": {
+   "t": "The Assassin missed, and good survives the world's least relaxing victory lap.",
+   "ms": 4920,
+   "h": "af77477384ce828e"
+  },
+  "n84": {
+   "t": "The winners came from behind. Never underestimate spite with momentum.",
+   "ms": 4896,
+   "h": "2de05651daf53c2d"
+  },
+  "n85": {
+   "t": "A clean sweep. The losing side was present in a largely decorative capacity.",
+   "ms": 5400,
+   "h": "5b47fefed3a185ea"
+  },
+  "n86": {
+   "t": "A two-all final quest decided it. Subtlety died several minutes ago.",
+   "ms": 5136,
+   "h": "2c67c1f9d955c27b"
+  },
+  "n87": {
+   "t": "The most accused player was good after all. Please recycle your accusations responsibly.",
+   "ms": 6120,
+   "h": "9f53aad80d0dcbd5"
+  },
+  "n88": {
+   "t": "The most defended player was evil. Those passionate defenders may collect their receipts.",
+   "ms": 5496,
+   "h": "9e62bae453cb9a60"
+  },
+  "n89": {
+   "t": "Someone's votes gave evil a remarkably comfortable chair.",
+   "ms": 4080,
+   "h": "a4507e4db462ed15"
+  },
+  "n9": {
+   "t": "Our leader is marinating that proposal well past its use-by date.",
+   "ms": 4584,
+   "h": "943a4ad5050f626a"
+  },
+  "n90": {
+   "t": "Someone's votes kept opposing evil. Annoying, but in retrospect, heroic.",
+   "ms": 5112,
+   "h": "e69a60d70280e52c"
+  },
+  "n91": {
+   "t": "Someone attended an impressive number of failed quests. Terrible tourism.",
+   "ms": 4944,
+   "h": "a29d4b26798824f0"
+  },
+  "n92": {
+   "t": "Someone attended an impressive number of successes. A boastful letter to the court is incoming.",
+   "ms": 6096,
+   "h": "01fa2a1a05a3724c"
+  },
+  "n93": {
+   "t": "The rematch requests begin before the emotional paperwork is complete.",
+   "ms": 4536,
+   "h": "7e03c8a138c2ddb1"
+  },
+  "n94": {
+   "t": "Everyone wants the rematch immediately. Healing has been unanimously rejected.",
+   "ms": 5280,
+   "h": "129e4ef142cd707f"
+  }
+ },
+ "cues": {
+  "lobby.welcome": [
+   "e.lobby.welcome.1",
+   "e.lobby.welcome.2",
+   "e.lobby.welcome.3",
+   "e.lobby.welcome.4"
+  ],
+  "lobby.join": [
+   "e.lobby.join.1",
+   "e.lobby.join.2",
+   "e.lobby.join.3",
+   "e.lobby.join.4",
+   "e.lobby.join.5",
+   "e.lobby.join.6",
+   "e.lobby.join.7",
+   "e.lobby.join.8",
+   "e.lobby.join.9",
+   "e.lobby.join.10"
+  ],
+  "lobby.enough": [
+   "e.lobby.enough.1",
+   "e.lobby.enough.2",
+   "e.lobby.enough.3"
+  ],
+  "lobby.all_ready": [
+   "e.lobby.all_ready.1",
+   "e.lobby.all_ready.2",
+   "e.lobby.all_ready.3"
+  ],
+  "lobby.idle": [
+   "e.lobby.idle.1",
+   "e.lobby.idle.2",
+   "e.lobby.idle.3"
+  ],
+  "start.opening": [
+   "e.start.opening.1",
+   "e.start.opening.2",
+   "e.start.opening.3",
+   "e.start.opening.4"
+  ],
+  "night.intro": [
+   "e.night.intro.1",
+   "e.night.intro.2",
+   "e.night.intro.3"
+  ],
+  "night.complete": [
+   "e.night.complete.1",
+   "e.night.complete.2",
+   "e.night.complete.3"
+  ],
+  "mission.1": [
+   "e.mission.1.1",
+   "e.mission.1.2"
+  ],
+  "mission.2": [
+   "e.mission.2.1",
+   "e.mission.2.2"
+  ],
+  "mission.3": [
+   "e.mission.3.1",
+   "e.mission.3.2"
+  ],
+  "mission.4": [
+   "e.mission.4.1",
+   "e.mission.4.2"
+  ],
+  "mission.5": [
+   "e.mission.5.1",
+   "e.mission.5.2"
+  ],
+  "leader.new": [
+   "e.leader.new.1",
+   "e.leader.new.2",
+   "e.leader.new.3",
+   "e.leader.new.4"
+  ],
+  "discussion.start": [
+   "e.discussion.start.1",
+   "e.discussion.start.2",
+   "e.discussion.start.3"
+  ],
+  "discussion.final10": [
+   "e.discussion.final10.1",
+   "e.discussion.final10.2",
+   "e.discussion.final10.3"
+  ],
+  "discussion.over": [
+   "e.discussion.over.1",
+   "e.discussion.over.2",
+   "e.discussion.over.3"
+  ],
+  "proposal.start": [
+   "e.proposal.start.1",
+   "e.proposal.start.2",
+   "e.proposal.start.3",
+   "e.proposal.start.4"
+  ],
+  "proposal.slow": [
+   "e.proposal.slow.1",
+   "e.proposal.slow.2",
+   "e.proposal.slow.3"
+  ],
+  "proposal.forced": [
+   "e.proposal.forced.1",
+   "e.proposal.forced.2"
+  ],
+  "proposal.locked": [
+   "e.proposal.locked.1",
+   "e.proposal.locked.2",
+   "e.proposal.locked.3"
+  ],
+  "vote.start": [
+   "e.vote.start.1",
+   "e.vote.start.2",
+   "e.vote.start.3",
+   "e.vote.start.4"
+  ],
+  "vote.stragglers": [
+   "e.vote.stragglers.1",
+   "e.vote.stragglers.2",
+   "e.vote.stragglers.3",
+   "e.vote.stragglers.4"
+  ],
+  "vote.reveal": [
+   "e.vote.reveal.1",
+   "e.vote.reveal.2",
+   "e.vote.reveal.3"
+  ],
+  "vote.approved": [
+   "e.vote.approved.1",
+   "e.vote.approved.2",
+   "e.vote.approved.3",
+   "e.vote.approved.4"
+  ],
+  "vote.rejected": [
+   "e.vote.rejected.1",
+   "e.vote.rejected.2",
+   "e.vote.rejected.3",
+   "e.vote.rejected.4"
+  ],
+  "vote.unanimous_yes": [
+   "e.vote.unanimous_yes.1",
+   "e.vote.unanimous_yes.2"
+  ],
+  "vote.unanimous_no": [
+   "e.vote.unanimous_no.1",
+   "e.vote.unanimous_no.2"
+  ],
+  "vote.tie": [
+   "e.vote.tie.1",
+   "e.vote.tie.2"
+  ],
+  "rejection.3": [
+   "e.rejection.3.1",
+   "e.rejection.3.2"
+  ],
+  "rejection.4": [
+   "e.rejection.4.1",
+   "e.rejection.4.2"
+  ],
+  "quest.begins": [
+   "e.quest.begins.1",
+   "e.quest.begins.2",
+   "e.quest.begins.3",
+   "e.quest.begins.4"
+  ],
+  "quest.sealed": [
+   "e.quest.sealed.1",
+   "e.quest.sealed.2",
+   "e.quest.sealed.3"
+  ],
+  "quest.reveal": [
+   "e.quest.reveal.1",
+   "e.quest.reveal.2",
+   "e.quest.reveal.3"
+  ],
+  "quest.success": [
+   "e.quest.success.1",
+   "e.quest.success.2",
+   "e.quest.success.3",
+   "e.quest.success.4"
+  ],
+  "quest.fail_one": [
+   "e.quest.fail_one.1",
+   "e.quest.fail_one.2",
+   "e.quest.fail_one.3"
+  ],
+  "quest.fail_many": [
+   "e.quest.fail_many.1",
+   "e.quest.fail_many.2",
+   "e.quest.fail_many.3"
+  ],
+  "quest.close_call": [
+   "e.quest.close_call.1",
+   "e.quest.close_call.2"
+  ],
+  "score.good_two": [
+   "e.score.good_two.1",
+   "e.score.good_two.2"
+  ],
+  "score.evil_two": [
+   "e.score.evil_two.1",
+   "e.score.evil_two.2"
+  ],
+  "score.decider": [
+   "e.score.decider.1",
+   "e.score.decider.2"
+  ],
+  "assassin.start": [
+   "e.assassin.start.1",
+   "e.assassin.start.2",
+   "e.assassin.start.3"
+  ],
+  "assassin.slow": [
+   "e.assassin.slow.1",
+   "e.assassin.slow.2",
+   "e.assassin.slow.3"
+  ],
+  "assassin.strike": [
+   "e.assassin.strike.1",
+   "e.assassin.strike.2",
+   "e.assassin.strike.3"
+  ],
+  "assassin.hit": [
+   "e.assassin.hit.1",
+   "e.assassin.hit.2",
+   "e.assassin.hit.3"
+  ],
+  "assassin.miss": [
+   "e.assassin.miss.1",
+   "e.assassin.miss.2",
+   "e.assassin.miss.3"
+  ],
+  "end.good": [
+   "e.end.good.1",
+   "e.end.good.2"
+  ],
+  "end.evil_missions": [
+   "e.end.evil_missions.1",
+   "e.end.evil_missions.2"
+  ],
+  "end.evil_assassin": [
+   "e.end.evil_assassin.1",
+   "e.end.evil_assassin.2"
+  ],
+  "end.evil_rejections": [
+   "e.end.evil_rejections.1",
+   "e.end.evil_rejections.2"
+  ],
+  "end.roles": [
+   "e.end.roles.1",
+   "e.end.roles.2"
+  ],
+  "awards.intro": [
+   "e.awards.intro.1",
+   "e.awards.intro.2",
+   "e.awards.intro.3"
+  ],
+  "award.trusting": [
+   "e.award.trusting.1",
+   "e.award.trusting.2"
+  ],
+  "award.skeptic": [
+   "e.award.skeptic.1",
+   "e.award.skeptic.2"
+  ],
+  "award.traveller": [
+   "e.award.traveller.1",
+   "e.award.traveller.2"
+  ],
+  "award.homebody": [
+   "e.award.homebody.1",
+   "e.award.homebody.2"
+  ],
+  "award.saboteur": [
+   "e.award.saboteur.1",
+   "e.award.saboteur.2"
+  ],
+  "award.poker_face": [
+   "e.award.poker_face.1",
+   "e.award.poker_face.2"
+  ],
+  "award.unlucky_leader": [
+   "e.award.unlucky_leader.1",
+   "e.award.unlucky_leader.2"
+  ],
+  "award.kingmaker": [
+   "e.award.kingmaker.1",
+   "e.award.kingmaker.2"
+  ],
+  "award.merlin": [
+   "e.award.merlin.1",
+   "e.award.merlin.2"
+  ],
+  "award.assassin": [
+   "e.award.assassin.1",
+   "e.award.assassin.2"
+  ],
+  "awards.outro": [
+   "e.awards.outro.1",
+   "e.awards.outro.2",
+   "e.awards.outro.3"
+  ],
+  "rematch.lobby": [
+   "e.rematch.lobby.1",
+   "e.rematch.lobby.2",
+   "e.rematch.lobby.3"
+  ],
+  "rematch.instant": [
+   "e.rematch.instant.1",
+   "e.rematch.instant.2"
+  ],
+  "n23f": [
+   "n23f1",
+   "n23f2",
+   "n23f3",
+   "n23f4"
+  ],
+  "n36f": [
+   "n36f1",
+   "n36f2",
+   "n36f3",
+   "n36f4"
+  ],
+  "n37f": [
+   "n37f1",
+   "n37f2",
+   "n37f3",
+   "n37f4"
+  ],
+  "n42f": [
+   "n42f1",
+   "n42f2",
+   "n42f3",
+   "n42f4"
+  ],
+  "n43f": [
+   "n43f1",
+   "n43f2",
+   "n43f3",
+   "n43f4"
+  ],
+  "n45f": [
+   "n45f1",
+   "n45f2",
+   "n45f3",
+   "n45f4"
+  ],
+  "n55f": [
+   "n55f1",
+   "n55f2",
+   "n55f3",
+   "n55f4"
+  ],
+  "n57f": [
+   "n57f1",
+   "n57f2",
+   "n57f3",
+   "n57f4"
+  ],
+  "n58f": [
+   "n58f1",
+   "n58f2",
+   "n58f3",
+   "n58f4"
+  ]
+ }
+}
